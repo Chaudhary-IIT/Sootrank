@@ -1,0 +1,45 @@
+# Create virtual environment
+
+python -m venv venv
+venv\Scripts\activate
+
+---------------------------------------------------------------------------------------------------------------------
+
+# Updating requirements.txt
+
+pip freeze > requirements.txt
+
+---------------------------------------------------------------------------------------------------------------------
+
+# Command for updating Database Schema
+
+python manage.py makemigrations
+python manage.py migrate
+
+---------------------------------------------------------------------------------------------------------------------
+
+# Running the app
+
+python manage.py runserver
+
+---------------------------------------------------------------------------------------------------------------------
+
+# Create a PostgreSQL database (through pgAdmin or terminal):
+
+CREATE DATABASE sootrank_db;
+CREATE USER sootrank_user WITH PASSWORD 'yourpassword';
+ALTER ROLE sootrank_user SET client_encoding TO 'utf8';
+ALTER ROLE sootrank_user SET default_transaction_isolation TO 'read committed';
+ALTER ROLE sootrank_user SET timezone TO 'UTC';
+GRANT ALL PRIVILEGES ON DATABASE sootrank_db TO sootrank_user;
+
+-->then apply migrations
+
+---------------------------------------------------------------------------------------------------------------------
+
+# Create Superuser
+
+python manage.py createsuperuser
+
+---------------------------------------------------------------------------------------------------------------------
+
