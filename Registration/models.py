@@ -11,7 +11,7 @@ class Student(models.Model):
     roll_no=models.CharField(max_length=10,unique=True)
     department=models.CharField(max_length=255)
     branch=models.CharField(max_length=255)
-    mobile_no=models.IntegerField(max_length=15, null=True)
+    mobile_no=models.IntegerField(null=True)
 
     def __str__(self):
         return self.roll_no
@@ -24,7 +24,7 @@ class Faculty(models.Model):
     password=models.CharField(max_length=255)
     faculty_id=models.CharField(max_length=10,unique=True)
     department=models.CharField(max_length=255)
-    mobile_no=models.IntegerField(max_length=15, null=True)
+    mobile_no=models.IntegerField(null=True)
 
     def __str__(self):
         return self.first_name+ " " +self.last_name
