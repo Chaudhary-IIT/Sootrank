@@ -78,10 +78,11 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'sootrank_db',
-        'USER': 'sootrank_user',
-        'PASSWORD': 'YO123#yo',
+        'USER': 'postgres',
+        'PASSWORD': 'nitin@098',
         'HOST': 'localhost',
         'PORT': '5432',
+        'CONN_MAX_AGE': 0,
     }
 }
 
@@ -131,3 +132,6 @@ STATICFILES_DIRS=[
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')

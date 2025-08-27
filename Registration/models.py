@@ -30,3 +30,38 @@ class Faculty(models.Model):
         return self.first_name+ " " +self.last_name
 
 
+
+
+
+class Branch(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+
+    def __str__(self):
+        return self.name
+
+class Course(models.Model):
+    course_code = models.CharField(max_length=20, unique=True)
+    course_name = models.CharField(max_length=200)
+    credits = models.IntegerField()
+
+    def __str__(self):
+        return f"{self.course_code} - {self.course_name}"
+
+class CourseOffering(models.Model):
+    YEAR_CHOICES = [(1, "1st Year"), (2, "2nd Year"), (3, "3rd Year"), (4, "4th Year")]
+
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="offerings")
+    years = models.ManyToManyField("Year")
+    branches = models.ManyToManyField(Branch)
+
+    def __str__(self):
+        return f"{self.course.course_code}"
+    
+class Year(models.Model):
+    number = models.IntegerField(choices=[(1,"1st"),(2,"2nd"),(3,"3rd"),(4,"4th")], unique=True)
+
+    def __str__(self):
+        return f"{self.number} Year"
+
+
+
