@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Instructor Pre-Registration</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: black;
+            color: white;
+        }
+    </style>
+</head>
+
+<body class="flex justify-center items-center min-h-screen">
+    <div class="w-[700px] p-6">
+        <!-- Tabs List -->
+        <div class="grid grid-cols-2 mb-4">
+            <button class="px-4 py-2 border rounded-md bg-white text-black font-medium"
+                onclick="showTab('IC202P')">IC202P</button>
+            <button class="px-4 py-2 border rounded-md" onclick="showTab('EE260')">EE260</button>
+        </div>
+
+        <!-- Tab Content: CS101 -->
+        <div id="IC202P" class="tab-content">
+            <div class="bg-white text-black rounded-xl shadow-md">
+                <div class="p-4 border-b">
+                    <h2 class="text-lg font-bold">Design Practicum</h2>
+                </div>
+                <div class="p-4 space-y-3">
+                    <!-- Student 1 -->
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="font-medium">Naman Chaudhary (B24259)</p>
+                            <p class="text-sm text-gray-600">EE</p>
+                        </div>
+                        <select class="border rounded-md px-3 py-2 w-[150px]">
+                            <option value="pending" selected>Pending</option>
+                            <option value="accepted">Accepted</option>
+                            <option value="rejected">Rejected</option>
+                        </select>
+                    </div>
+
+                    <!-- Student 2 -->
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="font-medium">Yogi Kakadia (B24178)</p>
+                            <p class="text-sm text-gray-600">CSE</p>
+                        </div>
+                        <select class="border rounded-md px-3 py-2 w-[150px]">
+                            <option value="pending">Pending</option>
+                            <option value="accepted" selected>Accepted</option>
+                            <option value="rejected">Rejected</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="p-4 border-t flex justify-end">
+                    <button class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Save changes</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Content: MA102 -->
+        <div id="EE260" class="tab-content hidden">
+            <div class="bg-white text-black rounded-xl shadow-md">
+                <div class="p-4 border-b">
+                    <h2 class="text-lg font-bold">Signals and System</h2>
+                </div>
+                <div class="p-4">
+                    <p>No students registered for this course.</p>
+                </div>
+                <div class="p-4 border-t flex justify-end">
+                    <button class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Save changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(tabId).classList.remove('hidden');
+            document.querySelectorAll('button').forEach(btn => btn.classList.remove('bg-white', 'text-black', 'font-medium'));
+            event.target.classList.add('bg-white', 'text-black', 'font-medium');
+        }
+    </script>
+</body>
+
+</html> 

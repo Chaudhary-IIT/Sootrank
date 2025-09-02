@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Edit Course</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="flex justify-center items-center min-h-screen bg-gray-50">
+    <div class="w-[750px] bg-white shadow-md rounded-2xl">
+        <!-- Card Header -->
+        <div class="p-6 border-b">
+            <h1 class="text-4xl font-bold">Edit Course</h1>
+            <p class="text-red-500">Modify the course details and save changes.</p>
+        </div>
+
+        <!-- Card Content -->
+        <div class="p-6">
+            <form>
+                <div class="grid w-full gap-4">
+
+                    <!-- Course Code -->
+                    <div class="flex flex-col space-y-1.5">
+                        <label class="font-medium">Course Code</label>
+                        <input type="text" name="course_code" value="CS101" disabled
+                            class="border rounded-md px-3 py-2" />
+                    </div>
+
+                    <!-- Course Name -->
+                    <div class="flex flex-col space-y-1.5">
+                        <label class="font-medium">Course Name</label>
+                        <input type="text" name="course_name" value="Introduction to CS"
+                            class="border rounded-md px-3 py-2" />
+                    </div>
+
+                    <!-- Instructor Name -->
+                    <div class="flex flex-col space-y-1.5">
+                        <label class="font-medium">Instructor Name</label>
+                        <input type="text" name="instructor_name" value="Dr. Smith"
+                            class="border rounded-md px-3 py-2" />
+                    </div>
+
+                    <!-- Instructor ID -->
+                    <div class="flex flex-col space-y-1.5">
+                        <label class="font-medium">Instructor ID</label>
+                        <input type="text" name="instructor_id" value="12345" class="border rounded-md px-3 py-2" />
+                    </div>
+
+                    <!-- Available -->
+                    <div class="flex flex-col space-y-1.5">
+                        <label class="font-medium">Available</label>
+                        <select class="border rounded-md px-3 py-2">
+                            <option value="yes" selected>Yes</option>
+                            <option value="no">No</option>
+                        </select>
+                    </div>
+
+                    <!-- DE For (Badges + Checkboxes) -->
+                    <div class="flex flex-col space-y-1.5">
+                        <label class="font-medium">DE For</label>
+                        <div class="flex flex-wrap gap-2 mb-2">
+                            <span class="px-2 py-1 border rounded-md text-sm">CS1</span>
+                            <span class="px-2 py-1 border rounded-md text-sm">BE2</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 border rounded-md p-2 max-h-32 overflow-y-auto">
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox" checked />
+                                <span class="text-sm">CS1</span>
+                            </label>
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox" />
+                                <span class="text-sm">CS2</span>
+                            </label>
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox" />
+                                <span class="text-sm">CS3</span>
+                            </label>
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox" />
+                                <span class="text-sm">CS4</span>
+                            </label>
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox" />
+                                <span class="text-sm">BE1</span>
+                            </label>
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox" checked />
+                                <span class="text-sm">BE2</span>
+                            </label>
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox" />
+                                <span class="text-sm">BE3</span>
+                            </label>
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox" />
+                                <span class="text-sm">BE4</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- IC or Not -->
+                    <div class="flex flex-col space-y-1.5">
+                        <label class="font-medium">IC or Not</label>
+                        <select class="border rounded-md px-3 py-2">
+                            <option value="IC" selected>IC</option>
+                            <option value="Non-IC">Non-IC</option>
+                        </select>
+                    </div>
+
+                    <!-- Slot -->
+                    <div class="flex flex-col space-y-1.5">
+                        <label class="font-medium">Slot</label>
+                        <select class="border rounded-md px-3 py-2">
+                            <option>A</option>
+                            <option>B</option>
+                            <option>C</option>
+                            <option>D</option>
+                            <option>E</option>
+                            <option>F</option>
+                            <option>G</option>
+                            <option>H</option>
+                            <option>FS</option>
+                        </select>
+                    </div>
+
+                    <!-- LTPC -->
+                    <div class="flex flex-col space-y-1.5">
+                        <label class="font-medium">LTPC</label>
+                        <input type="text" name="ltpc" value="3-0-0-3" class="border rounded-md px-3 py-2" />
+                    </div>
+
+                    <!-- Credits -->
+                    <div class="flex flex-col space-y-1.5">
+                        <label class="font-medium">Credits</label>
+                        <input type="text" name="credit" value="3" class="border rounded-md px-3 py-2" />
+                    </div>
+
+                </div>
+
+                <!-- Card Footer -->
+                <div class="flex justify-end space-x-4 mt-6 border-t pt-4">
+                    <button type="button" class="border px-4 py-2 rounded-md hover:bg-gray-100">Cancel</button>
+                    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Save
+                        Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+
+</html>

@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Add New Course</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: #f9fafb;
+        }
+
+        .card {
+            width: 750px;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+
+        .card-header h1 {
+            font-size: 28px;
+            margin-bottom: 4px;
+        }
+
+        .card-header p {
+            color: red;
+            font-size: 14px;
+            margin: 0;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .form-group input,
+        .form-group select {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .badge-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+
+        .badge {
+            display: inline-block;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 2px 8px;
+            font-size: 12px;
+            background: #f3f4f6;
+        }
+
+        .checkbox-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: 8px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .form-footer {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+
+        button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid #333;
+        }
+
+        .btn-primary {
+            background: #2563eb;
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="card">
+        <div class="card-header">
+            <h1>Add New Course</h1>
+            <p>*Course code must be unique</p>
+        </div>
+
+        <form action="http://localhost:5001/courses" method="POST">
+            <!-- Course Code -->
+            <div class="form-group">
+                <label for="course_code">Course Code</label>
+                <input type="text" id="course_code" name="course_code" placeholder="Enter unique course code" required>
+            </div>
+
+            <!-- Course Name -->
+            <div class="form-group">
+                <label for="course_name">Course Name</label>
+                <input type="text" id="course_name" name="course_name" placeholder="Enter course name" required>
+            </div>
+
+            <!-- Instructor Name -->
+            <div class="form-group">
+                <label for="instructor_name">Instructor Name</label>
+                <input type="text" id="instructor_name" name="instructor_name" placeholder="Enter instructor name">
+            </div>
+
+            <!-- Instructor ID -->
+            <div class="form-group">
+                <label for="instructor_id">Instructor ID</label>
+                <input type="text" id="instructor_id" name="instructor_id" placeholder="Enter instructor ID">
+            </div>
+
+            <!-- Available -->
+            <div class="form-group">
+                <label for="avail">Available</label>
+                <select id="avail" name="avail" required>
+                    <option value="">Select</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                </select>
+            </div>
+
+            <!-- DC For -->
+            <div class="form-group">
+                <label>DC For</label>
+                <div class="badge-container" id="dcfor-badges">
+                    <!-- Selected badges will appear here dynamically if scripted -->
+                    <span class="text-gray-500">No selection</span>
+                </div>
+                <div class="checkbox-grid">
+                    <div class="checkbox-item"><input type="checkbox" name="dcfor" value="CS1"><label>CS1</label></div>
+                    <div class="checkbox-item"><input type="checkbox" name="dcfor" value="CS2"><label>CS2</label></div>
+                    <div class="checkbox-item"><input type="checkbox" name="dcfor" value="CS3"><label>CS3</label></div>
+                    <div class="checkbox-item"><input type="checkbox" name="dcfor" value="CS4"><label>CS4</label></div>
+                    <div class="checkbox-item"><input type="checkbox" name="dcfor" value="BE1"><label>BE1</label></div>
+                    <div class="checkbox-item"><input type="checkbox" name="dcfor" value="BE2"><label>BE2</label></div>
+                    <div class="checkbox-item"><input type="checkbox" name="dcfor" value="BE3"><label>BE3</label></div>
+                    <div class="checkbox-item"><input type="checkbox" name="dcfor" value="BE4"><label>BE4</label></div>
+                    <!-- ... repeat for EE1..EE4, CE1..CE4, etc. -->
+                </div>
+            </div>
+
+            <!-- DE For -->
+            <div class="form-group">
+                <label>DE For</label>
+                <div class="badge-container" id="defor-badges">
+                    <span class="text-gray-500">No selection</span>
+                </div>
+                <div class="checkbox-grid">
+                    <div class="checkbox-item"><input type="checkbox" name="defor" value="CS1"><label>CS1</label></div>
+                    <div class="checkbox-item"><input type="checkbox" name="defor" value="CS2"><label>CS2</label></div>
+                    <div class="checkbox-item"><input type="checkbox" name="defor" value="CS3"><label>CS3</label></div>
+                    <div class="checkbox-item"><input type="checkbox" name="defor" value="CS4"><label>CS4</label></div>
+                    <div class="checkbox-item"><input type="checkbox" name="defor" value="BE1"><label>BE1</label></div>
+                    <div class="checkbox-item"><input type="checkbox" name="defor" value="BE2"><label>BE2</label></div>
+                    <div class="checkbox-item"><input type="checkbox" name="defor" value="BE3"><label>BE3</label></div>
+                    <div class="checkbox-item"><input type="checkbox" name="defor" value="BE4"><label>BE4</label></div>
+                    <!-- ... repeat same list as above -->
+                </div>
+            </div>
+
+            <!-- IC or Not -->
+            <div class="form-group">
+                <label for="icornot">IC or Not</label>
+                <select id="icornot" name="icornot">
+                    <option value="">Select</option>
+                    <option value="IC">IC</option>
+                    <option value="Non-IC">Non-IC</option>
+                </select>
+            </div>
+
+            <!-- Slot -->
+            <div class="form-group">
+                <label for="slot">Slot</label>
+                <select id="slot" name="slot">
+                    <option value="">Select Slot</option>
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                    <option value="D">D</option>
+                    <option value="E">E</option>
+                    <option value="F">F</option>
+                    <option value="G">G</option>
+                    <option value="H">H</option>
+                    <option value="FS">FS</option>
+                </select>
+            </div>
+
+            <!-- LTPC -->
+            <div class="form-group">
+                <label for="ltpc">LTPC</label>
+                <input type="text" id="ltpc" name="ltpc" placeholder="Enter LTPC eg.(3-0-1-4)">
+            </div>
+
+            <!-- Credits -->
+            <div class="form-group">
+                <label for="credit">Credits</label>
+                <input type="number" id="credit" name="credit" placeholder="Enter credit value">
+            </div>
+
+            <!-- Footer buttons -->
+            <div class="form-footer">
+                <button type="button" class="btn-outline" onclick="window.location.href='/all-courses'">Go Back</button>
+                <button type="submit" class="btn-primary">Add Course</button>
+            </div>
+        </form>
+    </div>
+
+</body>
+
+</html>

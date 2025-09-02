@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Registered Courses</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 p-6">
+    <div class="w-full max-w-6xl mx-auto space-y-6">
+        <div class="mb-5">
+            <h1 class="text-3xl font-bold">Registered Courses</h1>
+            <!-- <p class="text-red-500 mt-1">Last day for course pre-registration is 15-08-2025</p> -->
+        </div>
+        <!-- Table Container -->
+        <div class="rounded-md border overflow-x-auto shadow-md bg-white">
+            <table class="min-w-full table-auto text-sm">
+                <thead>
+                    <tr class="bg-gray-200 text-left text-gray-700">
+                        <th class="px-4 py-2">Course Code</th>
+                        <th class="px-4 py-2">Course Name</th>
+                        <th class="px-4 py-2">Instructor</th>
+                        <th class="px-4 py-2">Type</th>
+                        <th class="px-4 py-2">Slot</th>
+                        <th class="px-4 py-2">Credits</th>
+                        <th class="px-4 py-2">LTPC</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Example Row 1 -->
+                    <tr class="odd:bg-gray-50 even:bg-white">
+                        <td class="px-4 py-2">CS101</td>
+                        <td class="px-4 py-2">Introduction to Computer Science</td>
+                        <td class="px-4 py-2">Dr. Alice Johnson</td>
+                        <td class="px-4 py-2">Core</td>
+                        <td class="px-4 py-2">A</td>
+                        <td class="px-4 py-2">4</td>
+                        <td class="px-4 py-2">3-0-2-4</td>
+                    </tr>
+                    <!-- Example Row 2 -->
+                    <tr class="odd:bg-gray-50 even:bg-white">
+                        <td class="px-4 py-2">MA102</td>
+                        <td class="px-4 py-2">Engineering Mathematics</td>
+                        <td class="px-4 py-2">Prof. Bob Smith</td>
+                        <td class="px-4 py-2">Elective</td>
+                        <td class="px-4 py-2">B</td>
+                        <td class="px-4 py-2">3</td>
+                        <td class="px-4 py-2">3-1-0-3</td>
+                    </tr>
+                    <!-- Example Row 3 -->
+                    <tr class="odd:bg-gray-50 even:bg-white">
+                        <td class="px-4 py-2">PH201</td>
+                        <td class="px-4 py-2">Physics II</td>
+                        <td class="px-4 py-2">Dr. Carol White</td>
+                        <td class="px-4 py-2">Core</td>
+                        <td class="px-4 py-2">C</td>
+                        <td class="px-4 py-2">4</td>
+                        <td class="px-4 py-2">3-0-2-4</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Empty Case -->
+        <div class="hidden text-center text-gray-500">
+            No matching courses found.
+        </div>
+    </div>
+</body>
+
+</html>

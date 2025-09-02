@@ -2,10 +2,11 @@ from http.client import HTTPResponse
 from django.contrib import messages
 from django.db import IntegrityError
 from django.http import HttpResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from Registration.models import Student, Faculty, Admins
 from django.contrib.auth import authenticate , login as auth_login
 from django.contrib.auth.hashers import make_password,check_password
+from urllib.parse import urlencode
 import re
 
 def login(request):
@@ -29,7 +30,12 @@ def login(request):
             if Faculty.objects.filter(email_id=identifier).exists():
                 faculty = Faculty.objects.get(email_id=identifier)
                 if check_password(password, faculty.password):
-                    return redirect("/faculty_dashboard/")   # Faculty also goes to admin
+                    request.session["email_id"] = faculty.email_id  # stable across reloads
+                    request.session["flash_ctx"] = {
+                        "full_name": f"{faculty.first_name} {faculty.last_name}",
+                        "role_label": "Faculty",
+                    }  # optional one-time
+                    return render(request, "auth_successful.html", {"redirect_url": "/faculty_dashboard/"})
                 else:
                     messages.error(request, "Invalid Faculty Credentials")
                     return render(request, "login.html")
@@ -47,34 +53,18 @@ def login(request):
                 return render(request, "login.html")
 
             if check_password(password, student.password):
-                return redirect("/students_dashboard/")
+                request.session["roll_no"] = student.roll_no  # stable across reloads
+                request.session["flash_ctx"] = {
+                    "full_name": f"{student.first_name} {student.last_name}",
+                    "role_label": "Student",
+                }  # optional one-time
+                return render(request, "auth_successful.html", {"redirect_url": "/students_dashboard/"})
             else:
                 messages.error(request, "Invalid Student Credentials")
         except Student.DoesNotExist:
             messages.error(request, "First Register Yourself")
 
     return render(request, "login.html")
-            # # Try matching roll_no first
-            # if Student.objects.filter(roll_no=identifier).exists():
-            #     this_user = Student.objects.get(roll_no=identifier)
-            # # If not roll_no, then check email
-            # elif Student.objects.filter(email_id=identifier).exists():
-            #     this_user = Student.objects.get(email_id=identifier)
-            # else:
-            #     messages.error(request, "Invalid Username")
-            #     return render(request, 'login.html')
-
-            # Now check password
-        #     if (check_password(password, this_user.password)):   
-        #         return redirect("/students_dashboard/", roll_no=this_user.roll_no)
-        #     else:
-        #         messages.error(request, "Invalid Roll No/Email or Password")
-
-        # except Student.DoesNotExist:
-        #     messages.error(request, "First Register Yourself")
-        #     return render(request, 'login.html')
-
-    return render(request, 'login.html')
 
 
 
@@ -115,10 +105,56 @@ def register(request):
 
     return render(request, 'register.html')
 
+def student_bulk_upload(request):
+    return render(request, "registration/student_bulk_upload.html")
+
 def students_dashboard(request):
-    # student = Student.objects.get(roll_no=roll_no)
-    return render(request,'students_dashboard.html')
+    roll_no = request.session.get("roll_no")
+    if not roll_no:
+        # not logged in or session expired
+        return redirect("/")
+    student = get_object_or_404(Student, roll_no=roll_no)
+
+    flash = request.session.pop("flash_ctx", {})  # optional, disappears after first load
+    context = {
+        "student": student,
+        "full_name": flash.get("full_name"),
+        "role_label": flash.get("role_label", "Student"),
+    }
+    return render(request, "students_dashboard.html", context)
 
 def faculty_dashboard(request):
-    # student = Student.objects.get(roll_no=roll_no)
-    return render(request,'faculty_dashboard.html')
+    email_id = request.session.get("email_id")
+    if not email_id:
+        # not logged in or session expired
+        return redirect("/")
+    faculty = get_object_or_404(Faculty, email_id=email_id)
+
+    flash = request.session.pop("flash_ctx", {})  # optional, disappears after first load
+    context = {
+        "faculty": faculty,
+        "full_name": flash.get("full_name"),
+        "role_label": flash.get("role_label", "Faculty"),
+    }
+    return render(request,'faculty_dashboard.html',context)
+
+def pre_registration(request):
+    return render(request,'registration/pre_registration.html')
+
+def check_status(request):
+    return render(request, 'registration/check_status.html')
+
+def update_registration(request):
+    return render(request, 'registration/update_registration.html')
+
+def registered_courses(request):
+    return render(request, 'registration/registered_course.html')
+
+def course_request(request):
+    return render(request, 'instructor/course_request.html')
+
+def view_courses(request):
+    return render(request,'instructor/view_courses.html')
+
+def update_courses(request):
+    return render(request,'instructor/edit_courses.html')

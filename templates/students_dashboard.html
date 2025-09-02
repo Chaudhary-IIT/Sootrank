@@ -1,11 +1,75 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard</title>
-</head>
-<body>
-    <p> User Dashboard will be here...</p>
-</body>
-</html>
+{% extends "student_base.html" %}
+{% block title %}Student Dashboard | Sootrank{% endblock %}
+{% block nav_dashboard_active %} active{% endblock %}
+
+{%block content%}
+<h1 class="text-3xl fw-bold mb-5 text-center">🎓 {{role_label}} Dashboard</h1>
+
+<!-- Profile Section -->
+<div class="card mb-4 shadow">
+    <div class="card-body d-flex align-items-center gap-4 p-4">
+        <div>
+            <i class="fa-solid fa-user fa-3x text-primary"></i>
+        </div>
+        <div>
+            <h2 class="fs-4 fw-bold mb-1">{{student.first_name}} {{student.last_name}}</h2>
+            <p class="mb-1">Enrollment No: {{student.roll_no|upper}}</p>
+            <p class="mb-1">Course: {{student.branch}} ({{student.department}})</p>
+            <p class="mb-2">Semester: 3rd</p>
+            
+            <a href="{%url 'registered_courses'%}" class="btn btn-warning">Edit Profile</a>
+            <a href="{%url 'registered_courses'%}" class="btn btn-info">Registered Courses</a>
+        </div>
+    </div>
+</div>
+
+<!-- Registration Section -->
+<div class="card mb-4 shadow">
+    <div class="card-body p-4">
+        <h2 class="fs-5 fw-semibold mb-3">📑 Registration</h2>
+        <div class="d-flex gap-3 flex-wrap">
+            <a href="{% url 'prereg_page' %}" class="btn btn-primary">Pre-Registration</a>
+            <a href="{% url 'check_status_page' %}" class="btn btn-secondary">Check Registration Status</a>
+            <a href="{% url 'update_reg_page' %}" class="btn btn-outline-info">Update Registration</a>
+        </div>
+    </div>
+</div>
+
+
+
+<!-- Results Section -->
+<div class="card mb-4 shadow">
+    <div class="card-body p-4">
+        <h2 class="fs-5 fw-semibold mb-3">📊 Results</h2>
+        <div class="d-flex gap-3 flex-wrap">
+            <button class="btn btn-primary">
+                <i class="fa-solid fa-file-lines me-1"></i> View Results
+            </button>
+            <button class="btn btn-outline-primary">
+                <i class="fa-solid fa-graduation-cap me-1"></i> Download Marksheet
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Links Section -->
+<div class="card shadow">
+    <div class="card-body p-4">
+        <h2 class="fs-5 fw-semibold mb-3">📌 Quick Links</h2>
+        <div class="row g-3">
+            <div class="col-6">
+                <button class="btn btn-secondary w-100">Attendance</button>
+            </div>
+            <div class="col-6">
+                <button class="btn btn-secondary w-100">Fee Status</button>
+            </div>
+            <div class="col-6">
+                <button class="btn btn-secondary w-100">Time Table</button>
+            </div>
+            <div class="col-6">
+                <button class="btn btn-secondary w-100">Academic Calendar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{%endblock%}

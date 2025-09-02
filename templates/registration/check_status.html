@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Course Selection Status</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="min-h-screen bg-gray-100 flex items-start justify-center py-10">
+    <!-- Main Container -->
+    <div class="w-[1150px]">
+
+        <!-- Page Title + Note -->
+        <div class="mb-5">
+            <h1 class="text-3xl font-bold">Course Summary</h1>
+            <p class="text-sm text-gray-600 mt-1">
+                Here a student can see the status of all pre-registered courses and set priorities among accepted ones
+                sharing the same slot.
+            </p>
+        </div>
+
+        <!-- Card -->
+        <div class="bg-white rounded-2xl shadow">
+
+            <!-- Table -->
+            <div class="overflow-x-auto rounded-2xl">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-gray-50 text-gray-700">
+                            <th class="px-5 py-3 text-sm font-semibold">Course Code</th>
+                            <th class="px-5 py-3 text-sm font-semibold">Course Name</th>
+                            <th class="px-5 py-3 text-sm font-semibold">Instructor</th>
+                            <th class="px-5 py-3 text-sm font-semibold">Type</th>
+                            <th class="px-5 py-3 text-sm font-semibold">Slot</th>
+                            <th class="px-5 py-3 text-sm font-semibold">Credits</th>
+                            <th class="px-5 py-3 text-sm font-semibold">LTPC</th>
+                            <th class="px-5 py-3 text-sm font-semibold">Status</th>
+                            <th class="px-5 py-3 text-sm font-semibold">Priority</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-gray-900">
+
+                        <!-- Row 1 -->
+                        <tr class="border-t">
+                            <td class="px-5 py-3">MA-101</td>
+                            <td class="px-5 py-3">Calculus I</td>
+                            <td class="px-5 py-3">Dr. A. Mathur</td>
+                            <td class="px-5 py-3">IC</td>
+                            <td class="px-5 py-3">A</td>
+                            <td class="px-5 py-3">4</td>
+                            <td class="px-5 py-3">3-1-0-4</td>
+                            <td class="px-5 py-3">
+                                <span
+                                    class="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1">
+                                    Accepted
+                                </span>
+                            </td>
+                            <td class="px-5 py-3">
+                                <select
+                                    class="w-44 bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
+                                    <option>Select Priority</option>
+                                    <option>1</option>
+                                    <option>2</option>
+                                    <option>3</option>
+                                </select>
+                            </td>
+                        </tr>
+
+                        <!-- Row 2 -->
+                        <tr class="bg-gray-50 border-t">
+                            <td class="px-5 py-3">CS-310</td>
+                            <td class="px-5 py-3">Algorithms</td>
+                            <td class="px-5 py-3">Dr. P. Mehta</td>
+                            <td class="px-5 py-3">IC</td>
+                            <td class="px-5 py-3">D</td>
+                            <td class="px-5 py-3">3</td>
+                            <td class="px-5 py-3">3-0-0-3</td>
+                            <td class="px-5 py-3">
+                                <span
+                                    class="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-xs font-medium px-3 py-1">
+                                    Pending
+                                </span>
+                            </td>
+                            <td class="px-5 py-3">-</td>
+                        </tr>
+
+                        <!-- Row 3 -->
+                        <tr class="border-t">
+                            <td class="px-5 py-3">CS-214</td>
+                            <td class="px-5 py-3">Computer Organization and Computing</td>
+                            <td class="px-5 py-3">Dr. Sambhav Kumar Pandey</td>
+                            <td class="px-5 py-3">DC</td>
+                            <td class="px-5 py-3">H</td>
+                            <td class="px-5 py-3">4</td>
+                            <td class="px-5 py-3">3-0-4-1</td>
+                            <td class="px-5 py-3">
+                                <span
+                                    class="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1">
+                                    Accepted
+                                </span>
+                            </td>
+                            <td class="px-5 py-3">-</td>
+                        </tr>
+
+                        <!-- Row 4 -->
+                        <tr class="bg-gray-50 border-t">
+                            <td class="px-5 py-3">PH-101</td>
+                            <td class="px-5 py-3">Physics I</td>
+                            <td class="px-5 py-3">Dr. B. Raman</td>
+                            <td class="px-5 py-3">IC</td>
+                            <td class="px-5 py-3">A</td>
+                            <td class="px-5 py-3">4</td>
+                            <td class="px-5 py-3">3-0-2-4</td>
+                            <td class="px-5 py-3">
+                                <span
+                                    class="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1">
+                                    Accepted
+                                </span>
+                            </td>
+                            <td class="px-5 py-3">
+                                <select
+                                    class="w-44 bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
+                                    <option>Select Priority</option>
+                                    <option>1</option>
+                                    <option>2</option>
+                                    <option>3</option>
+                                </select>
+                            </td>
+                        </tr>
+
+                        <!-- Row 5 -->
+                        <tr class="border-t">
+                            <td class="px-5 py-3">CS-110</td>
+                            <td class="px-5 py-3">Introduction to Programming</td>
+                            <td class="px-5 py-3">Dr. Jane Smith</td>
+                            <td class="px-5 py-3">IC</td>
+                            <td class="px-5 py-3">B</td>
+                            <td class="px-5 py-3">3</td>
+                            <td class="px-5 py-3">3-0-2-4</td>
+                            <td class="px-5 py-3">
+                                <span
+                                    class="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1">
+                                    Accepted
+                                </span>
+                            </td>
+                            <td class="px-5 py-3">-</td>
+                        </tr>
+
+                        <!-- Row 6 -->
+                        <tr class="bg-gray-50 border-t">
+                            <td class="px-5 py-3">CH-101</td>
+                            <td class="px-5 py-3">Chemistry I</td>
+                            <td class="px-5 py-3">Dr. C. Nair</td>
+                            <td class="px-5 py-3">IC</td>
+                            <td class="px-5 py-3">A</td>
+                            <td class="px-5 py-3">4</td>
+                            <td class="px-5 py-3">3-1-0-4</td>
+                            <td class="px-5 py-3">
+                                <span
+                                    class="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1">
+                                    Accepted
+                                </span>
+                            </td>
+                            <td class="px-5 py-3">
+                                <select
+                                    class="w-44 bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
+                                    <option>Select Priority</option>
+                                    <option>1</option>
+                                    <option>2</option>
+                                    <option>3</option>
+                                </select>
+                            </td>
+                        </tr>
+
+                        <!-- Row 7 -->
+                        <tr class="border-t">
+                            <td class="px-5 py-3">CS-101</td>
+                            <td class="px-5 py-3">Introduction to Computer Science</td>
+                            <td class="px-5 py-3">Dr. John Doe</td>
+                            <td class="px-5 py-3">IC</td>
+                            <td class="px-5 py-3">A</td>
+                            <td class="px-5 py-3">8</td>
+                            <td class="px-5 py-3">3-0-2-4</td>
+                            <td class="px-5 py-3">
+                                <span
+                                    class="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-xs font-medium px-3 py-1">
+                                    Pending
+                                </span>
+                            </td>
+                            <td class="px-5 py-3">
+                                <select
+                                    class="w-44 bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
+                                    <option>Select Priority</option>
+                                    <option>1</option>
+                                    <option>2</option>
+                                    <option>3</option>
+                                </select>
+                            </td>
+                        </tr>
+
+                        <!-- Row 8 -->
+                        <tr class="bg-gray-50 border-t">
+                            <td class="px-5 py-3">ES-101</td>
+                            <td class="px-5 py-3">Engineering Science</td>
+                            <td class="px-5 py-3">Dr. E. Roy</td>
+                            <td class="px-5 py-3">IC</td>
+                            <td class="px-5 py-3">A</td>
+                            <td class="px-5 py-3">3</td>
+                            <td class="px-5 py-3">2-0-2-3</td>
+                            <td class="px-5 py-3">
+                                <span
+                                    class="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1">
+                                    Accepted
+                                </span>
+                            </td>
+                            <td class="px-5 py-3">
+                                <select
+                                    class="w-44 bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
+                                    <option>Select Priority</option>
+                                    <option>1</option>
+                                    <option>2</option>
+                                    <option>3</option>
+                                </select>
+                            </td>
+                        </tr>
+
+                        <!-- Row 9 -->
+                        <tr class="border-t">
+                            <td class="px-5 py-3">HS-202</td>
+                            <td class="px-5 py-3">Information Security And Privacy</td>
+                            <td class="px-5 py-3">bb</td>
+                            <td class="px-5 py-3">IC</td>
+                            <td class="px-5 py-3">D</td>
+                            <td class="px-5 py-3">4</td>
+                            <td class="px-5 py-3">3-2-0-1</td>
+                            <td class="px-5 py-3">
+                                <span
+                                    class="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-xs font-medium px-3 py-1">
+                                    Pending
+                                </span>
+                            </td>
+                            <td class="px-5 py-3">-</td>
+                        </tr>
+
+                        <!-- Row 10 -->
+                        <tr class="bg-gray-50 border-t">
+                            <td class="px-5 py-3">DS-313</td>
+                            <td class="px-5 py-3">Statistical Foundations Of Data Science</td>
+                            <td class="px-5 py-3">Dr. Sameer</td>
+                            <td class="px-5 py-3">DE</td>
+                            <td class="px-5 py-3">C</td>
+                            <td class="px-5 py-3">3</td>
+                            <td class="px-5 py-3">3-0-0-3</td>
+                            <td class="px-5 py-3">
+                                <span
+                                    class="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-xs font-medium px-3 py-1">
+                                    Pending
+                                </span>
+                            </td>
+                            <td class="px-5 py-3">-</td>
+                        </tr>
+
+                        <!-- Row 11 -->
+                        <tr class="border-t">
+                            <td class="px-5 py-3">CS-102</td>
+                            <td class="px-5 py-3">Data Structures and Algorithms</td>
+                            <td class="px-5 py-3">Dr. John Doe</td>
+                            <td class="px-5 py-3">IC</td>
+                            <td class="px-5 py-3">B</td>
+                            <td class="px-5 py-3">4</td>
+                            <td class="px-5 py-3">3-1-2-4</td>
+                            <td class="px-5 py-3">
+                                <span
+                                    class="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-xs font-medium px-3 py-1">
+                                    Pending
+                                </span>
+                            </td>
+                            <td class="px-5 py-3">-</td>
+                        </tr>
+
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Footer Note -->
+            <div class="px-5">
+                <div class="mt-5 rounded-lg bg-yellow-100 text-yellow-900 text-sm p-4">
+                    For DC (discipline core) courses, status is automatically accepted as these are compulsory;
+                    instructors still need to update status in this case.
+                </div>
+            </div>
+
+            <!-- Submit Section -->
+            <div class="flex items-center justify-between px-5 py-6">
+                <p class="text-red-500 font-medium">Fill all priorities before submitting.</p>
+                <button id="submitBtn" class="bg-gray-800 text-white px-5 py-2 rounded-lg hover:bg-black">
+                    Submit
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmModal" class="fixed inset-0 hidden justify-center items-center bg-black/60 z-50">
+        <div class="bg-white rounded-2xl shadow-lg w-[420px] p-6">
+            <h2 class="text-xl font-bold mb-2">Confirm Submission</h2>
+            <p class="text-red-500 mb-4">
+                You will not be able to edit your course priorities for this semester after this.
+                Are you sure you'd like to proceed?
+            </p>
+            <div class="flex justify-between">
+                <button id="backBtn" class="bg-gray-400 text-white px-4 py-2 rounded-lg hover:bg-gray-500">Back</button>
+                <button id="proceedBtn"
+                    class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">Proceed</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script -->
+    <script>
+        // Open modal on submit
+        document.getElementById('submitBtn').addEventListener('click', () => {
+            const m = document.getElementById('confirmModal');
+            m.classList.remove('hidden');
+            m.classList.add('flex');
+        });
+
+        // Close modal
+        document.getElementById('backBtn').addEventListener('click', () => {
+            document.getElementById('confirmModal').classList.add('hidden');
+        });
+
+        // Proceed navigation
+        document.getElementById('proceedBtn').addEventListener('click', () => {
+            window.location.href = '/thanku';
+        });
+    </script>
+</body>
+
+</html>
