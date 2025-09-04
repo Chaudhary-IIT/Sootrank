@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sootrank Admin Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+
+        .card {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            cursor: pointer;
+        }
+
+        .card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .icon {
+            font-size: 40px;
+            color: #0d6efd;
+        }
+
+        .navbar-brand {
+            font-weight: 700;
+            font-size: 1.8rem;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm mb-5">
+        <div class="container">
+            <a class="navbar-brand" href="#">Sootrank Admin</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h2 class="mb-4 text-center text-primary fw-bold">Admin Dashboard</h2>
+        <p class="text-center mb-5 text-secondary fs-5">
+            Manage all academic automation modules from here
+        </p>
+
+        <div class="row g-4 justify-content-center">
+            <div class="col-md-4 col-lg-3">
+                <a href="{% url 'custom_admin_students' %}" class="text-decoration-none">
+                    <div class="card shadow-sm text-center py-4 px-3 bg-white rounded">
+                        <i class="fa-solid fa-user-graduate icon mb-3"></i>
+                        <h5 class="card-title text-dark">Students</h5>
+                        <p class="card-text text-muted">View and manage student data</p>
+                    </div>
+                </a>
+            </div>
+
+            <div class="col-md-4 col-lg-3">
+                <a href="{% url 'custom_admin_faculty' %}" class="text-decoration-none">
+                    <div class="card shadow-sm text-center py-4 px-3 bg-white rounded">
+                        <i class="fa-solid fa-chalkboard-teacher icon mb-3"></i>
+                        <h5 class="card-title text-dark">Faculty</h5>
+                        <p class="card-text text-muted">Details and management of faculties</p>
+                    </div>
+                </a>
+            </div>
+
+            <div class="col-md-4 col-lg-3">
+                <a href="#" class="text-decoration-none">
+                    <div class="card shadow-sm text-center py-4 px-3 bg-white rounded">
+                        <i class="fa-solid fa-user-shield icon mb-3"></i>
+                        <h5 class="card-title text-dark">Admins</h5>
+                        <p class="card-text text-muted">Administrator account management</p>
+                    </div>
+                </a>
+            </div>
+
+            <div class="col-md-4 col-lg-3">
+                <a href="#" class="text-decoration-none">
+                    <div class="card shadow-sm text-center py-4 px-3 bg-white rounded">
+                        <i class="fa-solid fa-code-branch icon mb-3"></i>
+                        <h5 class="card-title text-dark">Branches</h5>
+                        <p class="card-text text-muted">Department and branch details</p>
+                    </div>
+                </a>
+            </div>
+
+            <div class="col-md-4 col-lg-3">
+                <a href="#" class="text-decoration-none">
+                    <div class="card shadow-sm text-center py-4 px-3 bg-white rounded">
+                        <i class="fa-solid fa-book-open icon mb-3"></i>
+                        <h5 class="card-title text-dark">Courses</h5>
+                        <p class="card-text text-muted">Manage courses and credits</p>
+                    </div>
+                </a>
+            </div>
+
+            <div class="col-md-4 col-lg-3">
+                <a href="#" class="text-decoration-none">
+                    <div class="card shadow-sm text-center py-4 px-3 bg-white rounded">
+                        <i class="fa-solid fa-layer-group icon mb-3"></i>
+                        <h5 class="card-title text-dark">Course Branch Categories</h5>
+                        <p class="card-text text-muted">Categorize courses by branch</p>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>

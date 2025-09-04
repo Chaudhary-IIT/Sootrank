@@ -7,7 +7,9 @@ from Registration.models import Student, Faculty, Admins
 from django.contrib.auth import authenticate , login as auth_login
 from django.contrib.auth.hashers import make_password,check_password
 from urllib.parse import urlencode
+from django.core.files.storage import default_storage
 import re
+import csv
 
 def login(request):
     if request.method == "POST":
@@ -18,7 +20,7 @@ def login(request):
             if Admins.objects.filter(email_id=identifier).exists():
                 Admin = Admins.objects.get(email_id=identifier)
                 if check_password(password, Admin.password):
-                    return redirect("/admin/")
+                    return redirect("/custom-admin/")
                 else:
                     messages.error(request, "Invalid Admin Credentials")
                     return render(request, "login.html")
@@ -158,3 +160,192 @@ def view_courses(request):
 
 def update_courses(request):
     return render(request,'instructor/edit_courses.html')
+
+def custom_admin_home(request):
+    return render(request, "admin/custom_admin_home.html")
+
+def custom_admin_students(request):
+    students = Student.objects.all()
+    if request.method=='POST':
+        firstname=request.POST['firstname']
+        lastname=request.POST['lastname']
+        roll_no=request.POST['roll_no']
+        email=request.POST['email']
+        department=request.POST['department']
+        branch=request.POST['branch']
+        password1=request.POST['password']
+        mobile_no=request.POST['mobile_no']
+        hashed_password = make_password(password1)
+
+        pattern1=re.compile(r'^(?:B|b|V|v|D|d|IM|im|MB|mb)\d{5}$')
+        pattern2=re.compile(r'^(?:B|b|V|v|D|d|IM|im|MB|mb)\d{5}@students\.iitmandi\.ac\.in$')
+
+
+        if(pattern1.match(roll_no) and pattern2.match(email) and (email[:len(roll_no)].lower()==roll_no.lower())):
+            
+            try:
+                Student.objects.create(
+                    first_name=firstname,
+                    last_name=lastname,
+                    email_id=email.lower(),
+                    roll_no=roll_no.lower(),
+                    password=hashed_password,
+                    department=department,
+                    branch=branch,
+                    mobile_no=mobile_no,
+
+                )
+                messages.success(request, 'Registration successful.')
+                return redirect('/custom-admin/students/')  # Redirect to login page or another page
+            except IntegrityError:
+                messages.error(request, "Student with this email or roll number already exists.")
+        else:
+            messages.error(request, "Invalid Roll No. or Institute Email")
+    return render(request, "admin/custom_admin_students.html", {"students": students})
+
+def custom_admin_students_bulk_add(request):
+    return render(request, "admin/bulk_add.html")
+
+def custom_admin_faculty(request):
+    faculties = Faculty.objects.all()
+    if request.method=='POST':
+        first_name=request.POST['firstname']
+        last_name=request.POST['lastname']
+        email_id=request.POST['email']
+        department=request.POST['department']
+        password1=request.POST['password']
+        hashed_password = make_password(password1)
+
+        pattern=re.compile(r'^[a-zA-Z0-9._%+-]+@iitmandi\.ac\.in$')
+
+        if(pattern.match(email_id)):
+            try:
+                Faculty.objects.create(
+                    first_name=first_name,
+                    last_name=last_name,
+                    email_id=email_id.lower(),
+                    password=hashed_password,
+                    department=department,
+                )
+                messages.success(request, 'Faculty added successfully.')
+                return redirect('/custom-admin/faculty/')  # Redirect to login page or another page
+            except IntegrityError:
+                messages.error(request, "Faculty with this email already exists.")
+        else:
+            messages.error(request, "Invalid Institute Email")
+    return render(request, "admin/custom_admin_faculty.html", {"faculties": faculties})
+
+
+def custom_admin_students_bulk_add(request):
+    if request.method == "POST":
+        csv_file = request.FILES.get("csv_file")
+        if not csv_file:
+            messages.error(request, "Please upload a CSV file.")
+            return redirect("custom_admin_students_bulk_add")
+
+        # Save uploaded file temporarily
+        temp_file_path = default_storage.save(
+            f"temp/{csv_file.name}", csv_file
+        )
+        added_count = 0
+        error_rows = []
+
+        with default_storage.open(temp_file_path, mode='r') as file:
+            reader = csv.DictReader(file)
+            required_fields = [
+                "first_name", "last_name", "email_id", "password",
+                "roll_no", "department", "branch", "mobile_no"
+            ]
+            for idx, row in enumerate(reader, start=2):  # start at 2 for header
+                # Validate required fields
+                if not all(row.get(f) for f in required_fields):
+                    error_rows.append(f"Row {idx}: Missing required fields.")
+                    continue
+                try:
+                    student, created = Student.objects.get_or_create(
+                        roll_no=row["roll_no"],
+                        defaults={
+                            "first_name": row["first_name"],
+                            "last_name": row["last_name"],
+                            "email_id": row["email_id"],
+                            "password": row["password"],
+                            "department": row["department"],
+                            "branch": row["branch"],
+                            "mobile_no": row["mobile_no"] or None,
+                        }
+                    )
+                    if created:
+                        added_count += 1
+                    else:
+                        error_rows.append(
+                            f"Row {idx}: Student with roll_no '{row['roll_no']}' already exists."
+                        )
+                except Exception as e:
+                    error_rows.append(f"Row {idx}: {str(e)}")
+
+        default_storage.delete(temp_file_path)
+
+        if added_count:
+            messages.success(request, f"Successfully added {added_count} students.")
+        for error in error_rows:
+            messages.error(request, error)
+        return redirect("custom_admin_students_bulk_add")
+    
+    # GET: Render the bulk add page
+    return render(request, "admin/bulk_add.html")
+
+def delete_student_by_roll(request, roll_no):
+    student = get_object_or_404(Student, roll_no=roll_no)
+    if request.method == "POST":
+        student.delete()
+        return redirect('custom_admin_students')
+
+def custom_admin_edit_student(request, roll_no):
+    student = get_object_or_404(Student, roll_no=roll_no)
+    if request.method == "POST":
+        # Update student details
+        student.roll_no = request.POST.get("roll_no")
+        student.first_name = request.POST.get("first_name")
+        student.last_name = request.POST.get("last_name")
+        student.email_id = request.POST.get("email_id")
+        student.department = request.POST.get("department")
+        student.branch = request.POST.get("branch")
+        student.mobile_no = request.POST.get("mobile_no")
+        student.save()
+        messages.success(request, "Student details updated successfully.")
+        return redirect("custom_admin_students")
+    return render(request, "admin/custom_admin_edit_student.html", {"student": student})
+
+def delete_faculty(request, faculty_id):
+    faculty = get_object_or_404(Faculty, id=faculty_id)
+    if request.method == "POST":
+        faculty.delete()
+        return redirect('custom_admin_faculty')
+    
+def custom_admin_edit_faculty(request, faculty_id):
+    faculty = get_object_or_404(Faculty, id=faculty_id)
+    if request.method == "POST":
+        faculty.first_name = request.POST.get("first_name")
+        faculty.last_name = request.POST.get("last_name")
+        faculty.email_id = request.POST.get("email_id")
+        faculty.department = request.POST.get("department")
+        faculty.mobile_no = request.POST.get("mobile_no")
+        faculty.password = request.POST.get("password")
+        faculty.password = make_password(faculty.password)
+        faculty.profile_image = request.FILES.get("profile_image") or faculty.profile_image
+        faculty.save()
+        messages.success(request, "Faculty details updated successfully.")
+        return redirect("custom_admin_faculty")
+    return render(request, "admin/custom_admin_edit_faculty.html", {"faculty": faculty})
+
+# def custom_admin_admins(request):
+#     return render(request, "admin/custom_admin_admins.html")
+
+# def custom_admin_branches(request):
+#     return render(request, "admin/custom_admin_branches.html")
+
+# def custom_admin_courses(request):
+#     return render(request, "admin/custom_admin_courses.html")
+
+# def custom_admin_coursebranches(request):
+#     return render(request, "admin/custom_admin_coursebranches.html")
