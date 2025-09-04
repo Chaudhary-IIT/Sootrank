@@ -17,7 +17,7 @@
             <p class="mb-1">Course: {{student.branch}} ({{student.department}})</p>
             <p class="mb-2">Semester: 3rd</p>
             
-            <a href="{%url 'registered_courses'%}" class="btn btn-warning">Edit Profile</a>
+            <a href="{%url 'student_edit_profile'%}" class="btn btn-warning">Edit Profile</a>
             <a href="{%url 'registered_courses'%}" class="btn btn-info">Registered Courses</a>
         </div>
     </div>
@@ -67,7 +67,7 @@
                 <button class="btn btn-secondary w-100">Time Table</button>
             </div>
             <div class="col-6">
-                <button class="btn btn-secondary w-100">Academic Calendar</button>
+                <a href="https://academics.iitmandi.ac.in/calendar" class="btn btn-secondary w-100">Academic Calendar</a>
             </div>
         </div>
     </div>

@@ -45,7 +45,7 @@
 
             <!-- Big line with role and full name -->
             <p class="display-7 fw-semibold text-primary mb-3">
-                Redirecting to {{ role_label }} dashboard, {{ full_name }}
+                Redirecting to {{ request.session.flash_ctx.role_label }} dashboard, {{ request.session.flash_ctx.full_name }}
             </p>
 
             <div class="d-flex align-items-center justify-content-center gap-2">
@@ -66,7 +66,7 @@
         // Redirect to the provided URL from server context
         setTimeout(() => {
             window.location.href = "{{ redirect_url }}"; // e.g., /student/dashboard/
-        }, 1600);
+        }, 2000);
     </script>
 </body>
 
