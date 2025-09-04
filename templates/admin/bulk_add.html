@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bulk Add Students - Sootrank Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <style>
+        body {
+            background-color: #f9fafb;
+        }
+
+        .form-section {
+            background: white;
+            padding: 32px;
+            border-radius: 12px;
+            box-shadow: 0 0 20px rgb(0 0 0 / 0.12);
+            margin-top: 60px;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .form-control:focus {
+            box-shadow: 0 0 6px rgba(13, 110, 253, .2);
+            border-color: #0d6efd;
+        }
+
+        .instructions {
+            font-size: 1rem;
+            color: #5b5b5b;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow">
+        <div class="container">
+            <a class="navbar-brand" href="{% url 'custom_admin_home' %}">Sootrank Admin</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="form-section">
+            <h2 class="mb-3 text-primary text-center">Bulk Add Students</h2>
+            <div class="instructions">
+                <p class="mb-2">
+                    Upload a CSV file containing student data.<br>
+                    <strong>Required columns:</strong> first_name, last_name, email_id, password, roll_no, department,
+                    branch, mobile_no
+                </p>
+                <p class="mb-2">
+                    <a href="/media/sample_bulk_students.csv" class="link-primary">Download sample CSV</a>
+                </p>
+            </div>
+            <form method="post" enctype="multipart/form-data" action="{% url 'custom_admin_students_bulk_add' %}">
+                {% csrf_token %}
+                <div class="mb-4">
+                    <label for="csv_file" class="form-label fw-semibold">CSV File</label>
+                    <input type="file" class="form-control" id="csv_file" name="csv_file" accept=".csv" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Upload and Add Students</button>
+            </form>
+
+            {% if messages %}
+            <div class="mt-4">
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }}">
+                    {{ message }}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>

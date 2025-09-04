@@ -55,9 +55,44 @@ class Admins(models.Model):
         if not self.password.startswith('pbkdf2_sha256$'):
             self.password = make_password(self.password)
         super().save(*args, **kwargs)
+from django.db import models
+
+class Department(models.Model):
+    SCHOOL_CHOICES = [
+        ('SCEE', 'School of Computing and Electrical Engineering (SCEE)'),
+        ('SMSS', 'School of Mathematics & Statistical Sciences (SMSS)'),
+        ('SPS', 'School of Physical Sciences (SPS)'),
+        ('SBB', 'School of Biosciences & Bioengineering (SBB)'),
+        ('SCENE', 'School of Civil & Environmental Engineering (SCENE)'),
+        ('SMME', 'School of Mechanical and Materials Engineering (SMME)'),
+        ('SCS', 'School of Chemical Sciences (SCS)'),
+    ]
+
+    code = models.CharField(max_length=10, choices=SCHOOL_CHOICES, unique=True)
+    name = models.CharField(max_length=255)
+
+    def __str__(self):
+        # Return the full name matching the code
+        return dict(self.SCHOOL_CHOICES).get(self.code, self.name)
+
 
 class Branch(models.Model):
-    name = models.CharField(max_length=100, unique=True)
+    BRANCHES = [
+        ("CSE", "Computer Science and Engineering"),
+        ("DSE", "Data Science and Engineering"),
+        ("ECE", "Electronics and Communication Engineering"),
+        ("ME", "Mechanical Engineering"),
+        ("CE", "Civil Engineering"),
+        ("EE", "Electrical Engineering"),
+        ("VLSI", "Very Large Scale Integration"),
+        ("EP", "Engineering Physics"),
+        ("GE", "General Engineering"),
+        ("MnC", "Mathematics and Computing"),
+        ("MSE", "Material Science and Engineering"),
+        ("BioEng", "Bioengineering"),
+        ("BS_CS","Bachelor of Science in Chemical Science")
+    ]
+    name = models.CharField(max_length=100, unique=True,choices=BRANCHES)
 
     def __str__(self):
         return self.name

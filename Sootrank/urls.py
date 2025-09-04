@@ -23,6 +23,14 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('custom-admin/', views.custom_admin_home, name='custom_admin_home'),
+    path('custom-admin/students/', views.custom_admin_students, name='custom_admin_students'),
+    path('custom-admin/students/bulk_add/', views.custom_admin_students_bulk_add, name='custom_admin_students_bulk_add'),
+    path('custom-admin/faculty/', views.custom_admin_faculty, name='custom_admin_faculty'),
+    path('custom-admin/students/delete/<str:roll_no>/', views.delete_student_by_roll, name='delete_student_by_roll'),
+    path('custom-admin/students/edit/<str:roll_no>/', views.custom_admin_edit_student, name='custom_admin_edit_student'),
+    path('custom-admin/faculty/delete/<int:faculty_id>/', views.delete_faculty, name='delete_faculty'),
+    path('custom-admin/faculty/edit/<int:faculty_id>/', views.custom_admin_edit_faculty, name='custom_admin_edit_faculty'),
     path('',views.login),
     path('login/', views.login, name='login'),
     path('register/',views.register),
