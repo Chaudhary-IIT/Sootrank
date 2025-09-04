@@ -105,7 +105,7 @@
                         <a class="nav-link{% block nav_timetable_active %}{% endblock %}" href="#">Time Table</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link{% block nav_calendar_active %}{% endblock %}" href="#">Academic Calendar</a>
+                        <a class="nav-link{% block nav_calendar_active %}{% endblock %}" href="https://academics.iitmandi.ac.in/calendar">Academic Calendar</a>
                     </li>
                 </ul>
 
@@ -130,7 +130,7 @@
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="profileDrop">
                             <li>
-                                <a class="dropdown-item" href="#">
+                                <a class="dropdown-item" href="{% url 'student_profile' %}">
                                     <i class="fa-solid fa-user me-2"></i> My Profile
                                 </a>
                             </li>
@@ -143,7 +143,7 @@
                                 <hr class="dropdown-divider">
                             </li>
                             <li>
-                                <form method="post" action="#">
+                                <form method="post" action="{% url 'logout' %}">
                                     {% csrf_token %}
                                     <button class="dropdown-item text-danger">
                                         <i class="fa-solid fa-right-from-bracket me-2"></i> Logout

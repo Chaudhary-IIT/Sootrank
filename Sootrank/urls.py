@@ -14,9 +14,12 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+from django.conf import settings
 from django.contrib import admin
+from django.contrib.auth.views import LogoutView
 from django.urls import path
 from . import views
+from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -33,7 +36,11 @@ urlpatterns = [
     path('register/',views.register),
     # path('auth/success/', views.auth_success, name='auth_success'),
     path("students_dashboard/", views.students_dashboard, name="students_dashboard"),
+    path("students_dashboard/profile/", views.student_profile, name="student_profile"),
+    path("student/profile/edit/", views.student_edit_profile, name="student_edit_profile"),
     path("faculty_dashboard/", views.faculty_dashboard, name="faculty_dashboard"),
+    path("faculty_dashboard/profile/", views.faculty_profile, name="faculty_profile"),
+    path("faculty/profile/edit/", views.faculty_edit_profile, name="faculty_edit_profile"),
     path('student/bulk-upload/', views.student_bulk_upload, name='registration_student_bulk_upload'),
     path("students_dashboard/registration/pre/", views.pre_registration, name="prereg_page"),
     path("students_dashboard/registration/status/", views.check_status, name="check_status_page"),
@@ -42,16 +49,9 @@ urlpatterns = [
     path("faculty_dashboard/course_request", views.course_request, name="course_request"),
     path("faculty_dashboard/view_courses", views.view_courses, name="view_courses"),
     path("faculty_dashboard/update_courses", views.update_courses, name="update_courses"),
-
-
-    # path("logout/", views.logout_view, name="logout"),
-    # path("catalog/", views.catalog, name="catalog"),
-    # path("select-courses/", views.select_courses, name="select_courses"),
-    # path("register-courses/", views.register_courses, name="register_courses"),
-    # path("profile/update/", views.profile_update, name="profile_update"),
-    # path("pay-fees/", views.pay_fees, name="pay_fees"),
-    # path("support/ticket/", views.support_ticket, name="support_ticket"),
-    # path("tickets/", views.tickets, name="tickets"),
-    # path("notifications/", views.notifications, name="notifications"),
-    # path("change-password/", views.change_password, name="change_password"),
+    path("logout/", LogoutView.as_view(next_page="login"), name="logout")
 ]
+
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT) 

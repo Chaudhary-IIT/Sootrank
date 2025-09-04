@@ -1,14 +1,17 @@
 from http.client import HTTPResponse
+from django.conf import settings
 from django.contrib import messages
 from django.db import IntegrityError
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from Registration.models import Student, Faculty, Admins
 from django.contrib.auth import authenticate , login as auth_login
 from django.contrib.auth.hashers import make_password,check_password
 from urllib.parse import urlencode
 from django.core.files.storage import default_storage
 import re
+from Registration.forms import FacultyEditForm, StudentEditForm
 import csv
 
 def login(request):
@@ -107,9 +110,6 @@ def register(request):
 
     return render(request, 'register.html')
 
-def student_bulk_upload(request):
-    return render(request, "registration/student_bulk_upload.html")
-
 def students_dashboard(request):
     roll_no = request.session.get("roll_no")
     if not roll_no:
@@ -161,6 +161,62 @@ def view_courses(request):
 def update_courses(request):
     return render(request,'instructor/edit_courses.html')
 
+
+def student_profile(request):
+    roll_no = request.session.get("roll_no")
+    if not roll_no:
+        login_url = getattr(settings, "LOGIN_URL", "/login/")
+        return redirect(f"{login_url}?next={request.path}")
+    student = get_object_or_404(Student, roll_no=roll_no)
+    return render(request, "student_profile.html", {"student": student})
+
+def faculty_profile(request):
+    email_id = request.session.get("email_id")
+    if not email_id:
+        login_url = getattr(settings, "LOGIN_URL", "/login/")
+        return redirect(f"{login_url}?next={request.path}")
+    faculty = get_object_or_404(Faculty, email_id=email_id)
+    return render(request, "instructor/profile.html", {"faculty": faculty})
+
+
+def student_edit_profile(request):
+    roll_no = request.session.get("roll_no")
+    if not roll_no:
+        login_url = getattr(settings, "LOGIN_URL", "/login/")
+        return redirect(f"{login_url}?next={request.path}")
+    student = get_object_or_404(Student, roll_no=roll_no)
+    if request.method == "POST":
+        form = StudentEditForm(request.POST, request.FILES, instance=student)
+        if form.is_valid():
+            form.save()
+            return redirect(reverse("student_profile"))
+    else:
+        form = StudentEditForm(instance=student)
+    context = {
+        "form": form,
+        "student": student,
+    }
+    return render(request, "student_edit_profile.html", context)
+
+
+
+def faculty_edit_profile(request):
+    email_id = request.session.get("email_id")  #
+    if not email_id:
+        login_url = getattr(settings, "LOGIN_URL", "/login/")
+        return redirect(f"{login_url}?next={request.path}")
+
+    faculty = get_object_or_404(Faculty, email_id=email_id)
+
+    if request.method == "POST":
+        form = FacultyEditForm(request.POST, request.FILES, instance=faculty)
+        if form.is_valid():
+            form.save()
+            return redirect(reverse("faculty_profile")) 
+    else:
+        form = FacultyEditForm(instance=faculty)
+
+    return render(request, "instructor/edit_profile.html", {"form": form, "faculty": faculty})
 def custom_admin_home(request):
     return render(request, "admin/custom_admin_home.html")
 
