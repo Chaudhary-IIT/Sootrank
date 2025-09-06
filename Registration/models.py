@@ -1,17 +1,85 @@
 from django.db import models
 from django.contrib.auth.hashers import make_password
 
-# Create your models here.
+class Department(models.Model):
+    SCHOOL_CHOICES = [
+        ('SCEE', 'School of Computing and Electrical Engineering (SCEE)'),
+        ('SMSS', 'School of Mathematics & Statistical Sciences (SMSS)'),
+        ('SPS', 'School of Physical Sciences (SPS)'),
+        ('SBB', 'School of Biosciences & Bioengineering (SBB)'),
+        ('SCENE', 'School of Civil & Environmental Engineering (SCENE)'),
+        ('SMME', 'School of Mechanical and Materials Engineering (SMME)'),
+        ('SCS', 'School of Chemical Sciences (SCS)'),
+    ]
+
+    code = models.CharField(max_length=10, choices=SCHOOL_CHOICES, unique=True)
+    name = models.CharField(max_length=255)
+
+    def __str__(self):
+        return self.name
+    
+class Branch(models.Model):
+    BRANCHES = [
+        ("CSE", "Computer Science and Engineering"),
+        ("DSE", "Data Science and Engineering"),
+        ("ME", "Mechanical Engineering"),
+        ("CE", "Civil Engineering"),
+        ("EE", "Electrical Engineering"),
+        ("MVLSI", "Microelectronics and Very Large Scale Integration"),
+        ("EP", "Engineering Physics"),
+        ("GE", "General Engineering"),
+        ("MnC", "Mathematics and Computing"),
+        ("MSE", "Material Science and Engineering"),
+        ("BioEng", "Bioengineering"),
+        ("BS_CS","Bachelor of Science in Chemical Science")
+    ]
+    name = models.CharField(max_length=100, unique=True,choices=BRANCHES)
+    department = models.ForeignKey(Department, on_delete=models.CASCADE, related_name='branches',null=True)  # One-to-many
+
+    def __str__(self):
+        return self.name
+    
+class Faculty(models.Model):
+    first_name=models.CharField(max_length=255)
+    last_name=models.CharField(max_length=255)
+    profile_image = models.ImageField(upload_to='profile_images/', blank=True, null=True)
+    email_id=models.EmailField(max_length=255,unique=True)
+    password=models.CharField(max_length=255)
+    # faculty_id=models.CharField(max_length=10,unique=True) 
+    department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True)  # Faculty linked to department
+    mobile_no=models.BigIntegerField(null=True)
+
+class Course(models.Model):
+    SLOT_CHOICES=[
+        ("A","A"),
+        ("B","B"),
+        ("C","C"),
+        ("D","D"),
+        ("E","E"),
+        ("F","F"),
+        ("G","G"),
+        ("H","H"),
+        ("FS","FS"),
+    ]
+    code=models.CharField(max_length=255)
+    name=models.CharField(max_length=255)
+    credits=models.IntegerField()
+    LTPC=models.CharField(max_length=20)
+    slot = models.CharField(max_length=2, choices=SLOT_CHOICES)
+    branches = models.ManyToManyField(Branch, through="CourseBranch", related_name="courses")
+    faculties = models.ManyToManyField(Faculty, related_name="courses")
+
 class Student(models.Model):
     first_name=models.CharField(max_length=255)
     last_name=models.CharField(max_length=255)
     profile_image = models.ImageField(upload_to='profile_images/', blank=True, null=True)
     email_id=models.EmailField(max_length=255,unique=True)
     password=models.CharField(max_length=255)
-    roll_no=models.CharField(max_length=10,unique=True)
-    department=models.CharField(max_length=255)
-    branch=models.CharField(max_length=255)
-    mobile_no=models.BigIntegerField(null=True)
+    roll_no = models.CharField(max_length=10, unique=True)
+    department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True)  # Student linked to department
+    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True)  # Student linked to branch
+    mobile_no = models.BigIntegerField(null=True)
+    courses = models.ManyToManyField(Course, through="StudentCourse", related_name="students")
 
     def __str__(self):
         return self.roll_no
@@ -22,15 +90,7 @@ class Student(models.Model):
             self.password = make_password(self.password)
         super().save(*args, **kwargs)
     
-class Faculty(models.Model):
-    first_name=models.CharField(max_length=255)
-    last_name=models.CharField(max_length=255)
-    profile_image = models.ImageField(upload_to='profile_images/', blank=True, null=True)
-    email_id=models.EmailField(max_length=255,unique=True)
-    password=models.CharField(max_length=255)
-    # faculty_id=models.CharField(max_length=10,unique=True)
-    department=models.CharField(max_length=255)
-    mobile_no=models.BigIntegerField(null=True)
+
 
     def save(self, *args, **kwargs):
         # Hash password only if it’s not already hashed
@@ -57,45 +117,7 @@ class Admins(models.Model):
         super().save(*args, **kwargs)
 from django.db import models
 
-class Department(models.Model):
-    SCHOOL_CHOICES = [
-        ('SCEE', 'School of Computing and Electrical Engineering (SCEE)'),
-        ('SMSS', 'School of Mathematics & Statistical Sciences (SMSS)'),
-        ('SPS', 'School of Physical Sciences (SPS)'),
-        ('SBB', 'School of Biosciences & Bioengineering (SBB)'),
-        ('SCENE', 'School of Civil & Environmental Engineering (SCENE)'),
-        ('SMME', 'School of Mechanical and Materials Engineering (SMME)'),
-        ('SCS', 'School of Chemical Sciences (SCS)'),
-    ]
 
-    code = models.CharField(max_length=10, choices=SCHOOL_CHOICES, unique=True)
-    name = models.CharField(max_length=255)
-
-    def __str__(self):
-        # Return the full name matching the code
-        return dict(self.SCHOOL_CHOICES).get(self.code, self.name)
-
-
-class Branch(models.Model):
-    BRANCHES = [
-        ("CSE", "Computer Science and Engineering"),
-        ("DSE", "Data Science and Engineering"),
-        ("ECE", "Electronics and Communication Engineering"),
-        ("ME", "Mechanical Engineering"),
-        ("CE", "Civil Engineering"),
-        ("EE", "Electrical Engineering"),
-        ("VLSI", "Very Large Scale Integration"),
-        ("EP", "Engineering Physics"),
-        ("GE", "General Engineering"),
-        ("MnC", "Mathematics and Computing"),
-        ("MSE", "Material Science and Engineering"),
-        ("BioEng", "Bioengineering"),
-        ("BS_CS","Bachelor of Science in Chemical Science")
-    ]
-    name = models.CharField(max_length=100, unique=True,choices=BRANCHES)
-
-    def __str__(self):
-        return self.name
     
 class CourseBranch(models.Model):
     CORE_ELECTIVE_CHOICES = [
@@ -109,32 +131,24 @@ class CourseBranch(models.Model):
         ("MTP","Major Technical Project (MTP)"),
     ]
 
-    course = models.ForeignKey("Course", on_delete=models.CASCADE)
-    branch = models.ForeignKey("Branch", on_delete=models.CASCADE)
+    course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    branch = models.ForeignKey(Branch, on_delete=models.CASCADE)
     category = models.CharField(max_length=4, choices=CORE_ELECTIVE_CHOICES)
 
     def __str__(self):
-        return f"{self.course.title} - {self.branch.name} ({self.get_category_display()})"
+        return f"{self.course.name} - {self.branch.name} ({self.get_category_display()})"
 
 
-class Course(models.Model):
-    SLOT_CHOICES=[
-        ("A","A"),
-        ("B","B"),
-        ("C","C"),
-        ("D","D"),
-        ("E","E"),
-        ("F","F"),
-        ("G","G"),
-        ("H","H"),
-        ("FS","FS"),
-    ]
-    code=models.CharField(max_length=255)
-    name=models.CharField(max_length=255)
-    credits=models.IntegerField()
-    LTPC=models.CharField(max_length=20)
-    slot = models.CharField(max_length=2, choices=SLOT_CHOICES)
-    branches = models.ManyToManyField(Branch, through="CourseBranch", related_name="courses")
-    faculties = models.ManyToManyField(Faculty, related_name="courses")
 
-    
+class StudentCourse(models.Model):
+    STATUS = [("ENR","Enrolled"), ("CMP","Completed"), ("DRP","Dropped")]
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="enrollments")
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="enrollments")
+    # optional branch snapshot (useful if course is tied to specific branch rules):
+    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True)
+    status = models.CharField(max_length=3, choices=STATUS, default="ENR")
+    grade = models.CharField(max_length=2, null=True, blank=True)  # if grading is tracked
+    term = models.CharField(max_length=20, null=True, blank=True)  # e.g., "2025-ODD"
+
+    class Meta:
+        unique_together = ("student", "course", "term")  # adjust to your policy

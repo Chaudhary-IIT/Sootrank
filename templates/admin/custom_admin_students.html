@@ -68,12 +68,24 @@
                     </div>
                     <div class="col-md-6">
                         <label for="department" class="form-label">Department</label>
-                        <input name="department" type="text" class="form-control" id="department" required />
+                        <select name="department_id" id="department" class="form-select" required>
+                            <option value="" selected disabled>Choose...</option>
+                            {% for dept in departments %}
+                            <option value="{{ dept.id }}">{{ dept.code }} — {{ dept.name }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
+
                     <div class="col-md-6">
                         <label for="branch" class="form-label">Branch</label>
-                        <input name="branch" type="text" class="form-control" id="branch" required />
+                        <select name="branch_id" id="branch" class="form-select" required>
+                            <option value="" selected disabled>Choose...</option>
+                            {% for br in branches %}
+                            <option value="{{ br.id }}">{{ br.name }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
+
                     <div class="col-md-6">
                         <label for="mobile_no" class="form-label">Mobile Number</label>
                         <input name="mobile_no" type="number" class="form-control" id="mobile_no" />
@@ -113,8 +125,8 @@
                         <td>{{ student.branch }}</td>
                         <td>{{ student.mobile_no }}</td>
                         <td class="table-actions">
-                            <a href="{% url 'custom_admin_edit_student' student.roll_no %}" class="btn btn-sm btn-warning"
-                                title="Edit">
+                            <a href="{% url 'custom_admin_edit_student' student.roll_no %}"
+                                class="btn btn-sm btn-warning" title="Edit">
                                 <i class="fa fa-pencil"></i>
                             </a>
                             <form action="{% url 'delete_student_by_roll' student.roll_no %}" method="post"

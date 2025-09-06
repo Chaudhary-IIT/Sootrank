@@ -5,7 +5,7 @@ from django.db import IntegrityError
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from Registration.models import Student, Faculty, Admins
+from Registration.models import Branch, Department, Student, Faculty, Admins
 from django.contrib.auth import authenticate , login as auth_login
 from django.contrib.auth.hashers import make_password,check_password
 from urllib.parse import urlencode
@@ -220,44 +220,100 @@ def faculty_edit_profile(request):
 def custom_admin_home(request):
     return render(request, "admin/custom_admin_home.html")
 
-def custom_admin_students(request):
-    students = Student.objects.all()
-    if request.method=='POST':
-        firstname=request.POST['firstname']
-        lastname=request.POST['lastname']
-        roll_no=request.POST['roll_no']
-        email=request.POST['email']
-        department=request.POST['department']
-        branch=request.POST['branch']
-        password1=request.POST['password']
-        mobile_no=request.POST['mobile_no']
-        hashed_password = make_password(password1)
+# def custom_admin_students(request):
+#     students = Student.objects.all()
+#     if request.method=='POST':
+#         firstname=request.POST['firstname']
+#         lastname=request.POST['lastname']
+#         roll_no=request.POST['roll_no']
+#         email=request.POST['email']
+#         department=request.POST['department']
+#         branch=request.POST['branch']
+#         password1=request.POST['password']
+#         mobile_no=request.POST['mobile_no']
+#         hashed_password = make_password(password1)
 
-        pattern1=re.compile(r'^(?:B|b|V|v|D|d|IM|im|MB|mb)\d{5}$')
-        pattern2=re.compile(r'^(?:B|b|V|v|D|d|IM|im|MB|mb)\d{5}@students\.iitmandi\.ac\.in$')
+#         pattern1=re.compile(r'^(?:B|b|V|v|D|d|IM|im|MB|mb)\d{5}$')
+#         pattern2=re.compile(r'^(?:B|b|V|v|D|d|IM|im|MB|mb)\d{5}@students\.iitmandi\.ac\.in$')
 
 
-        if(pattern1.match(roll_no) and pattern2.match(email) and (email[:len(roll_no)].lower()==roll_no.lower())):
+#         if(pattern1.match(roll_no) and pattern2.match(email) and (email[:len(roll_no)].lower()==roll_no.lower())):
             
+#             try:
+#                 Student.objects.create(
+#                     first_name=firstname,
+#                     last_name=lastname,
+#                     email_id=email.lower(),
+#                     roll_no=roll_no.lower(),
+#                     password=hashed_password,
+#                     department=department,
+#                     branch=branch,
+#                     mobile_no=mobile_no,
+
+#                 )
+#                 messages.success(request, 'Registration successful.')
+#                 return redirect('/custom-admin/students/')  # Redirect to login page or another page
+#             except IntegrityError:
+#                 messages.error(request, "Student with this email or roll number already exists.")
+#         else:
+#             messages.error(request, "Invalid Roll No. or Institute Email")
+#     return render(request, "admin/custom_admin_students.html", {"students": students})
+
+
+def custom_admin_students(request):
+    students = Student.objects.select_related("department","branch").all().order_by("roll_no")
+
+    if request.method == 'POST':
+        firstname = request.POST['firstname'].strip()
+        lastname  = request.POST['lastname'].strip()
+        roll_no   = request.POST['roll_no'].strip()
+        email     = request.POST['email'].strip()
+        password1 = request.POST['password']
+        mobile_no = request.POST.get('mobile_no') or None
+
+        # Get selected IDs from dropdowns
+        dept_id = request.POST.get('department_id')
+        branch_id = request.POST.get('branch_id')
+
+        # Validate basic formats
+        pattern1 = re.compile(r'^(?:B|b|V|v|D|d|IM|im|MB|mb)\d{5}$')
+        pattern2 = re.compile(r'^(?:B|b|V|v|D|d|IM|im|MB|mb)\d{5}@students\.iitmandi\.ac\.in$')
+
+        if pattern1.match(roll_no) and pattern2.match(email) and (email[:len(roll_no)].lower() == roll_no.lower()):
             try:
+                dept = Department.objects.get(pk=dept_id) if dept_id else None
+                branch = Branch.objects.get(pk=branch_id) if branch_id else None
+
                 Student.objects.create(
                     first_name=firstname,
                     last_name=lastname,
                     email_id=email.lower(),
                     roll_no=roll_no.lower(),
-                    password=hashed_password,
-                    department=department,
-                    branch=branch,
+                    password=make_password(password1),
+                    department=dept,     # ForeignKey object, not string
+                    branch=branch,       # ForeignKey object, not string
                     mobile_no=mobile_no,
-
                 )
                 messages.success(request, 'Registration successful.')
-                return redirect('/custom-admin/students/')  # Redirect to login page or another page
+                return redirect('custom_admin_students')
+            except Department.DoesNotExist:
+                messages.error(request, "Selected department does not exist.")
+            except Branch.DoesNotExist:
+                messages.error(request, "Selected branch does not exist.")
             except IntegrityError:
                 messages.error(request, "Student with this email or roll number already exists.")
         else:
             messages.error(request, "Invalid Roll No. or Institute Email")
-    return render(request, "admin/custom_admin_students.html", {"students": students})
+
+    # Supply choices for dropdowns
+    departments = Department.objects.all().order_by('code')
+    branches = Branch.objects.all().order_by('name')
+    return render(request, "admin/custom_admin_students.html", {
+        "students": students,
+        "departments": departments,
+        "branches": branches,
+    })
+
 
 def custom_admin_students_bulk_add(request):
     return render(request, "admin/bulk_add.html")
@@ -405,3 +461,54 @@ def custom_admin_edit_faculty(request, faculty_id):
 
 # def custom_admin_coursebranches(request):
 #     return render(request, "admin/custom_admin_coursebranches.html")
+
+
+
+def custom_admin_branch(request):
+    branches = Branch.objects.select_related("department").order_by("department__code", "name")
+    departments = Department.objects.all().order_by("code")
+
+    # derive choices from model (list of (code, label))
+    branch_choices = Branch.BRANCHES
+
+    if request.method == "POST":
+        dept_id = request.POST.get("department_id")
+        branch_code = request.POST.get("branch_code")  # e.g., "CSE"
+
+        if not dept_id or not branch_code:
+            messages.error(request, "Please select both Department and Branch.")
+            return redirect("custom_admin_branches")
+
+        try:
+            dept = Department.objects.get(pk=dept_id)
+        except Department.DoesNotExist:
+            messages.error(request, "Selected department does not exist.")
+            return redirect("custom_admin_branches")
+
+        valid_codes = {c for c, _ in branch_choices}
+        if branch_code not in valid_codes:
+            messages.error(request, "Invalid branch selection.")
+            return redirect("custom_admin_branches")
+
+        try:
+            # Branch.name stores the code because name has choices=BRANCHES
+            obj, created = Branch.objects.get_or_create(name=branch_code, defaults={"department": dept})
+            if not created:
+                # if it exists but department differs, update it
+                if obj.department_id != dept.id:
+                    obj.department = dept
+                    obj.save()
+                    messages.success(request, f"Branch {obj.name} moved to {dept.code}.")
+                else:
+                    messages.info(request, "Branch already exists under this department.")
+            else:
+                messages.success(request, "Branch created successfully.")
+        except IntegrityError:
+            messages.error(request, "Branch with the same code already exists.")
+        return redirect("custom_admin_branches")
+
+    return render(request, "admin/custom_admin_branch.html", {
+        "branches": branches,
+        "departments": departments,
+        "branch_choices": branch_choices,
+    })
