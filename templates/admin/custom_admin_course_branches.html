@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Assign Branch Categories - Sootrank Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <style>
+        body {
+            background-color: #f9fafb;
+        }
+
+        .form-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgb(0 0 0 / 0.1);
+            margin: 40px auto;
+            max-width: 1100px;
+        }
+
+        .muted {
+            color: #6b7280;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow">
+        <div class="container">
+            <a class="navbar-brand" href="{% url 'custom_admin_home' %}">Sootrank Admin</a>
+            <a href="{% url 'custom_admin_courses' %}" class="btn btn-light ms-auto">Back to Courses</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="form-section">
+            <h2 class="mb-1 text-primary">Assign Branch Categories</h2>
+            <p class="text-muted mb-4">
+                Course: <strong>{{ course.code }}</strong> — {{ course.name }}
+            </p>
+
+            <!-- Search branches -->
+            <div class="input-group mb-3">
+                <span class="input-group-text"><i class="fa fa-search"></i></span>
+                <input type="text" id="branchSearch" class="form-control"
+                    placeholder="Search branches by code, label, or department...">
+            </div>
+
+            <form method="post" action="{% url 'manage_course_branches' course.id %}">
+                {% csrf_token %}
+                <div class="table-responsive shadow-sm bg-white rounded p-3">
+                    <table class="table table-hover align-middle mb-0" id="branchTable">
+                        <thead class="table-primary">
+                            <tr>
+                                <th>Branch Code</th>
+                                <th>Branch Name</th>
+                                <th>Department</th>
+                                <th style="width: 260px;">Category</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for br in branches %}
+                            <tr class="branch-row">
+                                <td class="br-code">{{ br.name }}</td>
+                                <td class="br-label">
+                                    {% if br.get_name_display %}
+                                        {{ br.get_name_display }}
+                                    {% else %}
+                                        {{ br.name }}
+                                    {% endif %}
+                                </td>
+                                <td class="br-dept">{{ br.department }}</td>
+                                <td>
+                                    <select name="category_{{ br.id }}" class="form-select">
+                                        <option value="" {% if not br.selected_category %}selected{% endif %}>— None —</option>
+                                        {% for val, label in choices %}
+                                            <option value="{{ val }}" {% if br.selected_category == val %}selected{% endif %}>
+                                                {{ label }}
+                                            </option>
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center">No branches found.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                    <a href="{% url 'custom_admin_courses' %}" class="btn btn-secondary ms-2">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <script>
+        // Simple client-side table search
+        (function () {
+            const input = document.getElementById('branchSearch');
+            const rows = Array.from(document.querySelectorAll('#branchTable .branch-row'));
+
+            function norm(s) {
+                return (s || '').toString().toLowerCase().trim();
+            }
+
+            input.addEventListener('input', function () {
+                const q = norm(this.value);
+                rows.forEach(tr => {
+                    const text = norm(
+                        tr.querySelector('.br-code')?.textContent + ' ' +
+                        tr.querySelector('.br-label')?.textContent + ' ' +
+                        tr.querySelector('.br-dept')?.textContent
+                    );
+                    tr.style.display = text.includes(q) ? '' : 'none';
+                });
+            });
+        })();
+    </script>
+</body>
+
+</html>

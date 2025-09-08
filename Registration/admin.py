@@ -1,5 +1,5 @@
 from django.contrib import admin
-from . models import Student,Faculty,Admins,Course,CourseBranch,StudentCourse,Department,Branch
+from . models import Student,Faculty,Admins,Course,CourseBranch,StudentCourse,Department,Branch,ProgramRequirement
 from django.contrib.admin import AdminSite
 from django.shortcuts import render, redirect
 from django.urls import path
@@ -42,4 +42,5 @@ admin.site.register(CourseBranch)
 admin.site.register(StudentCourse)
 admin.site.register(Department)
 admin.site.register(Branch)
+admin.site.register(ProgramRequirement)
 

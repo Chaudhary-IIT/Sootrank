@@ -1,11 +1,10 @@
-from http.client import HTTPResponse
 from django.conf import settings
 from django.contrib import messages
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from Registration.models import Branch, Department, Student, Faculty, Admins
+from Registration.models import Branch, Course, CourseBranch, Department, ProgramRequirement, Student, Faculty, Admins
 from django.contrib.auth import authenticate , login as auth_login
 from django.contrib.auth.hashers import make_password,check_password
 from urllib.parse import urlencode
@@ -13,6 +12,9 @@ from django.core.files.storage import default_storage
 import re
 from Registration.forms import FacultyEditForm, StudentEditForm
 import csv
+from django.http import JsonResponse
+
+EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+-]+@iitmandi\.ac\.in$')
 
 def login(request):
     if request.method == "POST":
@@ -314,38 +316,55 @@ def custom_admin_students(request):
         "branches": branches,
     })
 
-
-def custom_admin_students_bulk_add(request):
-    return render(request, "admin/bulk_add.html")
-
 def custom_admin_faculty(request):
-    faculties = Faculty.objects.all()
-    if request.method=='POST':
-        first_name=request.POST['firstname']
-        last_name=request.POST['lastname']
-        email_id=request.POST['email']
-        department=request.POST['department']
-        password1=request.POST['password']
-        hashed_password = make_password(password1)
+    faculties = Faculty.objects.select_related("department").all().order_by("last_name", "first_name")
+    departments = Department.objects.all().order_by('code')
 
-        pattern=re.compile(r'^[a-zA-Z0-9._%+-]+@iitmandi\.ac\.in$')
+    if request.method == 'POST':
+        first_name = request.POST.get('firstname', '').strip()
+        last_name = request.POST.get('lastname', '').strip()
+        email_id = request.POST.get('email', '').strip().lower()
+        department_id = request.POST.get('department')
+        mobile_no = request.POST.get('mobile_no') or None
+        raw_password = request.POST.get('password', '')
 
-        if(pattern.match(email_id)):
-            try:
-                Faculty.objects.create(
-                    first_name=first_name,
-                    last_name=last_name,
-                    email_id=email_id.lower(),
-                    password=hashed_password,
-                    department=department,
-                )
-                messages.success(request, 'Faculty added successfully.')
-                return redirect('/custom-admin/faculty/')  # Redirect to login page or another page
-            except IntegrityError:
-                messages.error(request, "Faculty with this email already exists.")
-        else:
+        # Basic validation
+        if not EMAIL_RE.match(email_id):
             messages.error(request, "Invalid Institute Email")
-    return render(request, "admin/custom_admin_faculty.html", {"faculties": faculties})
+            return redirect('custom_admin_faculty')
+
+        # Resolve FK
+        dept = None
+        if department_id:
+            try:
+                dept = Department.objects.get(pk=department_id)
+            except Department.DoesNotExist:
+                messages.error(request, "Selected department does not exist.")
+                return redirect('custom_admin_faculty')
+        else:
+            messages.error(request, "Please select a department.")
+            return redirect('custom_admin_faculty')
+
+        try:
+            Faculty.objects.create(
+                first_name=first_name,
+                last_name=last_name,
+                email_id=email_id,
+                password=make_password(raw_password),
+                department=dept,
+                mobile_no=mobile_no,
+            )
+            messages.success(request, 'Faculty added successfully.')
+            return redirect('custom_admin_faculty')
+        except IntegrityError:
+            messages.error(request, "Faculty with this email already exists.")
+        except Exception as e:
+            messages.error(request, f"Error adding faculty: {e}")
+
+    return render(request, "admin/custom_admin_faculty.html", {
+        "faculties": faculties,
+        "departments": departments
+    })
 
 
 def custom_admin_students_bulk_add(request):
@@ -355,55 +374,73 @@ def custom_admin_students_bulk_add(request):
             messages.error(request, "Please upload a CSV file.")
             return redirect("custom_admin_students_bulk_add")
 
-        # Save uploaded file temporarily
-        temp_file_path = default_storage.save(
-            f"temp/{csv_file.name}", csv_file
-        )
+        temp_file_path = default_storage.save(f"temp/{csv_file.name}", csv_file)
         added_count = 0
         error_rows = []
 
-        with default_storage.open(temp_file_path, mode='r') as file:
-            reader = csv.DictReader(file)
-            required_fields = [
-                "first_name", "last_name", "email_id", "password",
-                "roll_no", "department", "branch", "mobile_no"
-            ]
-            for idx, row in enumerate(reader, start=2):  # start at 2 for header
-                # Validate required fields
-                if not all(row.get(f) for f in required_fields):
-                    error_rows.append(f"Row {idx}: Missing required fields.")
-                    continue
-                try:
-                    student, created = Student.objects.get_or_create(
-                        roll_no=row["roll_no"],
-                        defaults={
-                            "first_name": row["first_name"],
-                            "last_name": row["last_name"],
-                            "email_id": row["email_id"],
-                            "password": row["password"],
-                            "department": row["department"],
-                            "branch": row["branch"],
-                            "mobile_no": row["mobile_no"] or None,
-                        }
-                    )
-                    if created:
-                        added_count += 1
-                    else:
-                        error_rows.append(
-                            f"Row {idx}: Student with roll_no '{row['roll_no']}' already exists."
-                        )
-                except Exception as e:
-                    error_rows.append(f"Row {idx}: {str(e)}")
+        try:
+            with default_storage.open(temp_file_path, mode='r') as file:
+                reader = csv.DictReader(file)
+                required_fields = [
+                    "first_name", "last_name", "email_id", "password",
+                    "roll_no", "department", "branch", "mobile_no"
+                ]
+                for idx, row in enumerate(reader, start=2):  # header=1, first data row=2
+                    if not all(row.get(f) for f in required_fields):
+                        error_rows.append(f"Row {idx}: Missing required fields.")
+                        continue
 
-        default_storage.delete(temp_file_path)
+                    # Normalize codes from CSV (accept 'scee' or 'SCEE', 'cse' or 'CSE')
+                    dept_code = (row["department"] or "").strip().upper()
+                    br_code = (row["branch"] or "").strip()  # Case-sensitive for your Branch codes
+                    # If branch codes in CSV are lower, normalize similarly:
+                    # br_code = br_code.upper()
+
+                    # Resolve FKs
+                    try:
+                        dept = Department.objects.get(code=dept_code)
+                    except Department.DoesNotExist:
+                        error_rows.append(f"Row {idx}: Department code '{dept_code}' not found.")
+                        continue
+
+                    try:
+                        br = Branch.objects.get(name=br_code)
+                    except Branch.DoesNotExist:
+                        error_rows.append(f"Row {idx}: Branch code '{br_code}' not found.")
+                        continue
+
+                    try:
+                        student, created = Student.objects.get_or_create(
+                            roll_no=row["roll_no"].strip().lower(),
+                            defaults={
+                                "first_name": row["first_name"].strip(),
+                                "last_name": row["last_name"].strip(),
+                                "email_id": row["email_id"].strip().lower(),
+                                "password": make_password(row["password"]),  # hash here
+                                "department": dept,
+                                "branch": br,
+                                "mobile_no": (row["mobile_no"].strip() or None),
+                            },
+                        )
+                        if created:
+                            added_count += 1
+                        else:
+                            error_rows.append(
+                                f"Row {idx}: Student with roll_no '{row['roll_no']}' already exists."
+                            )
+                    except IntegrityError as e:
+                        error_rows.append(f"Row {idx}: Integrity error: {e}")
+                    except Exception as e:
+                        error_rows.append(f"Row {idx}: {str(e)}")
+        finally:
+            default_storage.delete(temp_file_path)
 
         if added_count:
             messages.success(request, f"Successfully added {added_count} students.")
         for error in error_rows:
             messages.error(request, error)
         return redirect("custom_admin_students_bulk_add")
-    
-    # GET: Render the bulk add page
+
     return render(request, "admin/bulk_add.html")
 
 def delete_student_by_roll(request, roll_no):
@@ -415,18 +452,48 @@ def delete_student_by_roll(request, roll_no):
 def custom_admin_edit_student(request, roll_no):
     student = get_object_or_404(Student, roll_no=roll_no)
     if request.method == "POST":
-        # Update student details
-        student.roll_no = request.POST.get("roll_no")
-        student.first_name = request.POST.get("first_name")
-        student.last_name = request.POST.get("last_name")
-        student.email_id = request.POST.get("email_id")
-        student.department = request.POST.get("department")
-        student.branch = request.POST.get("branch")
-        student.mobile_no = request.POST.get("mobile_no")
+        student.roll_no = request.POST.get("roll_no", "").strip().lower()
+        student.first_name = request.POST.get("first_name", "").strip()
+        student.last_name  = request.POST.get("last_name", "").strip()
+        student.email_id   = request.POST.get("email_id", "").strip().lower()
+
+        dept_id = request.POST.get("department")
+        br_id   = request.POST.get("branch")
+
+        # Resolve FKs safely
+        if dept_id:
+            try:
+                student.department = Department.objects.get(pk=dept_id)
+            except Department.DoesNotExist:
+                messages.error(request, "Selected department does not exist.")
+                return redirect("custom_admin_edit_student", roll_no=student.roll_no)
+        else:
+            student.department = None
+
+        if br_id:
+            try:
+                student.branch = Branch.objects.get(pk=br_id)
+            except Branch.DoesNotExist:
+                messages.error(request, "Selected branch does not exist.")
+                return redirect("custom_admin_edit_student", roll_no=student.roll_no)
+        else:
+            student.branch = None
+
+        student.mobile_no = request.POST.get("mobile_no") or None
+
         student.save()
         messages.success(request, "Student details updated successfully.")
         return redirect("custom_admin_students")
-    return render(request, "admin/custom_admin_edit_student.html", {"student": student})
+
+    # GET: provide dropdown data
+    departments = Department.objects.all().order_by('code')
+    branches = Branch.objects.all().order_by('name')
+    return render(request, "admin/custom_admin_edit_student.html", {
+        "student": student,
+        "departments": departments,
+        "branches": branches,
+    })
+
 
 def delete_faculty(request, faculty_id):
     faculty = get_object_or_404(Faculty, id=faculty_id)
@@ -436,19 +503,50 @@ def delete_faculty(request, faculty_id):
     
 def custom_admin_edit_faculty(request, faculty_id):
     faculty = get_object_or_404(Faculty, id=faculty_id)
+    departments = Department.objects.all().order_by('code')
+
     if request.method == "POST":
-        faculty.first_name = request.POST.get("first_name")
-        faculty.last_name = request.POST.get("last_name")
-        faculty.email_id = request.POST.get("email_id")
-        faculty.department = request.POST.get("department")
-        faculty.mobile_no = request.POST.get("mobile_no")
-        faculty.password = request.POST.get("password")
-        faculty.password = make_password(faculty.password)
-        faculty.profile_image = request.FILES.get("profile_image") or faculty.profile_image
+        first_name = request.POST.get("first_name", "").strip()
+        last_name  = request.POST.get("last_name", "").strip()
+        email_id   = request.POST.get("email_id", "").strip().lower()
+        mobile_no  = request.POST.get("mobile_no") or None
+        dept_id    = request.POST.get("department")
+        raw_pwd    = request.POST.get("password", "")
+
+        # Resolve FK
+        dept = None
+        if dept_id:
+            try:
+                dept = Department.objects.get(pk=dept_id)
+            except Department.DoesNotExist:
+                messages.error(request, "Selected department does not exist.")
+                return redirect("custom_admin_edit_faculty", faculty_id=faculty.id)
+
+        # Assign fields
+        faculty.first_name = first_name
+        faculty.last_name  = last_name
+        faculty.email_id   = email_id
+        faculty.department = dept
+        faculty.mobile_no  = mobile_no
+
+        # Update password only if a new one is provided (avoid double-hashing existing hash)
+        if raw_pwd.strip():
+            faculty.password = make_password(raw_pwd)
+
+        # Update profile image if new file uploaded
+        new_img = request.FILES.get("profile_image")
+        if new_img:
+            faculty.profile_image = new_img
+
         faculty.save()
         messages.success(request, "Faculty details updated successfully.")
         return redirect("custom_admin_faculty")
-    return render(request, "admin/custom_admin_edit_faculty.html", {"faculty": faculty})
+
+    return render(request, "admin/custom_admin_edit_faculty.html", {
+        "faculty": faculty,
+        "departments": departments
+    })
+
 
 # def custom_admin_admins(request):
 #     return render(request, "admin/custom_admin_admins.html")
@@ -477,18 +575,18 @@ def custom_admin_branch(request):
 
         if not dept_id or not branch_code:
             messages.error(request, "Please select both Department and Branch.")
-            return redirect("custom_admin_branches")
+            return redirect("custom_admin_branch")
 
         try:
             dept = Department.objects.get(pk=dept_id)
         except Department.DoesNotExist:
             messages.error(request, "Selected department does not exist.")
-            return redirect("custom_admin_branches")
+            return redirect("custom_admin_branch")
 
         valid_codes = {c for c, _ in branch_choices}
         if branch_code not in valid_codes:
             messages.error(request, "Invalid branch selection.")
-            return redirect("custom_admin_branches")
+            return redirect("custom_admin_branch")
 
         try:
             # Branch.name stores the code because name has choices=BRANCHES
@@ -505,10 +603,223 @@ def custom_admin_branch(request):
                 messages.success(request, "Branch created successfully.")
         except IntegrityError:
             messages.error(request, "Branch with the same code already exists.")
-        return redirect("custom_admin_branches")
+        return redirect("custom_admin_branch")
 
     return render(request, "admin/custom_admin_branch.html", {
         "branches": branches,
         "departments": departments,
         "branch_choices": branch_choices,
+    })
+
+
+def ajax_branches_json(request):
+    dept_id = request.GET.get("department_id")
+    qs = Branch.objects.none()
+    if dept_id:
+        qs = Branch.objects.filter(department_id=dept_id).order_by("name")
+    data = [{"id": b.id, "label": getattr(b, "get_name_display", lambda: b.name)()} for b in qs]
+    return JsonResponse({"options": data})
+
+
+
+def custom_admin_courses(request):
+    courses = Course.objects.all().order_by("code")
+    slot_choices = Course.SLOT_CHOICES  # for form select
+
+    if request.method == "POST":
+        code = request.POST.get("code", "").strip().upper()
+        name = request.POST.get("name", "").strip()
+        credits = request.POST.get("credits")
+        ltpc = request.POST.get("LTPC", "").strip().upper()
+        slot = request.POST.get("slot")
+
+        # Basic validation
+        if not code or not name or not credits or not slot:
+            messages.error(request, "Please fill in all required fields.")
+            return redirect("custom_admin_courses")
+
+        try:
+            credits = int(credits)
+        except ValueError:
+            messages.error(request, "Credits must be an integer.")
+            return redirect("custom_admin_courses")
+
+        try:
+            Course.objects.create(
+                code=code, name=name, credits=credits, LTPC=ltpc, slot=slot
+            )
+            messages.success(request, "Course added successfully.")
+        except IntegrityError as e:
+            messages.error(request, f"Could not add course: {e}")
+        except Exception as e:
+            messages.error(request, f"Error: {e}")
+        return redirect("custom_admin_courses")
+
+    return render(request, "admin/custom_admin_courses.html", {
+        "courses": courses,
+        "slot_choices": slot_choices,
+    })
+
+
+def custom_admin_edit_course(request, course_id):
+    course = get_object_or_404(Course, id=course_id)
+    slot_choices = Course.SLOT_CHOICES
+
+    if request.method == "POST":
+        course.code = request.POST.get("code", "").strip().upper()
+        course.name = request.POST.get("name", "").strip()
+        credits = request.POST.get("credits")
+        course.LTPC = request.POST.get("LTPC", "").strip().upper()
+        course.slot = request.POST.get("slot")
+
+        try:
+            course.credits = int(credits)
+        except (TypeError, ValueError):
+            messages.error(request, "Credits must be an integer.")
+            return redirect("custom_admin_edit_course", course_id=course.id)
+
+        try:
+            course.save()
+            messages.success(request, "Course updated successfully.")
+            return redirect("custom_admin_courses")
+        except IntegrityError as e:
+            messages.error(request, f"Could not update course: {e}")
+        except Exception as e:
+            messages.error(request, f"Error: {e}")
+
+    return render(request, "admin/custom_admin_edit_course.html", {
+        "course": course,
+        "slot_choices": slot_choices,
+    })
+
+
+from django.views.decorators.http import require_POST
+@require_POST
+def delete_course(request, course_id):
+    course = get_object_or_404(Course, id=course_id)
+    try:
+        course.delete()
+        messages.success(request, "Course deleted.")
+    except Exception as e:
+        messages.error(request, f"Could not delete: {e}")
+    return redirect("custom_admin_courses")
+
+
+def manage_course_faculties(request, course_id):
+    course = get_object_or_404(Course, id=course_id)
+    faculties = Faculty.objects.select_related("department").order_by("last_name", "first_name")
+
+    if request.method == "POST":
+        selected_ids = request.POST.getlist("faculty_ids")  # list of strings
+        # Replace all current assignments with selected ones
+        try:
+            # Ensure integers
+            faculty_pks = [int(pk) for pk in selected_ids]
+            course.faculties.set(faculty_pks)  # ManyToMany replace
+            course.save()
+            messages.success(request, "Faculties updated for this course.")
+        except Exception as e:
+            messages.error(request, f"Could not update faculties: {e}")
+        return redirect("custom_admin_courses")
+
+    assigned_ids = set(course.faculties.values_list("id", flat=True))
+    return render(request, "admin/custom_admin_course_faculties.html", {
+        "course": course,
+        "faculties": faculties,
+        "assigned_ids": assigned_ids,
+    })
+
+
+def course_branch_index(request):
+    courses = Course.objects.all().order_by("code")
+    return render(request, "admin/course_branch_index.html", {
+        "courses": courses,
+    })
+
+def manage_course_branches(request, course_id):
+    course = get_object_or_404(Course, id=course_id)
+    branches = Branch.objects.select_related("department").order_by("department__code", "name")
+    choices = CourseBranch.CORE_ELECTIVE_CHOICES
+    existing = dict(CourseBranch.objects.filter(course=course).values_list("branch_id", "category"))
+    for br in branches:
+        br.selected_category = existing.get(br.id)
+
+    if request.method == "POST":
+        try:
+            with transaction.atomic():
+                to_keep = set()
+                for br in branches:
+                    field = f"category_{br.id}"
+                    cat = (request.POST.get(field) or "").strip()
+                    if cat:
+                        if br.id in existing and existing[br.id] != cat:
+                            CourseBranch.objects.filter(course=course, branch=br).update(category=cat)
+                        elif br.id not in existing:
+                            CourseBranch.objects.create(course=course, branch=br, category=cat)
+                        to_keep.add(br.id)
+                # delete removed
+                drop = [bid for bid in existing.keys() if bid not in to_keep]
+                if drop:
+                    CourseBranch.objects.filter(course=course, branch_id__in=drop).delete()
+            messages.success(request, "Branch categories updated for this course.")
+        except Exception as e:
+            messages.error(request, f"Could not update categories: {e}")
+        return redirect("manage_course_branches", course_id=course.id)
+
+    return render(request, "admin/custom_admin_course_branches.html", {
+        "course": course,
+        "branches": branches,
+        "choices": choices,
+        "existing": existing,
+    }) 
+
+
+def requirements_index(request):
+    branches = Branch.objects.select_related("department").order_by("department__code", "name")
+    return render(request, "admin/requirements_index.html", {"branches": branches})
+
+def manage_branch_requirements(request, branch_id):
+    branch = get_object_or_404(Branch, id=branch_id)
+    categories = ProgramRequirement.CATEGORY_CHOICES
+
+    # map: category -> required
+    existing = {
+        r.category: r.required_credits for r in ProgramRequirement.objects.filter(branch=branch)
+    }
+
+    if request.method == "POST":
+        try:
+            with transaction.atomic():
+                for cat, _label in categories:
+                    req_val = request.POST.get(f"{cat}_req", "").strip()
+                    if req_val == "":
+                        # Treat blank as 0 to keep it simple; adjust if you prefer to delete rows when blank
+                        req_i = 0
+                    else:
+                        try:
+                            req_i = int(req_val)
+                        except ValueError:
+                            raise ValueError(f"{cat}: required must be an integer.")
+                        if req_i < 0:
+                            raise ValueError(f"{cat}: required cannot be negative.")
+
+                    ProgramRequirement.objects.update_or_create(
+                        branch=branch,
+                        category=cat,
+                        defaults={"required_credits": req_i},
+                    )
+            messages.success(request, "Requirements saved.")
+        except Exception as e:
+            messages.error(request, f"Could not save: {e}")
+        return redirect("manage_branch_requirements", branch_id=branch.id)
+
+    # Build rows for template
+    rows = []
+    for cat, label in categories:
+        req_i = existing.get(cat, 0)
+        rows.append({"cat": cat, "label": label, "req": req_i})
+
+    return render(request, "admin/manage_branch_requirements.html", {
+        "branch": branch,
+        "rows": rows,
     })

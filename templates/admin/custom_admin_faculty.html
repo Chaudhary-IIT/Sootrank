@@ -55,7 +55,12 @@
                     </div>
                     <div class="col-md-6">
                         <label for="department" class="form-label">Department</label>
-                        <input name="department" type="text" class="form-control" id="department" required />
+                        <select name="department" id="department" class="form-select" required>
+                            <option value="" selected disabled>Choose...</option>
+                            {% for dept in departments %}
+                            <option value="{{ dept.id }}">{{ dept.code }} — {{ dept.name }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                     <div class="col-md-6">
                         <label for="mobile_no" class="form-label">Mobile Number</label>

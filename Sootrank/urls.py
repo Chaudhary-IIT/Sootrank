@@ -32,6 +32,14 @@ urlpatterns = [
     path('custom-admin/students/edit/<str:roll_no>/', views.custom_admin_edit_student, name='custom_admin_edit_student'),
     path('custom-admin/faculty/delete/<int:faculty_id>/', views.delete_faculty, name='delete_faculty'),
     path('custom-admin/faculty/edit/<int:faculty_id>/', views.custom_admin_edit_faculty, name='custom_admin_edit_faculty'),
+    path("custom-admin/courses/", views.custom_admin_courses, name="custom_admin_courses"),
+    path("custom-admin/courses/<int:course_id>/edit/", views.custom_admin_edit_course, name="custom_admin_edit_course"),
+    path("custom-admin/courses/<int:course_id>/delete/", views.delete_course, name="delete_course"),
+    path("custom-admin/courses/<int:course_id>/faculties/", views.manage_course_faculties, name="manage_course_faculties"),
+    path("custom-admin/course-branches/", views.course_branch_index, name="course_branch_index"),
+    path("custom-admin/course-branches/<int:course_id>/", views.manage_course_branches, name="manage_course_branches"),
+    path("custom-admin/requirements/", views.requirements_index, name="requirements_index"),
+    path("custom-admin/requirements/<int:branch_id>/", views.manage_branch_requirements, name="manage_branch_requirements"),
     path('',views.login),
     path('login/', views.login, name='login'),
     path('register/',views.register),
@@ -49,7 +57,9 @@ urlpatterns = [
     path("faculty_dashboard/course_request", views.course_request, name="course_request"),
     path("faculty_dashboard/view_courses", views.view_courses, name="view_courses"),
     path("faculty_dashboard/update_courses", views.update_courses, name="update_courses"),
-    path("logout/", LogoutView.as_view(next_page="login"), name="logout")
+    path("logout/", LogoutView.as_view(next_page="login"), name="logout"),
+    path("ajax/branches-json/", views.ajax_branches_json, name="ajax_branches_json"),
+    
 ]
 
 

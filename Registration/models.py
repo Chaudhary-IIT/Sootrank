@@ -145,10 +145,30 @@ class StudentCourse(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="enrollments")
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="enrollments")
     # optional branch snapshot (useful if course is tied to specific branch rules):
-    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True)
     status = models.CharField(max_length=3, choices=STATUS, default="ENR")
     grade = models.CharField(max_length=2, null=True, blank=True)  # if grading is tracked
     term = models.CharField(max_length=20, null=True, blank=True)  # e.g., "2025-ODD"
 
     class Meta:
         unique_together = ("student", "course", "term")  # adjust to your policy
+
+class ProgramRequirement(models.Model):
+    CATEGORY_CHOICES = [
+        ("DC", "Disciplinary Core (DC)"),
+        ("DE", "Disciplinary Elective (DE)"),
+        ("IC","Institute Core (IC)"),
+        ("HSS","Humanities and Social Science (HSS)"),
+        ("FE","Free Elective (FE)"),
+        ("IKS","Indian Knowledge System (IKS)"),
+        ("ISTP","Interactive Socio-Technical Practicum (ISTP)"),
+        ("MTP","Major Technical Project (MTP)"),
+    ]
+    branch = models.ForeignKey(Branch, on_delete=models.CASCADE, related_name="requirements")
+    category = models.CharField(max_length=4, choices=CATEGORY_CHOICES)
+    required_credits = models.PositiveIntegerField()
+    # Optional if rules vary by admission year or track:
+    # cohort = models.CharField(max_length=9, null=True, blank=True)  # e.g., "2025"
+
+    class Meta:
+        unique_together = ("branch", "category")
+

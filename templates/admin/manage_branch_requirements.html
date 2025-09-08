@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Assign Requirements - Sootrank Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <style>
+        body {
+            background-color: #f9fafb;
+        }
+
+        .form-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgb(0 0 0 / 0.1);
+            margin: 40px auto;
+            max-width: 900px;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow">
+        <div class="container">
+            <a class="navbar-brand" href="{% url 'custom_admin_home' %}">Sootrank Admin</a>
+            <a href="{% url 'requirements_index' %}" class="btn btn-light ms-auto">Back to Branches</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="form-section">
+            <h2 class="mb-1 text-primary">Assign Requirements</h2>
+            <p class="text-muted mb-4">Branch: <strong>{{ branch.name }}</strong> — {{ branch.get_name_display }} ({{
+                branch.department }})</p>
+
+            <form method="post" action="{% url 'manage_branch_requirements' branch.id %}">
+                {% csrf_token %}
+                <div class="table-responsive shadow-sm bg-white rounded p-3">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-primary">
+                            <tr>
+                                <th>Category</th>
+                                <th>Required credits</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in rows %}
+                            <tr>
+                                <td><strong>{{ row.cat }}</strong> — {{ row.label }}</td>
+                                <td style="max-width:160px;">
+                                    <input type="number" min="0" class="form-control" name="{{ row.cat }}_req"
+                                        value="{{ row.req }}">
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="2" class="text-center">No categories defined.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+
+                </div>
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                    <a href="{% url 'requirements_index' %}" class="btn btn-secondary ms-2">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>
