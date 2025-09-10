@@ -1,10 +1,11 @@
 from django.conf import settings
 from django.contrib import messages
 from django.db import IntegrityError, transaction
+from django.db.models import Prefetch
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from Registration.models import Branch, Course, CourseBranch, Department, ProgramRequirement, Student, Faculty, Admins
+from Registration.models import Branch, Category, Course, CourseBranch, Department, ProgramRequirement, Student, Faculty, Admins
 from django.contrib.auth import authenticate , login as auth_login
 from django.contrib.auth.hashers import make_password,check_password
 from urllib.parse import urlencode
@@ -15,6 +16,18 @@ import csv
 from django.http import JsonResponse
 
 EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+-]+@iitmandi\.ac\.in$')
+SLOTS = ["A","B","C","D","E","F","G","H","FS"]
+
+CATEGORIES = [
+    {"code": "DC", "label": "Disciplinary Core (DC)"},
+    {"code": "DE", "label": "Disciplinary Elective (DE)"},
+    {"code": "IC", "label": "Institute Core (IC)"},
+    {"code": "HSS", "label": "Humanities and Social Science (HSS)"},
+    {"code": "FE", "label": "Free Elective (FE)"},
+    {"code": "IKS", "label": "Indian Knowledge System (IKS)"},
+    {"code": "ISTP", "label": "Interactive Socio-Technical Practicum (ISTP)"},
+    {"code": "MTP", "label": "Major Technical Project (MTP)"},
+]
 
 def login(request):
     if request.method == "POST":
@@ -143,7 +156,36 @@ def faculty_dashboard(request):
     return render(request,'faculty_dashboard.html',context)
 
 def pre_registration(request):
-    return render(request,'registration/pre_registration.html')
+    roll_no = request.session.get("roll_no")
+    if not roll_no:
+        return redirect("/")
+    student = get_object_or_404(Student, roll_no=roll_no)
+    branch = student.branch
+
+    # Base prefetch: only CourseBranch rows for this student's branch
+    base_cb = CourseBranch.objects.filter(branch=branch)
+
+    # Build per-slot, per-category querysets
+    slot_map = {}
+    for slot in SLOTS:
+        cat_map = {}
+        for cat in [c["code"] for c in CATEGORIES]:
+            qs = (
+                Course.objects.filter(slot=slot, coursebranch__branch=branch, coursebranch__category=cat)
+                .prefetch_related(Prefetch("coursebranch_set", queryset=base_cb, to_attr="cb_for_branch"))
+                .distinct()
+            )
+            cat_map[cat] = qs
+        slot_map[slot] = cat_map
+
+    context = {
+        "student": student,
+        "categories": CATEGORIES,
+        "slot_map": slot_map,
+        "min_credit": 4,
+        "max_credit": 22,
+    }
+    return render(request, "registration/pre_registration.html", context)
 
 def check_status(request):
     return render(request, 'registration/check_status.html')
@@ -736,43 +778,34 @@ def course_branch_index(request):
         "courses": courses,
     })
 
+@transaction.atomic
 def manage_course_branches(request, course_id):
     course = get_object_or_404(Course, id=course_id)
-    branches = Branch.objects.select_related("department").order_by("department__code", "name")
-    choices = CourseBranch.CORE_ELECTIVE_CHOICES
-    existing = dict(CourseBranch.objects.filter(course=course).values_list("branch_id", "category"))
-    for br in branches:
-        br.selected_category = existing.get(br.id)
+    categories = Category.objects.order_by("code")
+    branches = Branch.objects.select_related("department").order_by("name")
 
     if request.method == "POST":
-        try:
-            with transaction.atomic():
-                to_keep = set()
-                for br in branches:
-                    field = f"category_{br.id}"
-                    cat = (request.POST.get(field) or "").strip()
-                    if cat:
-                        if br.id in existing and existing[br.id] != cat:
-                            CourseBranch.objects.filter(course=course, branch=br).update(category=cat)
-                        elif br.id not in existing:
-                            CourseBranch.objects.create(course=course, branch=br, category=cat)
-                        to_keep.add(br.id)
-                # delete removed
-                drop = [bid for bid in existing.keys() if bid not in to_keep]
-                if drop:
-                    CourseBranch.objects.filter(course=course, branch_id__in=drop).delete()
-            messages.success(request, "Branch categories updated for this course.")
-        except Exception as e:
-            messages.error(request, f"Could not update categories: {e}")
-        return redirect("manage_course_branches", course_id=course.id)
+        for br in branches:
+            ids = request.POST.getlist(f"category_{br.id}[]")
+            cb, _ = CourseBranch.objects.get_or_create(course=course, branch=br)
+            qs = Category.objects.filter(id__in=ids)
+            cb.categories.set(qs) if ids else cb.categories.clear()
+        return redirect("course_branch_index")
 
-    return render(request, "admin/custom_admin_course_branches.html", {
-        "course": course,
-        "branches": branches,
-        "choices": choices,
-        "existing": existing,
-    }) 
+    # Build preselected sets from DB for this course
+    cb_for_course = CourseBranch.objects.filter(course=course).prefetch_related("categories")
+    selected_map = {
+        cb.branch_id: set(cb.categories.values_list("id", flat=True))
+        for cb in cb_for_course
+    }
+    for br in branches:
+        br.selected_category_ids = selected_map.get(br.id, set())
 
+    return render(
+        request,
+        "admin/custom_admin_course_branches.html",
+        {"course": course, "branches": branches, "categories": categories},
+    )
 
 def requirements_index(request):
     branches = Branch.objects.select_related("department").order_by("department__code", "name")

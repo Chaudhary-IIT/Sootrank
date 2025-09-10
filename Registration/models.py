@@ -69,6 +69,7 @@ class Course(models.Model):
     branches = models.ManyToManyField(Branch, through="CourseBranch", related_name="courses")
     faculties = models.ManyToManyField(Faculty, related_name="courses")
 
+
 class Student(models.Model):
     first_name=models.CharField(max_length=255)
     last_name=models.CharField(max_length=255)
@@ -117,10 +118,7 @@ class Admins(models.Model):
         super().save(*args, **kwargs)
 from django.db import models
 
-
-    
-class CourseBranch(models.Model):
-    CORE_ELECTIVE_CHOICES = [
+CORE_ELECTIVE_CHOICES = [
         ("DC", "Disciplinary Core (DC)"),
         ("DE", "Disciplinary Elective (DE)"),
         ("IC","Institute Core (IC)"),
@@ -131,13 +129,32 @@ class CourseBranch(models.Model):
         ("MTP","Major Technical Project (MTP)"),
     ]
 
-    course = models.ForeignKey(Course, on_delete=models.CASCADE)
-    branch = models.ForeignKey(Branch, on_delete=models.CASCADE)
-    category = models.CharField(max_length=4, choices=CORE_ELECTIVE_CHOICES)
+class Category(models.Model):
+    code = models.CharField(max_length=10, unique=True)  # "DC", "DE", "IC", "HSS", ...
+    label = models.CharField(max_length=100)            # "Disciplinary Core (DC)", ...
+
+    class Meta:
+        ordering = ["code"]
 
     def __str__(self):
-        return f"{self.course.name} - {self.branch.name} ({self.get_category_display()})"
+        return f"{self.label}"
+    
+class CourseBranch(models.Model):
+    
 
+    course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    branch = models.ForeignKey(Branch, on_delete=models.CASCADE)
+    categories = models.ManyToManyField(Category, related_name="course_branches", blank=True)
+    
+    class Meta:
+        unique_together = ("course", "branch")
+        
+    def __str__(self):
+        if self.pk:
+            codes = ", ".join(self.categories.values_list("code", flat=True))
+        else:
+            codes = ""
+        return f"{self.course.name} - {self.branch.name} ({codes})"
 
 
 class StudentCourse(models.Model):
@@ -148,6 +165,8 @@ class StudentCourse(models.Model):
     status = models.CharField(max_length=3, choices=STATUS, default="ENR")
     grade = models.CharField(max_length=2, null=True, blank=True)  # if grading is tracked
     term = models.CharField(max_length=20, null=True, blank=True)  # e.g., "2025-ODD"
+    type=models.CharField(max_length=10,null=True)
+
 
     class Meta:
         unique_together = ("student", "course", "term")  # adjust to your policy

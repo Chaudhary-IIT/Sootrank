@@ -1,5 +1,17 @@
-from Registration.models import Department, Branch
+from Registration.models import Department, Branch,Category
 from django.db import transaction
+
+CORE_ELECTIVE_CHOICES = [
+    ("DC", "Disciplinary Core (DC)"),
+    ("DE", "Disciplinary Elective (DE)"),
+    ("IC", "Institute Core (IC)"),
+    ("HSS","Humanities and Social Science (HSS)"),
+    ("FE", "Free Elective (FE)"),
+    ("IKS","Indian Knowledge System (IKS)"),
+    ("ISTP","Interactive Socio-Technical Practicum (ISTP)"),
+    ("MTP","Major Technical Project (MTP)"),
+]
+
 
 def run():
     # Ensure departments exist
@@ -48,3 +60,9 @@ def run():
 
     for b in Branch.objects.select_related("department").order_by("name"):
         print(f"{b.name:6s} -> {b.department.code if b.department else 'None'}")
+
+    for code, label in CORE_ELECTIVE_CHOICES:
+        obj, created = Category.objects.update_or_create(
+            code=code, defaults={"label": label}
+        )
+        print(("Created" if created else "Updated"), obj)

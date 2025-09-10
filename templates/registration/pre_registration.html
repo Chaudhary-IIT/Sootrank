@@ -1,3 +1,4 @@
+{% load dict_extras %}
 <!DOCTYPE html>
 <html lang="en">
 
@@ -10,122 +11,388 @@
 
 <body class="min-h-screen bg-gray-100 flex items-start justify-center py-10">
     <div class="w-[1150px]">
-
-        <!-- Header -->
         <div class="mb-5">
             <h1 class="text-3xl font-bold">Course Pre-Registration</h1>
             <p class="text-red-500 mt-1">Last day for course pre-registration is 15-08-2025</p>
         </div>
 
-        <!-- Card -->
         <div class="bg-white rounded-2xl shadow">
             <form id="courseForm" class="p-6">
-
-                <!-- Grid of slots -->
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
 
-                    <!-- Slot A -->
+                    <!-- SLOT A -->
                     <div class="flex flex-col">
-                        <label for="slot-A" class="font-medium mb-1">Slot-A</label>
-                        <select id="slot-A" name="slot-A"
-                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
-                            <option value="none">None</option>
-                            <option value="CS101">Programming in C (CS101) - 4 credits</option>
-                            <option value="MA201">Linear Algebra (MA201) - 3 credits</option>
+                        <label class="font-medium mb-1">Slot-A</label>
+
+                        <!-- Category select -->
+                        <select id="slot-A-cat" name="slot-A-cat"
+                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 slot-cat"
+                            data-slot="A">
+                            <option value="">Select category</option>
+                            {% for c in categories %}
+                            <option value="{{ c.code }}">{{ c.code }} — {{ c.label }}</option>
+                            {% endfor %}
                         </select>
+
+                        <!-- Course select (depends on category) -->
+                        <select id="slot-A-course" name="slot-A-course"
+                            class="mt-2 w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 slot-course"
+                            data-slot="A" disabled>
+                            <option value="">Select a category first</option>
+                            {% for c in categories %}
+                            {% with cat_code=c.code %}
+                            {% for course in slot_map.A|get_item:cat_code %}
+                            {% if course.cb_for_branch and course.cb_for_branch.0 %}
+                            {% with cat=course.cb_for_branch.0.category %}
+                            <option value="{{ course.code }}" data-credits="{{ course.credits }}"
+                                data-category="{{ cat }}" data-cat="{{ cat_code }}" class="hidden">
+                                {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat }}
+                            </option>
+                            {% endwith %}
+                            {% else %}
+                            <option value="{{ course.code }}" data-credits="{{ course.credits }}"
+                                data-category="{{ cat_code }}" data-cat="{{ cat_code }}" class="hidden">
+                                {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat_code }}
+                            </option>
+                            {% endif %}
+                            {% endfor %}
+                            {% endwith %}
+                            {% endfor %}
+                        </select>
+
+                        <div class="cat-badge text-xs text-gray-600 mt-1"></div>
                     </div>
 
-                    <!-- Slot B -->
+                    <!-- SLOT B -->
                     <div class="flex flex-col">
-                        <label for="slot-B" class="font-medium mb-1">Slot-B</label>
-                        <select id="slot-B" name="slot-B"
-                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
-                            <option value="none">None</option>
-                            <option value="EE202">Digital Systems (EE202) - 4 credits</option>
-                            <option value="HS101">Economics (HS101) - 3 credits</option>
+                        <label class="font-medium mb-1">Slot-B</label>
+
+                        <select id="slot-B-cat" name="slot-B-cat"
+                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 slot-cat"
+                            data-slot="B">
+                            <option value="">Select category</option>
+                            {% for c in categories %}
+                            <option value="{{ c.code }}">{{ c.code }} — {{ c.label }}</option>
+                            {% endfor %}
                         </select>
+
+                        <select id="slot-B-course" name="slot-B-course"
+                            class="mt-2 w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 slot-course"
+                            data-slot="B" disabled>
+                            <option value="">Select a category first</option>
+                            {% for c in categories %}
+                            {% with cat_code=c.code %}
+                            {% for course in slot_map.B|get_item:cat_code %}
+                            {% if course.cb_for_branch and course.cb_for_branch.0 %}
+                            {% with cat=course.cb_for_branch.0.category %}
+                            <option value="{{ course.code }}" data-credits="{{ course.credits }}"
+                                data-category="{{ cat }}" data-cat="{{ cat_code }}" class="hidden">
+                                {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat }}
+                            </option>
+                            {% endwith %}
+                            {% else %}
+                            <option value="{{ course.code }}" data-credits="{{ course.credits }}"
+                                data-category="{{ cat_code }}" data-cat="{{ cat_code }}" class="hidden">
+                                {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat_code }}
+                            </option>
+                            {% endif %}
+                            {% endfor %}
+                            {% endwith %}
+                            {% endfor %}
+                        </select>
+
+                        <div class="cat-badge text-xs text-gray-600 mt-1"></div>
                     </div>
 
-                    <!-- Slot C -->
+                    <!-- SLOT C -->
                     <div class="flex flex-col">
-                        <label for="slot-C" class="font-medium mb-1">Slot-C</label>
-                        <select id="slot-C" name="slot-C"
-                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
-                            <option value="none">None</option>
-                            <option value="EE202">Digital Systems (EE202) - 4 credits</option>
-                            <option value="HS101">Economics (HS101) - 3 credits</option>
+                        <label class="font-medium mb-1">Slot-C</label>
+
+                        <select id="slot-C-cat" name="slot-C-cat"
+                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 slot-cat"
+                            data-slot="C">
+                            <option value="">Select category</option>
+                            {% for c in categories %}
+                            <option value="{{ c.code }}">{{ c.code }} — {{ c.label }}</option>
+                            {% endfor %}
                         </select>
+
+                        <select id="slot-C-course" name="slot-C-course"
+                            class="mt-2 w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 slot-course"
+                            data-slot="C" disabled>
+                            <option value="">Select a category first</option>
+                            {% for c in categories %}
+                            {% with cat_code=c.code %}
+                            {% for course in slot_map.C|get_item:cat_code %}
+                            {% if course.cb_for_branch and course.cb_for_branch.0 %}
+                            {% with cat=course.cb_for_branch.0.category %}
+                            <option value="{{ course.code }}" data-credits="{{ course.credits }}"
+                                data-category="{{ cat }}" data-cat="{{ cat_code }}" class="hidden">
+                                {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat }}
+                            </option>
+                            {% endwith %}
+                            {% else %}
+                            <option value="{{ course.code }}" data-credits="{{ course.credits }}"
+                                data-category="{{ cat_code }}" data-cat="{{ cat_code }}" class="hidden">
+                                {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat_code }}
+                            </option>
+                            {% endif %}
+                            {% endfor %}
+                            {% endwith %}
+                            {% endfor %}
+                        </select>
+
+                        <div class="cat-badge text-xs text-gray-600 mt-1"></div>
                     </div>
 
-                    <!-- Slot D -->
+                    <!-- SLOT D -->
                     <div class="flex flex-col">
-                        <label for="slot-D" class="font-medium mb-1">Slot-D</label>
-                        <select id="slot-D" name="slot-D"
-                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
-                            <option value="none">None</option>
-                            <option value="EE202">Digital Systems (EE202) - 4 credits</option>
-                            <option value="HS101">Economics (HS101) - 3 credits</option>
+                        <label class="font-medium mb-1">Slot-D</label>
+
+                        <select id="slot-D-cat" name="slot-D-cat"
+                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 slot-cat"
+                            data-slot="D">
+                            <option value="">Select category</option>
+                            {% for c in categories %}
+                            <option value="{{ c.code }}">{{ c.code }} — {{ c.label }}</option>
+                            {% endfor %}
                         </select>
+
+                        <select id="slot-D-course" name="slot-D-course"
+                            class="mt-2 w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 slot-course"
+                            data-slot="D" disabled>
+                            <option value="">Select a category first</option>
+                            {% for c in categories %}
+                            {% with cat_code=c.code %}
+                            {% for course in slot_map.D|get_item:cat_code %}
+                            {% if course.cb_for_branch and course.cb_for_branch.0 %}
+                            {% with cat=course.cb_for_branch.0.category %}
+                            <option value="{{ course.code }}" data-credits="{{ course.credits }}"
+                                data-category="{{ cat }}" data-cat="{{ cat_code }}" class="hidden">
+                                {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat }}
+                            </option>
+                            {% endwith %}
+                            {% else %}
+                            <option value="{{ course.code }}" data-credits="{{ course.credits }}"
+                                data-category="{{ cat_code }}" data-cat="{{ cat_code }}" class="hidden">
+                                {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat_code }}
+                            </option>
+                            {% endif %}
+                            {% endfor %}
+                            {% endwith %}
+                            {% endfor %}
+                        </select>
+
+                        <div class="cat-badge text-xs text-gray-600 mt-1"></div>
                     </div>
 
-                    <!-- Slot E -->
+                    <!-- SLOT E -->
                     <div class="flex flex-col">
-                        <label for="slot-E" class="font-medium mb-1">Slot-E</label>
-                        <select id="slot-E" name="slot-E"
-                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
-                            <option value="none">None</option>
-                            <option value="EE202">Digital Systems (EE202) - 4 credits</option>
-                            <option value="HS101">Economics (HS101) - 3 credits</option>
+                        <label class="font-medium mb-1">Slot-E</label>
+
+                        <select id="slot-E-cat" name="slot-E-cat"
+                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 slot-cat"
+                            data-slot="E">
+                            <option value="">Select category</option>
+                            {% for c in categories %}
+                            <option value="{{ c.code }}">{{ c.code }} — {{ c.label }}</option>
+                            {% endfor %}
                         </select>
+
+                        <select id="slot-E-course" name="slot-E-course"
+                            class="mt-2 w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 slot-course"
+                            data-slot="E" disabled>
+                            <option value="">Select a category first</option>
+                            {% for c in categories %}
+                            {% with cat_code=c.code %}
+                            {% for course in slot_map.E|get_item:cat_code %}
+                            {% if course.cb_for_branch and course.cb_for_branch.0 %}
+                            {% with cat=course.cb_for_branch.0.category %}
+                            <option value="{{ course.code }}" data-credits="{{ course.credits }}"
+                                data-category="{{ cat }}" data-cat="{{ cat_code }}" class="hidden">
+                                {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat }}
+                            </option>
+                            {% endwith %}
+                            {% else %}
+                            <option value="{{ course.code }}" data-credits="{{ course.credits }}"
+                                data-category="{{ cat_code }}" data-cat="{{ cat_code }}" class="hidden">
+                                {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat_code }}
+                            </option>
+                            {% endif %}
+                            {% endfor %}
+                            {% endwith %}
+                            {% endfor %}
+                        </select>
+
+                        <div class="cat-badge text-xs text-gray-600 mt-1"></div>
                     </div>
 
-                    <!-- Slot F -->
+                    <!-- SLOT F -->
                     <div class="flex flex-col">
-                        <label for="slot-F" class="font-medium mb-1">Slot-F</label>
-                        <select id="slot-F" name="slot-F"
-                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
-                            <option value="none">None</option>
-                            <option value="EE202">Digital Systems (EE202) - 4 credits</option>
-                            <option value="HS101">Economics (HS101) - 3 credits</option>
+                        <label class="font-medium mb-1">Slot-F</label>
+
+                        <select id="slot-F-cat" name="slot-F-cat"
+                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 slot-cat"
+                            data-slot="F">
+                            <option value="">Select category</option>
+                            {% for c in categories %}
+                            <option value="{{ c.code }}">{{ c.code }} — {{ c.label }}</option>
+                            {% endfor %}
                         </select>
+
+                        <select id="slot-F-course" name="slot-F-course"
+                            class="mt-2 w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 slot-course"
+                            data-slot="F" disabled>
+                            <option value="">Select a category first</option>
+                            {% for c in categories %}
+                            {% with cat_code=c.code %}
+                            {% for course in slot_map.F|get_item:cat_code %}
+                            {% if course.cb_for_branch and course.cb_for_branch.0 %}
+                            {% with cat=course.cb_for_branch.0.category %}
+                            <option value="{{ course.code }}" data-credits="{{ course.credits }}"
+                                data-category="{{ cat }}" data-cat="{{ cat_code }}" class="hidden">
+                                {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat }}
+                            </option>
+                            {% endwith %}
+                            {% else %}
+                            <option value="{{ course.code }}" data-credits="{{ course.credits }}"
+                                data-category="{{ cat_code }}" data-cat="{{ cat_code }}" class="hidden">
+                                {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat_code }}
+                            </option>
+                            {% endif %}
+                            {% endfor %}
+                            {% endwith %}
+                            {% endfor %}
+                        </select>
+
+                        <div class="cat-badge text-xs text-gray-600 mt-1"></div>
                     </div>
 
-                    <!-- Slot G -->
+                    <!-- SLOT G -->
                     <div class="flex flex-col">
-                        <label for="slot-G" class="font-medium mb-1">Slot-G</label>
-                        <select id="slot-G" name="slot-G"
-                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
-                            <option value="none">None</option>
-                            <option value="EE202">Digital Systems (EE202) - 4 credits</option>
-                            <option value="HS101">Economics (HS101) - 3 credits</option>
+                        <label class="font-medium mb-1">Slot-G</label>
+
+                        <select id="slot-G-cat" name="slot-G-cat"
+                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 slot-cat"
+                            data-slot="G">
+                            <option value="">Select category</option>
+                            {% for c in categories %}
+                            <option value="{{ c.code }}">{{ c.code }} — {{ c.label }}</option>
+                            {% endfor %}
                         </select>
+
+                        <select id="slot-G-course" name="slot-G-course"
+                            class="mt-2 w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 slot-course"
+                            data-slot="G" disabled>
+                            <option value="">Select a category first</option>
+                            {% for c in categories %}
+                            {% with cat_code=c.code %}
+                            {% for course in slot_map.G|get_item:cat_code %}
+                            {% if course.cb_for_branch and course.cb_for_branch.0 %}
+                            {% with cat=course.cb_for_branch.0.category %}
+                            <option value="{{ course.code }}" data-credits="{{ course.credits }}"
+                                data-category="{{ cat }}" data-cat="{{ cat_code }}" class="hidden">
+                                {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat }}
+                            </option>
+                            {% endwith %}
+                            {% else %}
+                            <option value="{{ course.code }}" data-credits="{{ course.credits }}"
+                                data-category="{{ cat_code }}" data-cat="{{ cat_code }}" class="hidden">
+                                {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat_code }}
+                            </option>
+                            {% endif %}
+                            {% endfor %}
+                            {% endwith %}
+                            {% endfor %}
+                        </select>
+
+                        <div class="cat-badge text-xs text-gray-600 mt-1"></div>
                     </div>
 
-                    <!-- Slot H -->
+                    <!-- SLOT H -->
                     <div class="flex flex-col">
-                        <label for="slot-H" class="font-medium mb-1">Slot-H</label>
-                        <select id="slot-H" name="slot-H"
-                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
-                            <option value="none">None</option>
-                            <option value="EE202">Digital Systems (EE202) - 4 credits</option>
-                            <option value="HS101">Economics (HS101) - 3 credits</option>
+                        <label class="font-medium mb-1">Slot-H</label>
+
+                        <select id="slot-H-cat" name="slot-H-cat"
+                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 slot-cat"
+                            data-slot="H">
+                            <option value="">Select category</option>
+                            {% for c in categories %}
+                            <option value="{{ c.code }}">{{ c.code }} — {{ c.label }}</option>
+                            {% endfor %}
                         </select>
+
+                        <select id="slot-H-course" name="slot-H-course"
+                            class="mt-2 w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 slot-course"
+                            data-slot="H" disabled>
+                            <option value="">Select a category first</option>
+                            {% for c in categories %}
+                            {% with cat_code=c.code %}
+                            {% for course in slot_map.H|get_item:cat_code %}
+                            {% if course.cb_for_branch and course.cb_for_branch.0 %}
+                            {% with cat=course.cb_for_branch.0.category %}
+                            <option value="{{ course.code }}" data-credits="{{ course.credits }}"
+                                data-category="{{ cat }}" data-cat="{{ cat_code }}" class="hidden">
+                                {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat }}
+                            </option>
+                            {% endwith %}
+                            {% else %}
+                            <option value="{{ course.code }}" data-credits="{{ course.credits }}"
+                                data-category="{{ cat_code }}" data-cat="{{ cat_code }}" class="hidden">
+                                {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat_code }}
+                            </option>
+                            {% endif %}
+                            {% endfor %}
+                            {% endwith %}
+                            {% endfor %}
+                        </select>
+
+                        <div class="cat-badge text-xs text-gray-600 mt-1"></div>
                     </div>
 
-                    <!-- Slot FS -->
+                    <!-- SLOT FS -->
                     <div class="flex flex-col">
-                        <label for="slot-FS" class="font-medium mb-1">Slot-FS</label>
-                        <select id="slot-FS" name="slot-FS"
-                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
-                            <option value="none">None</option>
-                            <option value="EE202">Digital Systems (EE202) - 4 credits</option>
-                            <option value="HS101">Economics (HS101) - 3 credits</option>
+                        <label class="font-medium mb-1">Slot-FS</label>
+
+                        <select id="slot-FS-cat" name="slot-FS-cat"
+                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 slot-cat"
+                            data-slot="FS">
+                            <option value="">Select category</option>
+                            {% for c in categories %}
+                            <option value="{{ c.code }}">{{ c.code }} — {{ c.label }}</option>
+                            {% endfor %}
                         </select>
+
+                        <select id="slot-FS-course" name="slot-FS-course"
+                            class="mt-2 w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 slot-course"
+                            data-slot="FS" disabled>
+                            <option value="">Select a category first</option>
+                            {% for c in categories %}
+                            {% with cat_code=c.code %}
+                            {% for course in slot_map.FS|get_item:cat_code %}
+                            {% if course.cb_for_branch and course.cb_for_branch.0 %}
+                            {% with cat=course.cb_for_branch.0.category %}
+                            <option value="{{ course.code }}" data-credits="{{ course.credits }}"
+                                data-category="{{ cat }}" data-cat="{{ cat_code }}" class="hidden">
+                                {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat }}
+                            </option>
+                            {% endwith %}
+                            {% else %}
+                            <option value="{{ course.code }}" data-credits="{{ course.credits }}"
+                                data-category="{{ cat_code }}" data-cat="{{ cat_code }}" class="hidden">
+                                {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat_code }}
+                            </option>
+                            {% endif %}
+                            {% endfor %}
+                            {% endwith %}
+                            {% endfor %}
+                        </select>
+
+                        <div class="cat-badge text-xs text-gray-600 mt-1"></div>
                     </div>
 
                 </div>
 
-                <!-- Credits and errors -->
                 <div class="mt-6 flex items-center justify-between">
                     <p class=" text-lg font-semibold ">
                         Total Credits: <span id="totalCredits" class="text-green-600">0</span>
@@ -133,10 +400,8 @@
                     <p id="creditError" class="text-red-500 hidden"></p>
                 </div>
 
-                <!-- Divider -->
                 <div class="h-px bg-gray-200 my-6"></div>
 
-                <!-- Footer actions -->
                 <div class="flex items-center justify-end gap-3">
                     <button type="button" id="resetBtn"
                         class="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50">
@@ -159,36 +424,26 @@
                 Are you sure you'd like to proceed?
             </p>
             <div class="flex justify-between">
-                <button id="backBtn" class="bg-gray-400 text-white px-4 py-2 rounded-lg hover:bg-gray-500">
-                    Back
-                </button>
-                <button id="proceedBtn" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
-                    Proceed
-                </button>
+                <button id="backBtn" class="bg-gray-400 text-white px-4 py-2 rounded-lg hover:bg-gray-500">Back</button>
+                <button id="proceedBtn"
+                    class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">Proceed</button>
             </div>
         </div>
     </div>
 
-    <!-- Script -->
     <script>
-        const minCredit = 4;
-        const maxCredit = 22;
-        const courseCredits = {
-            "CS101": 4,
-            "MA201": 3,
-            "EE202": 4,
-            "HS101": 3
-        };
 
         function updateCredits() {
             let total = 0;
-            document.querySelectorAll("select").forEach((sel) => {
-                if (sel.value !== "none") total += courseCredits[sel.value] || 0;
+            document.querySelectorAll(".slot-course").forEach((sel) => {
+                const opt = sel.options[sel.selectedIndex];
+                if (opt && opt.value) {
+                    const c = parseInt(opt.dataset.credits || "0", 10);
+                    total += isNaN(c) ? 0 : c;
+                }
             });
-
             document.getElementById("totalCredits").textContent = total;
             const errorEl = document.getElementById("creditError");
-
             if (total < minCredit) {
                 errorEl.textContent = `Minimum ${minCredit} credits required`;
                 errorEl.classList.remove("hidden");
@@ -200,18 +455,69 @@
             }
         }
 
-        // Attach change handler to all selects
-        document.querySelectorAll("select").forEach((sel) => {
-            sel.addEventListener("change", updateCredits);
-        });
+        function onCategoryChange(catSel) {
+            const slot = catSel.dataset.slot;
+            const courseSel = document.getElementById(`slot-${slot}-course`);
+            const chosenCat = catSel.value;
 
-        // Reset button clears selections and recalculates
+            // Reset course select
+            courseSel.innerHTML = "";
+            const placeholder = document.createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = chosenCat ? "Select a course" : "Select a category first";
+            courseSel.appendChild(placeholder);
+
+            // Pull all pre-rendered options for this slot/category from hidden template
+            const preRendered = document.querySelectorAll(`#slot-${slot}-course-template option[data-cat="${chosenCat}"]`);
+
+            if (chosenCat) {
+                preRendered.forEach((opt) => {
+                    const clone = opt.cloneNode(true);
+                    clone.classList.remove("hidden");
+                    courseSel.appendChild(clone);
+                });
+                courseSel.disabled = false;
+            } else {
+                courseSel.disabled = true;
+            }
+
+            const badge = courseSel.parentElement.querySelector(".cat-badge");
+            badge.textContent = chosenCat ? `Category: ${chosenCat}` : "";
+            updateCredits();
+        }
+
+        function wireSlots() {
+            // Move pre-rendered options into a hidden template <select> for each slot
+            document.querySelectorAll(".slot-course").forEach((sel) => {
+                const slot = sel.dataset.slot;
+                const tmpl = document.createElement("select");
+                tmpl.id = `slot-${slot}-course-template`;
+                tmpl.className = "hidden";
+
+                const opts = Array.from(sel.querySelectorAll("option.hidden, option[data-cat]"));
+                opts.forEach((o) => tmpl.appendChild(o));
+
+                sel.parentElement.insertBefore(tmpl, sel.nextSibling);
+                sel.innerHTML = '<option value="">Select a category first</option>';
+                sel.disabled = true;
+            });
+
+            document.querySelectorAll(".slot-cat").forEach((catSel) => {
+                catSel.addEventListener("change", () => onCategoryChange(catSel));
+            });
+        }
+
         document.getElementById("resetBtn").addEventListener("click", () => {
-            document.querySelectorAll("select").forEach((sel) => (sel.value = "none"));
+            document.querySelectorAll(".slot-cat").forEach((sel) => (sel.value = ""));
+            document.querySelectorAll(".slot-course").forEach((sel) => {
+                sel.innerHTML = '<option value="">Select a category first</option>';
+                sel.disabled = true;
+                const badge = sel.parentElement.querySelector(".cat-badge");
+                if (badge) badge.textContent = "";
+            });
             updateCredits();
         });
 
-        // Submit shows modal when credits valid
         document.getElementById("courseForm").addEventListener("submit", (e) => {
             e.preventDefault();
             const total = parseInt(document.getElementById("totalCredits").textContent, 10);
@@ -222,16 +528,12 @@
             }
         });
 
-        // Modal controls
         document.getElementById("backBtn").addEventListener("click", () => {
             document.getElementById("popup").classList.add("hidden");
         });
 
-        document.getElementById("proceedBtn").addEventListener("click", () => {
-            window.location.href = "/thanku";
-        });
-
-        // Initialize credits on load
+        document.querySelectorAll(".slot-course").forEach((sel) => sel.addEventListener("change", updateCredits));
+        wireSlots();
         updateCredits();
     </script>
 </body>

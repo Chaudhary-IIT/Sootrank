@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    "django_extensions",
     'Registration',
     'AdminDashboard',
 ]
@@ -65,6 +66,9 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
             ],
+            "libraries": {
+                "dict_extras": "project_utils.templatetags.dict_extras",
+            },
         },
     },
 ]
@@ -80,7 +84,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'sootrank_db',
         'USER': 'sootrank_user',
-        'PASSWORD': 'YO123#yo',
+        'PASSWORD': 'yourpassword',
         'HOST': 'localhost',
         'PORT': '5432',
     }
