@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bulk Add Courses - Sootrank Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <style>
+        body {
+            background-color: #f9fafb;
+        }
+
+        .form-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgb(0 0 0 / 0.1);
+            margin-bottom: 40px;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow">
+        <div class="container">
+            <a class="navbar-brand" href="{% url 'custom_admin_home' %}">Sootrank Admin</a>
+            <a href="{% url 'custom_admin_courses' %}" class="btn btn-light ms-auto me-2">Back to Courses</a>
+        </div>
+    </nav>
+
+    <div class="container my-5">
+        <h2 class="mb-4 text-primary">Bulk Add Courses</h2>
+
+        {% if messages %}
+            <div>
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <div class="form-section">
+            <form method="post" enctype="multipart/form-data" action="{% url 'custom_admin_courses_bulk' %}">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label for="course_file" class="form-label">Upload CSV or Excel File</label>
+                    <input type="file" class="form-control" id="course_file" name="course_file"
+                        accept=".csv, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        required />
+                </div>
+                <div class="mb-3">
+                    <p>File header format (columns in order):</p>
+                    <ul>
+                        <li>Sl. No.</li>
+                        <li>No Use (ignored)</li>
+                        <li>Course Code</li>
+                        <li>Course Name</li>
+                        <li>Status in course booklet</li>
+                        <li>L-T-P-C</li>
+                        <li>Slot</li>
+                        <li>Credit</li>
+                    </ul>
+                </div>
+                <button type="submit" class="btn btn-success">Upload and Add Courses</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>

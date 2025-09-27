@@ -29,9 +29,10 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow">
         <div class="container">
             <a class="navbar-brand" href="{% url 'custom_admin_home' %}">Sootrank Admin</a>
-            <a href="{% url 'custom_admin_faculty' %}" class="btn btn-light ms-auto">
+            <a href="{% url 'custom_admin_faculty' %}" class="btn btn-light ms-auto me-2">
                 Refresh List
             </a>
+            <a href="{%url 'custom_admin_faculty_bulk_add'%}" class="btn btn-outline-light me-2">Bulk Add Faculties</a>
         </div>
     </nav>
 
@@ -85,17 +86,15 @@
                         <th>Name</th>
                         <th>Email</th>
                         <th>Department</th>
-                        <th>Mobile</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for faculty in faculties %}
                     <tr>
-                        <td>{{ faculty.first_name }} {{ faculty.last_name }}</td>
+                        <td>{{ faculty.first_name }} {{ faculty.last_name|default_if_none:"" }}</td>
                         <td>{{ faculty.email_id }}</td>
                         <td>{{ faculty.department }}</td>
-                        <td>{{ faculty.mobile_no }}</td>
                         <td class="table-actions">
                             <a href="{% url 'custom_admin_edit_faculty' faculty.id %}" class="btn btn-sm btn-warning"
                                 title="Edit">

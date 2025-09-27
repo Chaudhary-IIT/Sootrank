@@ -12,7 +12,7 @@
             <i class="fa-solid fa-user fa-3x text-primary"></i>
         </div>
         <div>
-            <h2 class="fs-4 fw-bold mb-1">{{student.first_name}} {{student.last_name}}</h2>
+            <h2 class="fs-4 fw-bold mb-1">{{student.first_name}} {{ student.last_name|default_if_none:"" }}</h2>
             <p class="mb-1">Enrollment No: {{student.roll_no|upper}}</p>
             <p class="mb-1">Course: {{student.branch}} ({{student.department}})</p>
             <p class="mb-2">Semester: 3rd</p>

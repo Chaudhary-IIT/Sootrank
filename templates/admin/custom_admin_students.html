@@ -57,7 +57,7 @@
                     </div>
                     <div class="col-md-6">
                         <label for="last_name" class="form-label">Last Name</label>
-                        <input name="lastname" type="text" class="form-control" id="last_name" required />
+                        <input name="lastname" type="text" class="form-control" id="last_name"  />
                     </div>
                     <div class="col-md-6">
                         <label for="email_id" class="form-label">Email</label>
@@ -109,7 +109,6 @@
                         <th>Email</th>
                         <th>Department</th>
                         <th>Branch</th>
-                        <th>Mobile</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -117,11 +116,10 @@
                     {% for student in students %}
                     <tr>
                         <td>{{ student.roll_no }}</td>
-                        <td>{{ student.first_name }} {{ student.last_name }}</td>
+                        <td>{{ student.first_name }} {{ student.last_name|default_if_none:"" }}</td>
                         <td>{{ student.email_id }}</td>
-                        <td>{{ student.department }}</td>
+                        <td>{{ student.department.code }}</td>
                         <td>{{ student.branch }}</td>
-                        <td>{{ student.mobile_no }}</td>
                         <td class="table-actions">
                             <a href="{% url 'custom_admin_edit_student' student.roll_no %}"
                                 class="btn btn-sm btn-warning" title="Edit">
@@ -134,7 +132,7 @@
                                 <button type="submit" class="btn btn-sm btn-danger" title="Delete">
                                     <i class="fa fa-trash"></i>
                                 </button>
-                            </form>
+                            </form> 
                         </td>
                     </tr>
                     {% empty %}

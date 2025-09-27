@@ -40,7 +40,6 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     "django_extensions",
     'Registration',
-    'AdminDashboard',
 ]
 
 MIDDLEWARE = [
@@ -84,7 +83,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'sootrank_db',
         'USER': 'sootrank_user',
-        'PASSWORD': 'yourpassword',
+        'PASSWORD': 'YO123#yo',
         'HOST': 'localhost',
         'PORT': '5432',
     }

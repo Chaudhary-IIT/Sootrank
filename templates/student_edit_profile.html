@@ -96,10 +96,10 @@
                             <img class="avatar me-3" src="{{ student.profile_image.url }}" alt="Profile image">
                             {% else %}
                             <div class="avatar-fallback me-3">
-                                {{ student.first_name|slice:":1" }}{{ student.last_name|slice:":1" }}
+                                {{ student.first_name|slice:":1" }}{{ student.last_name|default_if_none:""|slice:":1" }}
                             </div>
                             {% endif %}
-                                <div class="text-muted small">{{student.first_name}} {{student.last_name}}</div>
+                                <div class="text-muted small">{{student.first_name}}{{ student.last_name|default_if_none:"" }}</div>
                             </div>
 
                             <div class="col-12 col-md-8">

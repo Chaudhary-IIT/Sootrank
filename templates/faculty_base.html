@@ -17,7 +17,7 @@
     <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom shadow-sm">
         <div class="container">
             <!-- Brand -->
-            <a class="navbar-brand fw-semibold d-flex align-items-center gap-2" href="#">
+            <a class="navbar-brand fw-semibold d-flex align-items-center gap-2" href="{% url 'faculty_dashboard' %}">
                 <i class="fa-solid fa-chalkboard-teacher text-primary"></i>
                 Faculty Dashboard
             </a>
@@ -108,7 +108,7 @@
                         <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" id="profileDropdown"
                             role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="fa-solid fa-circle-user fa-lg me-2 text-primary"></i>
-                            <span>{{faculty.first_name}} {{faculty.last_name}}</span>
+                            <span>{{faculty.first_name}}  {{ faculty.last_name|default_if_none:"" }}</span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="profileDropdown">
                             <li><a class="dropdown-item" href="{%url 'faculty_profile'%}"><i

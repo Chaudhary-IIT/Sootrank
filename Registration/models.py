@@ -41,7 +41,7 @@ class Branch(models.Model):
     
 class Faculty(models.Model):
     first_name=models.CharField(max_length=255)
-    last_name=models.CharField(max_length=255)
+    last_name=models.CharField(max_length=255,null=True)
     profile_image = models.ImageField(upload_to='profile_images/', blank=True, null=True)
     email_id=models.EmailField(max_length=255,unique=True)
     password=models.CharField(max_length=255)
@@ -65,6 +65,7 @@ class Course(models.Model):
     name=models.CharField(max_length=255)
     credits=models.IntegerField()
     LTPC=models.CharField(max_length=20)
+    status=models.CharField(max_length=20,default="Yes")
     slot = models.CharField(max_length=2, choices=SLOT_CHOICES)
     branches = models.ManyToManyField(Branch, through="CourseBranch", related_name="courses")
     faculties = models.ManyToManyField(Faculty, related_name="courses")
@@ -72,13 +73,14 @@ class Course(models.Model):
 
 class Student(models.Model):
     first_name=models.CharField(max_length=255)
-    last_name=models.CharField(max_length=255)
+    last_name=models.CharField(max_length=255,null=True)
     profile_image = models.ImageField(upload_to='profile_images/', blank=True, null=True)
     email_id=models.EmailField(max_length=255,unique=True)
     password=models.CharField(max_length=255)
     roll_no = models.CharField(max_length=10, unique=True)
     department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True)  # Student linked to department
     branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True)  # Student linked to branch
+    semester = models.IntegerField(null=True,default=1)
     mobile_no = models.BigIntegerField(null=True)
     courses = models.ManyToManyField(Course, through="StudentCourse", related_name="students")
 
@@ -91,7 +93,6 @@ class Student(models.Model):
             self.password = make_password(self.password)
         super().save(*args, **kwargs)
     
-
 
     def save(self, *args, **kwargs):
         # Hash password only if it’s not already hashed
@@ -156,20 +157,30 @@ class CourseBranch(models.Model):
             codes = ""
         return f"{self.course.name} - {self.branch.name} ({codes})"
 
-
 class StudentCourse(models.Model):
-    STATUS = [("ENR","Enrolled"), ("CMP","Completed"), ("DRP","Dropped")]
+    STATUS = [
+        ("PND", "Pending"),
+        ("ENR", "Enrolled"),
+        ("CMP", "Completed"),
+        ("DRP", "Dropped"),
+    ]
+    OUTCOME = [
+        ("UNK", "Unknown"),
+        ("PAS", "Pass"),
+        ("FAI", "Fail"),
+    ]
+
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="enrollments")
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="enrollments")
-    # optional branch snapshot (useful if course is tied to specific branch rules):
-    status = models.CharField(max_length=3, choices=STATUS, default="ENR")
-    grade = models.CharField(max_length=2, null=True, blank=True)  # if grading is tracked
-    term = models.CharField(max_length=20, null=True, blank=True)  # e.g., "2025-ODD"
-    type=models.CharField(max_length=10,null=True)
-
+    status = models.CharField(max_length=3, choices=STATUS, default="PND")
+    outcome = models.CharField(max_length=3, choices=OUTCOME, default="UNK")
+    grade = models.CharField(max_length=2, null=True, blank=True)  # for letter-graded only
+    is_pass_fail = models.BooleanField(default=False)  # NEW: PF selection at registration/approval
+    semester = models.IntegerField(null=True)  # e.g., 1, 2, ..., 8
+    type = models.CharField(max_length=10, null=True, blank=True)
 
     class Meta:
-        unique_together = ("student", "course", "term")  # adjust to your policy
+        unique_together = ("student", "course", "semester")
 
 class ProgramRequirement(models.Model):
     CATEGORY_CHOICES = [

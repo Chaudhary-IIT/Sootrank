@@ -14,6 +14,7 @@ import re
 from Registration.forms import FacultyEditForm, StudentEditForm
 import csv
 from django.http import JsonResponse
+import pandas as pd
 
 EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+-]+@iitmandi\.ac\.in$')
 SLOTS = ["A","B","C","D","E","F","G","H","FS"]
@@ -52,7 +53,7 @@ def login(request):
                 if check_password(password, faculty.password):
                     request.session["email_id"] = faculty.email_id  # stable across reloads
                     request.session["flash_ctx"] = {
-                        "full_name": f"{faculty.first_name} {faculty.last_name}",
+                        "full_name": f"{faculty.first_name}",
                         "role_label": "Faculty",
                     }  # optional one-time
                     return render(request, "auth_successful.html", {"redirect_url": "/faculty_dashboard/"})
@@ -75,7 +76,7 @@ def login(request):
             if check_password(password, student.password):
                 request.session["roll_no"] = student.roll_no  # stable across reloads
                 request.session["flash_ctx"] = {
-                    "full_name": f"{student.first_name} {student.last_name}",
+                    "full_name": f"{student.first_name}",
                     "role_label": "Student",
                 }  # optional one-time
                 return render(request, "auth_successful.html", {"redirect_url": "/students_dashboard/"})
@@ -171,8 +172,18 @@ def pre_registration(request):
         cat_map = {}
         for cat in [c["code"] for c in CATEGORIES]:
             qs = (
-                Course.objects.filter(slot=slot, coursebranch__branch=branch, coursebranch__category=cat)
-                .prefetch_related(Prefetch("coursebranch_set", queryset=base_cb, to_attr="cb_for_branch"))
+                Course.objects.filter(
+                    slot=slot,
+                    coursebranch__branch=branch,               # reverse FK from CourseBranch to Course is coursebranch (implicit reverse name is coursebranch_set)
+                    coursebranch__categories__code=cat         # go through M2M to Category.code
+                )
+                .prefetch_related(
+                    Prefetch(
+                        "coursebranch_set",                    # reverse name to CourseBranch
+                        queryset=base_cb.prefetch_related("categories"),
+                        to_attr="cb_for_branch"
+                    )
+                )
                 .distinct()
             )
             cat_map[cat] = qs
@@ -358,62 +369,11 @@ def custom_admin_students(request):
         "branches": branches,
     })
 
-def custom_admin_faculty(request):
-    faculties = Faculty.objects.select_related("department").all().order_by("last_name", "first_name")
-    departments = Department.objects.all().order_by('code')
-
-    if request.method == 'POST':
-        first_name = request.POST.get('firstname', '').strip()
-        last_name = request.POST.get('lastname', '').strip()
-        email_id = request.POST.get('email', '').strip().lower()
-        department_id = request.POST.get('department')
-        mobile_no = request.POST.get('mobile_no') or None
-        raw_password = request.POST.get('password', '')
-
-        # Basic validation
-        if not EMAIL_RE.match(email_id):
-            messages.error(request, "Invalid Institute Email")
-            return redirect('custom_admin_faculty')
-
-        # Resolve FK
-        dept = None
-        if department_id:
-            try:
-                dept = Department.objects.get(pk=department_id)
-            except Department.DoesNotExist:
-                messages.error(request, "Selected department does not exist.")
-                return redirect('custom_admin_faculty')
-        else:
-            messages.error(request, "Please select a department.")
-            return redirect('custom_admin_faculty')
-
-        try:
-            Faculty.objects.create(
-                first_name=first_name,
-                last_name=last_name,
-                email_id=email_id,
-                password=make_password(raw_password),
-                department=dept,
-                mobile_no=mobile_no,
-            )
-            messages.success(request, 'Faculty added successfully.')
-            return redirect('custom_admin_faculty')
-        except IntegrityError:
-            messages.error(request, "Faculty with this email already exists.")
-        except Exception as e:
-            messages.error(request, f"Error adding faculty: {e}")
-
-    return render(request, "admin/custom_admin_faculty.html", {
-        "faculties": faculties,
-        "departments": departments
-    })
-
-
 def custom_admin_students_bulk_add(request):
     if request.method == "POST":
         csv_file = request.FILES.get("csv_file")
         if not csv_file:
-            messages.error(request, "Please upload a CSV file.")
+            messages.error(request, "Please upload a CSV or Excel file.")
             return redirect("custom_admin_students_bulk_add")
 
         temp_file_path = default_storage.save(f"temp/{csv_file.name}", csv_file)
@@ -421,61 +381,85 @@ def custom_admin_students_bulk_add(request):
         error_rows = []
 
         try:
-            with default_storage.open(temp_file_path, mode='r') as file:
-                reader = csv.DictReader(file)
-                required_fields = [
-                    "first_name", "last_name", "email_id", "password",
-                    "roll_no", "department", "branch", "mobile_no"
-                ]
-                for idx, row in enumerate(reader, start=2):  # header=1, first data row=2
-                    if not all(row.get(f) for f in required_fields):
-                        error_rows.append(f"Row {idx}: Missing required fields.")
-                        continue
+            ext = csv_file.name.split('.')[-1].lower()
+            if ext == 'csv':
+                with default_storage.open(temp_file_path, mode='r') as file:
+                    reader = csv.DictReader(file)
+                    rows = list(reader)
+            elif ext in ['xls', 'xlsx']:
+                with default_storage.open(temp_file_path, 'rb') as f:
+                    df = pd.read_excel(f)
+                rows = df.to_dict(orient='records')
+            else:
+                messages.error(request, "Unsupported file format. Please upload CSV or Excel.")
+                default_storage.delete(temp_file_path)
+                return redirect("custom_admin_students_bulk_add")
 
-                    # Normalize codes from CSV (accept 'scee' or 'SCEE', 'cse' or 'CSE')
-                    dept_code = (row["department"] or "").strip().upper()
-                    br_code = (row["branch"] or "").strip()  # Case-sensitive for your Branch codes
-                    # If branch codes in CSV are lower, normalize similarly:
-                    # br_code = br_code.upper()
+            # Cache departments and branches for FK efficiency
+            departments = {d.code: d for d in Department.objects.all()}
+            branches = {b.name: b for b in Branch.objects.all()}
 
-                    # Resolve FKs
-                    try:
-                        dept = Department.objects.get(code=dept_code)
-                    except Department.DoesNotExist:
-                        error_rows.append(f"Row {idx}: Department code '{dept_code}' not found.")
-                        continue
+            # Required fields except last_name (nullable)
+            required_fields = [
+                "first_name", "email_id", "password",
+                "roll_no", "department", "branch"
+            ]
 
-                    try:
-                        br = Branch.objects.get(name=br_code)
-                    except Branch.DoesNotExist:
-                        error_rows.append(f"Row {idx}: Branch code '{br_code}' not found.")
-                        continue
+            def safe_str(val):
+                return '' if val is None else str(val).strip()
 
-                    try:
-                        student, created = Student.objects.get_or_create(
-                            roll_no=row["roll_no"].strip().lower(),
-                            defaults={
-                                "first_name": row["first_name"].strip(),
-                                "last_name": row["last_name"].strip(),
-                                "email_id": row["email_id"].strip().lower(),
-                                "password": make_password(row["password"]),  # hash here
-                                "department": dept,
-                                "branch": br,
-                                "mobile_no": (row["mobile_no"].strip() or None),
-                            },
-                        )
-                        if created:
-                            added_count += 1
-                        else:
-                            error_rows.append(
-                                f"Row {idx}: Student with roll_no '{row['roll_no']}' already exists."
-                            )
-                    except IntegrityError as e:
-                        error_rows.append(f"Row {idx}: Integrity error: {e}")
-                    except Exception as e:
-                        error_rows.append(f"Row {idx}: {str(e)}")
-        finally:
+            for idx, row in enumerate(rows, start=2):  # header = 1
+                missing_fields = [f for f in required_fields if not row.get(f) or safe_str(row.get(f)) == '']
+                if missing_fields:
+                    error_rows.append(f"Row {idx}: Missing required fields: {', '.join(missing_fields)}.")
+                    continue
+
+                first_name = safe_str(row.get('first_name'))
+                last_name = safe_str(row.get('last_name')) or None  # Nullable field
+                email = safe_str(row.get('email_id')).lower()
+                password_raw = row.get('password')
+                roll_no = safe_str(row.get('roll_no')).lower()
+                dept_code = safe_str(row.get('department')).upper()
+                br_code = safe_str(row.get('branch'))
+
+                dept = departments.get(dept_code)
+                if not dept:
+                    error_rows.append(f"Row {idx}: Department code '{dept_code}' not found.")
+                    continue
+
+                br = branches.get(br_code)
+                if not br:
+                    error_rows.append(f"Row {idx}: Branch code '{br_code}' not found.")
+                    continue
+
+                try:
+                    student, created = Student.objects.get_or_create(
+                        roll_no=roll_no,
+                        defaults={
+                            "first_name": first_name,
+                            "last_name": last_name,
+                            "email_id": email,
+                            "password": make_password(password_raw),
+                            "department": dept,
+                            "branch": br,
+                            "mobile_no": None,  # since no mobile column
+                        },
+                    )
+                    if created:
+                        added_count += 1
+                    else:
+                        error_rows.append(f"Row {idx}: Student with roll_no '{roll_no}' already exists.")
+                except IntegrityError as e:
+                    error_rows.append(f"Row {idx}: Integrity error: {str(e)}")
+                except Exception as e:
+                    error_rows.append(f"Row {idx}: Error saving student - {str(e)}")
+
+        except Exception as e:
+            messages.error(request, f"Failed to process file: {str(e)}")
             default_storage.delete(temp_file_path)
+            return redirect("custom_admin_students_bulk_add")
+
+        default_storage.delete(temp_file_path)
 
         if added_count:
             messages.success(request, f"Successfully added {added_count} students.")
@@ -484,6 +468,7 @@ def custom_admin_students_bulk_add(request):
         return redirect("custom_admin_students_bulk_add")
 
     return render(request, "admin/bulk_add.html")
+
 
 def delete_student_by_roll(request, roll_no):
     student = get_object_or_404(Student, roll_no=roll_no)
@@ -535,6 +520,144 @@ def custom_admin_edit_student(request, roll_no):
         "departments": departments,
         "branches": branches,
     })
+
+
+def custom_admin_faculty(request):
+    faculties = Faculty.objects.select_related("department").all().order_by("last_name", "first_name")
+    departments = Department.objects.all().order_by('code')
+
+    if request.method == 'POST':
+        first_name = request.POST.get('firstname', '').strip()
+        last_name = request.POST.get('lastname', '').strip()
+        email_id = request.POST.get('email', '').strip().lower()
+        department_id = request.POST.get('department')
+        mobile_no = request.POST.get('mobile_no') or None
+        raw_password = request.POST.get('password', '')
+
+        # Basic validation
+        if not EMAIL_RE.match(email_id):
+            messages.error(request, "Invalid Institute Email")
+            return redirect('custom_admin_faculty')
+
+        # Resolve FK
+        dept = None
+        if department_id:
+            try:
+                dept = Department.objects.get(pk=department_id)
+            except Department.DoesNotExist:
+                messages.error(request, "Selected department does not exist.")
+                return redirect('custom_admin_faculty')
+        else:
+            messages.error(request, "Please select a department.")
+            return redirect('custom_admin_faculty')
+
+        try:
+            Faculty.objects.create(
+                first_name=first_name,
+                last_name=last_name,
+                email_id=email_id,
+                password=make_password(raw_password),
+                department=dept,
+                mobile_no=mobile_no,
+            )
+            messages.success(request, 'Faculty added successfully.')
+            return redirect('custom_admin_faculty')
+        except IntegrityError:
+            messages.error(request, "Faculty with this email already exists.")
+        except Exception as e:
+            messages.error(request, f"Error adding faculty: {e}")
+
+    return render(request, "admin/custom_admin_faculty.html", {
+        "faculties": faculties,
+        "departments": departments
+    })
+
+
+def custom_admin_faculty_bulk_add(request):
+    if request.method == "POST":
+        faculty_file = request.FILES.get("faculty_file")
+        if not faculty_file:
+            messages.error(request, "Please upload a CSV or Excel file.")
+            return redirect("custom_admin_faculty_bulk_add")
+
+        temp_file_path = default_storage.save(f"temp/{faculty_file.name}", faculty_file)
+        added_count = 0
+        error_rows = []
+
+        try:
+            ext = faculty_file.name.split('.')[-1].lower()
+            if ext == 'csv':
+                with default_storage.open(temp_file_path, mode='r') as file:
+                    reader = csv.DictReader(file)
+                    rows = list(reader)
+            elif ext in ['xls', 'xlsx']:
+                with default_storage.open(temp_file_path, 'rb') as f:
+                    df = pd.read_excel(f)
+                rows = df.to_dict(orient='records')
+            else:
+                messages.error(request, "Unsupported file format. Upload CSV or Excel.")
+                return redirect("custom_admin_faculty_bulk_add")
+
+            departments = {d.code: d for d in Department.objects.all()}
+
+            def safe_str(val):
+                return '' if val is None else str(val).strip()
+
+            for idx, row in enumerate(rows, start=2):
+                first_name = safe_str(row.get('first_name'))
+                last_name = safe_str(row.get('last_name'))
+                email = safe_str(row.get('email_id')).lower()
+                password_raw = row.get('password')
+                dept_code = safe_str(row.get('department')).upper()
+
+                missing_fields = [f for f,v in [('first_name', first_name),  ('email_id', email), ('password', password_raw), ('department', dept_code)] if not v]
+                if missing_fields:
+                    error_rows.append(f"Row {idx}: Missing required fields: {', '.join(missing_fields)}.")
+                    continue
+
+                dept = departments.get(dept_code)
+                if not dept:
+                    error_rows.append(f"Row {idx}: Department code '{dept_code}' not found.")
+                    continue
+
+                mobile_no_raw = row.get('mobile_no')
+                mobile_no = safe_str(mobile_no_raw) if mobile_no_raw else None
+
+                try:
+                    faculty, created = Faculty.objects.get_or_create(
+                        email_id=email,
+                        defaults={
+                            'first_name': first_name,
+                            'last_name': last_name if last_name else None,
+                            'password': make_password(password_raw),
+                            'department': dept,
+                            'mobile_no': mobile_no if mobile_no else None,
+                        }
+                    )
+                    if created:
+                        added_count += 1
+                    else:
+                        error_rows.append(f"Row {idx}: Faculty with email '{email}' already exists.")
+                except IntegrityError as e:
+                    error_rows.append(f"Row {idx}: Integrity error: {str(e)}")
+                except Exception as e:
+                    error_rows.append(f"Row {idx}: Error saving faculty - {str(e)}")
+
+        except Exception as e:
+            messages.error(request, f"Failed to process file: {str(e)}")
+            default_storage.delete(temp_file_path)
+            return redirect("custom_admin_faculty_bulk_add")
+
+        default_storage.delete(temp_file_path)
+
+        if added_count:
+            messages.success(request, f"Successfully added {added_count} faculties.")
+        for err in error_rows:
+            messages.error(request, err)
+        return redirect("custom_admin_faculty_bulk_add")
+
+    return render(request, "admin/custom_admin_faculty_bulk.html")
+
 
 
 def delete_faculty(request, faculty_id):
@@ -701,6 +824,98 @@ def custom_admin_courses(request):
         "courses": courses,
         "slot_choices": slot_choices,
     })
+
+def custom_admin_courses_bulk(request):
+    if request.method == "POST":
+        course_file = request.FILES.get("course_file")
+        if not course_file:
+            messages.error(request, "Please upload a CSV or Excel file.")
+            return redirect("custom_admin_courses_bulk")
+
+        temp_file_path = default_storage.save(f"temp/{course_file.name}", course_file)
+        added_count = 0
+        error_rows = []
+
+        try:
+            ext = course_file.name.split('.')[-1].lower()
+            if ext == 'csv':
+                with default_storage.open(temp_file_path, mode='r') as file:
+                    reader = csv.DictReader(file)
+                    rows = list(reader)
+            elif ext in ['xls', 'xlsx']:
+                with default_storage.open(temp_file_path, 'rb') as f:
+                    df = pd.read_excel(f)
+                rows = df.to_dict(orient='records')
+            else:
+                messages.error(request, "Unsupported file format. Upload CSV or Excel.")
+                return redirect("custom_admin_courses_bulk")
+
+            valid_slots = {val for val, _ in Course.SLOT_CHOICES}
+
+            def safe_str(val):
+                return '' if val is None else str(val).strip()
+
+            for idx, row in enumerate(rows, start=2):  # header = 1, data starts at 2
+                code = safe_str(row.get('Course Code')).upper()
+                name = safe_str(row.get('Course Name'))
+                status = safe_str(row.get('Status in course booklet')) or 'Yes'
+                ltpc = safe_str(row.get('L-T-P-C')).upper()
+                slot = safe_str(row.get('Slot')).upper()
+                credit_val = row.get('Credit')
+                try:
+                    credits = int(float(credit_val)) if credit_val not in [None, ''] else None
+                except (ValueError, TypeError):
+                    credits = None
+
+                if not (code and name and slot and credits is not None):
+                    error_rows.append(f"Row {idx}: Missing required fields.")
+                    continue
+                if slot not in valid_slots:
+                    error_rows.append(f"Row {idx}: Invalid slot '{slot}'.")
+                    continue
+
+                try:
+                    course, created = Course.objects.get_or_create(
+                        code=code,
+                        defaults={
+                            'name': name,
+                            'status': status,
+                            'LTPC': ltpc,
+                            'slot': slot,
+                            'credits': credits,
+                        }
+                    )
+                    if created:
+                        added_count += 1
+                    else:
+                        # Uncomment below to update existing course info if needed
+                        # course.name = name
+                        # course.status = status
+                        # course.LTPC = ltpc
+                        # course.slot = slot
+                        # course.credits = credits
+                        # course.save()
+                        pass
+                except IntegrityError:
+                    error_rows.append(f"Row {idx}: Course with code '{code}' already exists.")
+                except Exception as e:
+                    error_rows.append(f"Row {idx}: Error saving course - {str(e)}")
+
+        except Exception as e:
+            messages.error(request, f"Failed to process file: {str(e)}")
+            default_storage.delete(temp_file_path)
+            return redirect("custom_admin_courses_bulk")
+
+        default_storage.delete(temp_file_path)
+
+        if added_count:
+            messages.success(request, f"Successfully added {added_count} new courses.")
+        for err in error_rows:
+            messages.error(request, err)
+        return redirect("custom_admin_courses_bulk")
+
+    return render(request, "admin/bulk_add_courses.html")
+
 
 
 def custom_admin_edit_course(request, course_id):

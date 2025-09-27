@@ -48,3 +48,21 @@ python manage.py createsuperuser
 
 ---------------------------------------------------------------------------------------------------------------------
 
+# Running Scripts
+
+
+python manage.py shell
+import sys
+sys.path.append("Sootrank/scripts")
+import orm_scripts
+orm_scripts.run()
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+# Fix Permission For Database on PostgreSQL
+
+psql -U postgres -d sootrank_db
+
+GRANT ALL PRIVILEGES ON DATABASE sootrank_db TO sootrank_user;
+GRANT ALL ON SCHEMA public TO sootrank_user;
+ALTER USER sootrank_user WITH SUPERUSER;

@@ -12,7 +12,7 @@
             <i class="fa-solid fa-chalkboard-teacher fa-3x text-primary"></i>
         </div>
         <div>
-            <h2 class="fs-4 fw-semibold mb-1">{{faculty.first_name}} {{faculty.last_name}}</h2>
+            <h2 class="fs-4 fw-semibold mb-1">{{faculty.first_name}} {{ faculty.last_name|default_if_none:"" }}</h2>
             <p class="mb-1">Department: {{faculty.department}}</p>
             <p class="mb-1">Email: {{faculty.email_id}}</p>
             <a href="{%url 'faculty_edit_profile' %}" class="btn btn-outline-primary btn-sm">

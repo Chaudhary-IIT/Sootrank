@@ -85,7 +85,7 @@
     <!-- Navbar -->
     <nav class="navbar navbar-light bg-white shadow-sm">
         <div class="container d-flex justify-content-start">
-            <a class="navbar-brand d-flex align-items-center" href="#">
+            <a class="navbar-brand d-flex align-items-center" href="{% url 'faculty_dashboard' %}">
                 <img src="{% static 'images/sootrank_logo.jpg' %}" alt="Sootrank" width="36" height="36" class="me-2">
                 <span class="fs-4 brand-text">Sootrank</span>
             </a>
@@ -103,7 +103,7 @@
                             <div>
                                 <div class="badge text-bg-primary-subtle text-primary">Faculty Profile</div>
                                 <h1 class="h4 mt-2 mb-0 text-primary fw-semibold">
-                                    {{ faculty.first_name }} {{ faculty.last_name }}
+                                    {{ faculty.first_name }}  {{ faculty.last_name|default_if_none:"" }}
                                 </h1>
                                 <div class="text-secondary">
                                     {{ faculty.department }}
@@ -123,11 +123,11 @@
                             <img class="avatar me-3" src="{{ faculty.profile_image.url }}" alt="Profile image">
                             {% else %}
                             <div class="avatar-fallback me-3">
-                                {{ faculty.first_name|slice:":1" }}{{ faculty.last_name|slice:":1" }}
+                                {{ faculty.first_name|slice:":1" }} {{ faculty.last_name|default_if_none:"" |slice:":1" }}
                             </div>
                             {% endif %}
                             <div>
-                                <div class="info-value">{{ faculty.first_name }} {{ faculty.last_name }}</div>
+                                <div class="info-value">{{ faculty.first_name }}  {{ faculty.last_name|default_if_none:"" }}</div>
                                 <div class="text-secondary">Department: {{ faculty.department }}</div>
                             </div>
                         </div>
