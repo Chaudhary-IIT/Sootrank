@@ -14,7 +14,8 @@
   <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow">
     <div class="container">
       <a class="navbar-brand" href="{% url 'custom_admin_home' %}">Sootrank Admin</a>
-      <a href="{% url 'course_branch_index' %}" class="btn btn-light ms-auto">Refresh</a>
+      <a href="{%url 'bulk_upload_course_branch'%}" class="btn btn-outline-light ms-auto me-2">Bulk Add Assignments</a>
+      <a href="{% url 'course_branch_index' %}" class="btn btn-light">Refresh</a>
     </div>
   </nav>
 

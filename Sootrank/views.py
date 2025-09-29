@@ -1,3 +1,5 @@
+from collections import defaultdict
+from io import TextIOWrapper
 from django.conf import settings
 from django.contrib import messages
 from django.db import IntegrityError, transaction
@@ -15,9 +17,20 @@ from Registration.forms import FacultyEditForm, StudentEditForm
 import csv
 from django.http import JsonResponse
 import pandas as pd
+from dataclasses import dataclass
 
 EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+-]+@iitmandi\.ac\.in$')
 SLOTS = ["A","B","C","D","E","F","G","H","FS"]
+CATEGORY_MAP = {
+    "DC": "DC",
+    "DE": "DE",
+    "IC": "IC",
+    "HSS": "HSS",
+    "FE": "FE",
+    "IKS": "IKS",
+    "ISTP": "ISTP",
+    "MTP": "MTP",
+}
 
 CATEGORIES = [
     {"code": "DC", "label": "Disciplinary Core (DC)"},
@@ -29,6 +42,37 @@ CATEGORIES = [
     {"code": "ISTP", "label": "Interactive Socio-Technical Practicum (ISTP)"},
     {"code": "MTP", "label": "Major Technical Project (MTP)"},
 ]
+CATEGORY_HEADERS = ["DC", "DE", "IC", "HSS", "FE", "IKS", "ISTP", "MTP"]
+HEADER_TO_CATEGORY = {h: h for h in CATEGORY_HEADERS}
+
+
+def _safe_str(v):
+    return "" if v is None else str(v).strip()
+
+def _is_blank_or_nan(v):
+    s = _safe_str(v)
+    return s == "" or s.lower() in ("nan", "none", "null")
+
+def _split_codes(cell):
+    if _is_blank_or_nan(cell):
+        return []
+    s = str(cell)
+    for sep in ["|", ";"]:
+        s = s.replace(sep, ",")
+    if "," in s:
+        tokens = s.split(",")
+    else:
+        tokens = s.split()
+    return [t.strip().upper() for t in tokens if t.strip()]
+
+@dataclass
+class FacultyMini:
+    first_name: str
+    last_name: str | None
+    email_id: str
+    department: str
+
+#---------------------------------------------------------------------------------------------------------------
 
 def login(request):
     if request.method == "POST":
@@ -274,46 +318,6 @@ def faculty_edit_profile(request):
     return render(request, "instructor/edit_profile.html", {"form": form, "faculty": faculty})
 def custom_admin_home(request):
     return render(request, "admin/custom_admin_home.html")
-
-# def custom_admin_students(request):
-#     students = Student.objects.all()
-#     if request.method=='POST':
-#         firstname=request.POST['firstname']
-#         lastname=request.POST['lastname']
-#         roll_no=request.POST['roll_no']
-#         email=request.POST['email']
-#         department=request.POST['department']
-#         branch=request.POST['branch']
-#         password1=request.POST['password']
-#         mobile_no=request.POST['mobile_no']
-#         hashed_password = make_password(password1)
-
-#         pattern1=re.compile(r'^(?:B|b|V|v|D|d|IM|im|MB|mb)\d{5}$')
-#         pattern2=re.compile(r'^(?:B|b|V|v|D|d|IM|im|MB|mb)\d{5}@students\.iitmandi\.ac\.in$')
-
-
-#         if(pattern1.match(roll_no) and pattern2.match(email) and (email[:len(roll_no)].lower()==roll_no.lower())):
-            
-#             try:
-#                 Student.objects.create(
-#                     first_name=firstname,
-#                     last_name=lastname,
-#                     email_id=email.lower(),
-#                     roll_no=roll_no.lower(),
-#                     password=hashed_password,
-#                     department=department,
-#                     branch=branch,
-#                     mobile_no=mobile_no,
-
-#                 )
-#                 messages.success(request, 'Registration successful.')
-#                 return redirect('/custom-admin/students/')  # Redirect to login page or another page
-#             except IntegrityError:
-#                 messages.error(request, "Student with this email or roll number already exists.")
-#         else:
-#             messages.error(request, "Invalid Roll No. or Institute Email")
-#     return render(request, "admin/custom_admin_students.html", {"students": students})
-
 
 def custom_admin_students(request):
     students = Student.objects.select_related("department","branch").all().order_by("roll_no")
@@ -713,19 +717,6 @@ def custom_admin_edit_faculty(request, faculty_id):
     })
 
 
-# def custom_admin_admins(request):
-#     return render(request, "admin/custom_admin_admins.html")
-
-# def custom_admin_branches(request):
-#     return render(request, "admin/custom_admin_branches.html")
-
-# def custom_admin_courses(request):
-#     return render(request, "admin/custom_admin_courses.html")
-
-# def custom_admin_coursebranches(request):
-#     return render(request, "admin/custom_admin_coursebranches.html")
-
-
 
 def custom_admin_branch(request):
     branches = Branch.objects.select_related("department").order_by("department__code", "name")
@@ -977,7 +968,7 @@ def manage_course_faculties(request, course_id):
             messages.success(request, "Faculties updated for this course.")
         except Exception as e:
             messages.error(request, f"Could not update faculties: {e}")
-        return redirect("custom_admin_courses")
+        return redirect("course_instructors_assign")
 
     assigned_ids = set(course.faculties.values_list("id", flat=True))
     return render(request, "admin/custom_admin_course_faculties.html", {
@@ -1021,6 +1012,137 @@ def manage_course_branches(request, course_id):
         "admin/custom_admin_course_branches.html",
         {"course": course, "branches": branches, "categories": categories},
     )
+
+
+def bulk_upload_course_branch(request):
+    if request.method == "POST":
+        upload = request.FILES.get("file")
+        if not upload:
+            return JsonResponse({"ok": False, "message": "Please upload a CSV or Excel file.", "errors": []}, status=400)
+
+        temp_path = default_storage.save(f"temp/{upload.name}", upload)
+        errors = []
+        applied_links = 0
+        rows_processed = 0
+
+        try:
+            ext = upload.name.split(".")[-1].lower()
+            if ext == "csv":
+                with default_storage.open(temp_path, mode="r", encoding="utf-8", newline="") as f:
+                    reader = csv.DictReader(f)
+                    rows = list(reader)
+            elif ext in ["xls", "xlsx"]:
+                with default_storage.open(temp_path, "rb") as f:
+                    df = pd.read_excel(f, engine="openpyxl")
+                rows = df.to_dict(orient="records")
+            else:
+                return JsonResponse({"ok": False, "message": "Unsupported file format. Upload CSV or Excel.", "errors": []}, status=400)
+
+            if not rows:
+                return JsonResponse({"ok": False, "message": "The uploaded file has no data rows.", "errors": []}, status=400)
+
+            headers = set(rows[0].keys())
+            must_have = {"Course Code", "Course Name"}
+            missing = [h for h in must_have if h not in headers]
+            if missing:
+                return JsonResponse({"ok": False, "message": "Invalid header row.", "errors": [f"Missing required columns: {', '.join(missing)}"]}, status=400)
+            if not any(h in headers for h in CATEGORY_HEADERS):
+                return JsonResponse({"ok": False, "message": "No category columns present.", "errors": [f"Provide any of: {', '.join(CATEGORY_HEADERS)}"]}, status=400)
+
+            # Preload references
+            branches = list(Branch.objects.all())
+            branches_by_code = {b.name.strip().upper(): b for b in branches}  # Branch.name holds the code
+            all_branches = branches  # for ALL token
+            categories_by_code = {c.code.strip().upper(): c for c in Category.objects.all()}
+            missing_cats = [h for h in CATEGORY_HEADERS if h not in categories_by_code]
+            if missing_cats:
+                return JsonResponse({"ok": False, "message": "Missing Category rows in DB.", "errors": [f"Create Category for codes: {', '.join(missing_cats)}"]}, status=400)
+
+            with transaction.atomic():
+                for rix, row in enumerate(rows, start=2):
+                    code = _safe_str(row.get("Course Code")).upper()
+                    name = _safe_str(row.get("Course Name"))
+
+                    if not code and not name:
+                        errors.append(f"Row {rix}: Both Course Code and Course Name are empty; skipped.")
+                        continue
+
+                    course = None
+                    if code:
+                        course = Course.objects.filter(code__iexact=code).first()
+                    if course is None and name:
+                        course = Course.objects.filter(name__iexact=name).first()
+
+                    if course is None:
+                        errors.append(f"Row {rix}: Course not found by code '{code}' or name '{name}'. Skipped.")
+                        continue
+
+                    rows_processed += 1
+
+                    # Process each category column
+                    for header in CATEGORY_HEADERS:
+                        if header not in headers:
+                            continue
+                        cell = row.get(header)
+
+                        # Skip blanks/NaN entirely
+                        if _is_blank_or_nan(cell):
+                            continue
+
+                        tokens = _split_codes(cell)
+                        # If the cell explicitly contains ALL (case-insensitive), apply to all branches
+                        # Detect ALL even if mixed with other separators/tokens
+                        has_all = any(tok.upper() == "ALL" for tok in (tokens if tokens else [_safe_str(cell).upper()]))
+
+                        if has_all:
+                            target_branches = all_branches
+                        else:
+                            # Use parsed codes; unknown codes are reported individually
+                            target_branches = []
+                            for br_code in tokens:
+                                if br_code == "ALL":
+                                    # Already handled by has_all; skip here
+                                    continue
+                                br = branches_by_code.get(br_code)
+                                if not br:
+                                    errors.append(f"Row {rix}: Unknown Branch Code '{br_code}' in column '{header}'.")
+                                    continue
+                                target_branches.append(br)
+
+                        if not target_branches:
+                            continue  # nothing to do for this cell
+
+                        cat = categories_by_code[HEADER_TO_CATEGORY[header]]
+
+                        for br in target_branches:
+                            cb, _ = CourseBranch.objects.get_or_create(course=course, branch=br)
+                            # Add category if missing; never remove others
+                            if not cb.categories.filter(id=cat.id).exists():
+                                cb.categories.add(cat)
+                                applied_links += 1
+
+            return JsonResponse({
+                "ok": True,
+                "message": "Processed file.",
+                "rows": rows_processed,
+                "links_added": applied_links,
+                "errors": errors[:100],
+            }, status=200)
+
+        except Exception as e:
+            return JsonResponse({
+                "ok": False,
+                "message": f"Failed to process file: {str(e)}",
+                "errors": errors[:100]
+            }, status=500)
+        finally:
+            try:
+                default_storage.delete(temp_path)
+            except Exception:
+                pass
+
+    # GET
+    return render(request, "admin/bulk_upload_course_branches.html")
 
 def requirements_index(request):
     branches = Branch.objects.select_related("department").order_by("department__code", "name")
@@ -1071,3 +1193,276 @@ def manage_branch_requirements(request, branch_id):
         "branch": branch,
         "rows": rows,
     })
+
+
+def bulk_upload_program_requirements(request):
+    if request.method == "POST":
+        upload = request.FILES.get("file")
+        if not upload:
+            return JsonResponse({
+                "ok": False,
+                "message": "Please upload a CSV or Excel file.",
+                "errors": []
+            }, status=400)
+
+        temp_file_path = default_storage.save(f"temp/{upload.name}", upload)
+        created_count = 0
+        updated_count = 0
+        error_rows = []
+
+        try:
+            # Read rows
+            ext = upload.name.split(".")[-1].lower()
+            if ext == "csv":
+                with default_storage.open(temp_file_path, mode="r", encoding="utf-8", newline="") as f:
+                    reader = csv.DictReader(f)
+                    rows = list(reader)
+            elif ext in ["xls", "xlsx"]:
+                with default_storage.open(temp_file_path, "rb") as f:
+                    # Use openpyxl for .xlsx
+                    df = pd.read_excel(f, engine="openpyxl")
+                rows = df.to_dict(orient="records")
+            else:
+                return JsonResponse({
+                    "ok": False,
+                    "message": "Unsupported file format. Upload CSV or Excel.",
+                    "errors": []
+                }, status=400)
+
+            # Guard: no data
+            if not rows:
+                return JsonResponse({
+                    "ok": False,
+                    "message": "The uploaded file contains no data rows.",
+                    "errors": []
+                }, status=400)
+
+            # Header validation
+            headers = set(rows[0].keys())
+            required_headers = {"Branch Code"} | set(CATEGORY_MAP.keys())
+            missing = [h for h in required_headers if h not in headers]
+            if missing:
+                return JsonResponse({
+                    "ok": False,
+                    "message": "Missing required columns.",
+                    "errors": [f"Missing required columns: {', '.join(missing)}"]
+                }, status=400)
+
+            # Preload Branch by code.
+            # IMPORTANT: Branch.name stores the code (choices), e.g., "CSE", "DSE", etc.
+            branch_by_code = {b.name.strip().upper(): b for b in Branch.objects.all()}
+
+            # Existing ProgramRequirement map
+            existing = {
+                (pr.branch_id, pr.category): pr
+                for pr in ProgramRequirement.objects.all().only("id", "branch_id", "category", "required_credits")
+            }
+
+            def parse_int(val):
+                if val is None:
+                    return None
+                s = str(val).strip()
+                if s == "" or s.lower() in ("nan", "none"):
+                    return None
+                try:
+                    return int(float(s))
+                except Exception:
+                    return None
+
+            to_create = []
+            to_update = []
+
+            for idx, row in enumerate(rows, start=2):  # header row = 1
+                branch_code = str(row.get("Branch Code", "")).strip().upper()
+                if not branch_code:
+                    error_rows.append(f"Row {idx}: Missing Branch Code.")
+                    continue
+                branch = branch_by_code.get(branch_code)
+                if not branch:
+                    error_rows.append(f"Row {idx}: Unknown Branch Code '{branch_code}'.")
+                    continue
+
+                any_valid = False
+                for header_key, category_code in CATEGORY_MAP.items():
+                    credits = parse_int(row.get(header_key))
+                    if credits is None:
+                        continue  # blank/invalid => no change
+                    any_valid = True
+                    key = (branch.id, category_code)
+                    pr = existing.get(key)
+                    if pr:
+                        if pr.required_credits != credits:
+                            pr.required_credits = credits
+                            to_update.append(pr)
+                    else:
+                        to_create.append(ProgramRequirement(
+                            branch=branch,
+                            category=category_code,
+                            required_credits=credits,
+                        ))
+
+                if not any_valid:
+                    error_rows.append(f"Row {idx}: No valid integer credits for any category; row skipped.")
+
+            # Apply DB changes atomically
+            with transaction.atomic():
+                if to_create:
+                    ProgramRequirement.objects.bulk_create(to_create, batch_size=1000)
+                    created_count = len(to_create)
+                if to_update:
+                    ProgramRequirement.objects.bulk_update(to_update, ["required_credits"], batch_size=1000)
+                    updated_count = len(to_update)
+
+            return JsonResponse({
+                "ok": True,
+                "created": created_count,
+                "updated": updated_count,
+                "errors": error_rows[:50],  # cap to avoid huge payloads
+            }, status=200)
+
+        except Exception as e:
+            return JsonResponse({
+                "ok": False,
+                "message": f"Failed to process file: {str(e)}",
+                "errors": error_rows[:50] if error_rows else []
+            }, status=500)
+        finally:
+            try:
+                default_storage.delete(temp_file_path)
+            except Exception:
+                # Silent cleanup failure
+                pass
+
+    # GET: render page
+    return render(request, "admin/bulk_upload_program_requirements.html")
+
+
+def course_instructors_assign(request):
+    courses = (
+        Course.objects
+        .all()
+        .prefetch_related("faculties__department")
+        .order_by("code")
+    )
+
+    # Build mapping of course.id to list of mini faculty objects (first_name, last_name, email, department name)
+    course_faculty_map: dict[int, list[FacultyMini]] = defaultdict(list)
+    for course in courses:
+        for f in course.faculties.all():
+            dept_name = f.department.name if f.department else "—"
+            course_faculty_map[course.id].append(
+                FacultyMini(
+                    first_name=f.first_name,
+                    last_name=f.last_name or "",
+                    email_id=f.email_id,
+                    department=dept_name,
+                )
+            )
+
+    # Filters for dropdowns
+    departments = (
+        Department.objects
+        .order_by("name")
+        .values_list("name", flat=True)
+        .distinct()
+    )
+    slots = (
+        Course.objects
+        .order_by()
+        .values_list("slot", flat=True)
+        .distinct()
+    )
+
+    return render(
+        request,
+        "admin/course_instructors_assign.html",  # use the template you created for this page
+        {
+            "courses": courses,
+            "course_faculty_map": course_faculty_map,
+            "departments": departments,
+            "slots": slots,
+        },
+    )
+
+def course_instructors_assign_bulk(request):
+    if request.method=='POST':
+        csv_file = request.FILES.get("csv_file")
+        if not csv_file:
+            messages.error(request, "No CSV file uploaded.")
+            return redirect("course_instructors_assign")
+
+        conflict = (request.POST.get("conflict_policy") or "append").strip().lower()
+        validation = (request.POST.get("validation_level") or "strict").strip().lower()
+        if conflict not in {"append", "replace"}:
+            conflict = "append"
+        if validation not in {"strict", "lenient"}:
+            validation = "strict"
+
+        try:
+            # Decode to text; adjust encoding if needed
+            wrapper = TextIOWrapper(csv_file.file, encoding="utf-8")
+            reader = csv.reader(wrapper)
+            rows = []
+            for idx, parts in enumerate(reader, start=1):
+                # skip empty lines
+                if not parts or all(not str(p).strip() for p in parts):
+                    continue
+                if len(parts) < 2:
+                    if validation == "strict":
+                        messages.error(request, f"Line {idx}: expected 2 columns (course_code, faculty_email).")
+                        return redirect("course_instructors_assign")
+                    else:
+                        continue
+                code = str(parts[0]).strip()
+                email = str(parts[1]).strip()
+                rows.append((code, email))
+        except Exception as exc:
+            messages.error(request, f"Could not read CSV: {exc}")
+            return redirect("course_instructors_assign")
+
+        processed = 0
+        try:
+            with transaction.atomic():
+                codes = {code for code, _ in rows}
+                emails = {email for _, email in rows}
+                course_by_code = {c.code: c for c in Course.objects.filter(code__in=codes)}
+                faculty_by_email = {f.email_id: f for f in Faculty.objects.filter(email_id__in=emails)}
+
+                if conflict == "replace":
+                    # Clear once per course code present in the file
+                    for code in sorted(codes):
+                        course = course_by_code.get(code)
+                        if not course:
+                            if validation == "strict":
+                                messages.error(request, f"Unknown course: {code}")
+                                return redirect("course_instructors_assign")
+                            else:
+                                continue
+                        course.faculties.clear()
+
+                for code, email in rows:
+                    course = course_by_code.get(code)
+                    faculty = faculty_by_email.get(email)
+                    if not course:
+                        if validation == "strict":
+                            messages.error(request, f"Unknown course: {code}")
+                            return redirect("course_instructors_assign")
+                        else:
+                            continue
+                    if not faculty:
+                        if validation == "strict":
+                            messages.error(request, f"Unknown faculty: {email}")
+                            return redirect("course_instructors_assign")
+                        else:
+                            continue
+
+                    if not course.faculties.filter(pk=faculty.pk).exists():
+                        course.faculties.add(faculty)
+                    processed += 1
+
+            messages.success(request, f"Processed {processed} row(s).")
+        except Exception as exc:
+            messages.error(request, f"Bulk assignment failed: {exc}")
+
+        return redirect("course_instructors_assign")
+    return render(request, "admin/bulk_add_course_instructors.html")

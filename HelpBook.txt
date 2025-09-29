@@ -32,7 +32,7 @@ python manage.py runserver
 # Create a PostgreSQL database (through pgAdmin or terminal):
 
 CREATE DATABASE sootrank_db;
-CREATE USER sootrank_user WITH PASSWORD 'yourpassword';
+CREATE USER sootrank_user WITH PASSWORD 'YO123#yo';
 ALTER ROLE sootrank_user SET client_encoding TO 'utf8';
 ALTER ROLE sootrank_user SET default_transaction_isolation TO 'read committed';
 ALTER ROLE sootrank_user SET timezone TO 'UTC';

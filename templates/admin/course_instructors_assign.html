@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Courses & Instructors - Sootrank Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <style>
+        body {
+            background-color: #f9fafb;
+        }
+
+        .form-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgb(0 0 0 / 0.1);
+            margin-bottom: 40px;
+        }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: .375rem;
+            padding: .25rem .5rem;
+            border-radius: 999px;
+            background: #eef2ff;
+            color: #1e3a8a;
+            font-size: .9rem;
+            margin: 0 .5rem .5rem 0;
+        }
+
+        .chip .x {
+            cursor: default;
+            font-weight: 700;
+            opacity: .7;
+        }
+
+        .muted {
+            color: #6b7280;
+        }
+
+        .table-actions button,
+        .table-actions a {
+            margin-right: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow">
+        <div class="container">
+            <a class="navbar-brand" href="{% url 'custom_admin_home' %}">Sootrank Admin</a>
+            <a href="{% url 'course_instructors_assign' %}" class="btn btn-light ms-auto me-2">Refresh</a>
+            <a href="{% url 'custom_admin_courses' %}" class="btn btn-outline-light me-2">Manage Courses</a>
+            <a href="{% url 'course_instructors_assign_bulk' %}" class="btn btn-outline-light me-2">Bulk Add Instructors</a>
+        </div>
+    </nav>
+
+    <div class="container my-5">
+        <h2 class="mb-3 text-primary">Courses & Instructors</h2>
+        <div class="form-section">
+            <!-- Filters -->
+            <div class="row g-2 mb-3">
+                <div class="col-12 col-md-6">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fa fa-search"></i></span>
+                        <input type="text" id="courseSearch" class="form-control"
+                            placeholder="Search by code, name, slot, or instructor…" />
+                    </div>
+                </div>
+                <div class="col-12 col-md-3">
+                    <select id="deptFilter" class="form-select">
+                        <option value="">All Departments</option>
+                        {% for d in departments %}
+                        <option value="{{ d }}">{{ d }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-12 col-md-3">
+                    <select id="slotFilter" class="form-select">
+                        <option value="">All Slots</option>
+                        {% for s in slots %}
+                        <option value="{{ s }}">{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- Table -->
+            <div class="table-responsive shadow-sm bg-white rounded p-3">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-primary">
+                        <tr>
+                            <th>Code</th>
+                            <th>Name</th>
+                            <th>Credits</th>
+                            <th>Instructors</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="courseBody">
+                        {% for c in courses %}
+                        <tr class="course-row">
+                            <td class="c-code">{{ c.code }}</td>
+                            <td class="c-name">{{ c.name }}</td>
+                            <td class="c-slot">{{ c.slot }}</td>
+                            <td class="c-instructors">
+                                {% with facs=c.faculties.all %}
+                                {% if facs %}
+                                {% for f in facs %}
+                                <span class="chip" title="{{ f.email_id }}">
+                                    {{ f.first_name }} {{ f.last_name }}
+                                    <span class="x">•</span>
+                                    <span class="muted">
+                                        {% if f.department %}{{ f.department.name }}{% else %}—{% endif %}
+                                    </span>
+                                </span>
+                                {% endfor %}
+                                {% else %}
+                                <span class="muted">No instructors assigned.</span>
+                                {% endif %}
+                                {% endwith %}
+                            </td>
+
+
+                            <td class="text-end table-actions">
+                                <a href="{% url 'manage_course_faculties' c.id %}"
+                                    class="btn btn-sm btn-info text-white" title="Assign / Update">
+                                    <i class="fa fa-user-plus me-1"></i> Assign / Update
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center">No courses found.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Add Modal -->
+    <div class="modal fade" id="bulkAddModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <form method="post" action="{% url 'course_instructors_assign_bulk' %}" class="modal-content">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title text-primary">Bulk Add Instructors</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted">
+                        Paste CSV with columns: course_code, faculty_email. Choose conflict handling and validation
+                        level below.
+                    </p>
+                    <div class="mb-3">
+                        <textarea name="csv_payload" class="form-control" rows="8" placeholder="CS101, alice@univ.edu
+MA102, bob@univ.edu"></textarea>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">On conflict</label>
+                            <select name="conflict_policy" class="form-select">
+                                <option value="append">Append to existing</option>
+                                <option value="replace">Replace existing</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Validation</label>
+                            <select name="validation_level" class="form-select">
+                                <option value="strict">Strict (fail on any unknown)</option>
+                                <option value="lenient">Lenient (skip unknown rows)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-text mt-2">
+                        Tip: Export faculty emails from your directory to build this CSV quickly.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-success" type="submit">
+                        <i class="fa fa-upload me-1"></i> Process Upload
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        (function () {
+            const qInput = document.getElementById('courseSearch');
+            const dept = document.getElementById('deptFilter');
+            const slot = document.getElementById('slotFilter');
+            const rows = Array.from(document.querySelectorAll('#courseBody .course-row'));
+
+            function norm(s) { return (s || '').toString().toLowerCase().trim(); }
+
+            function matches(row, q, d, s) {
+                const code = row.querySelector('.c-code')?.textContent || '';
+                const name = row.querySelector('.c-name')?.textContent || '';
+                const slotTxt = row.querySelector('.c-slot')?.textContent || '';
+                const instructors = row.querySelector('.c-instructors')?.textContent || '';
+                const hay = (code + ' ' + name + ' ' + slotTxt + ' ' + instructors).toLowerCase();
+                const deptHit = !d || instructors.toLowerCase().includes(d);
+                const slotHit = !s || norm(slotTxt) === norm(s);
+                const qHit = !q || hay.includes(q);
+                return qHit && deptHit && slotHit;
+            }
+
+            function applyFilters() {
+                const q = norm(qInput.value);
+                const d = norm(dept.value);
+                const s = norm(slot.value);
+                rows.forEach(r => r.style.display = matches(r, q, d, s) ? '' : 'none');
+            }
+
+            qInput.addEventListener('input', applyFilters);
+            dept.addEventListener('change', applyFilters);
+            slot.addEventListener('change', applyFilters);
+        })();
+    </script>
+</body>
+
+</html>

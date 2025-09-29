@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bulk Add Course Faculties - Sootrank Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <style>
+        body {
+            background-color: #f9fafb;
+        }
+
+        .form-section {
+            background: white;
+            padding: 32px;
+            border-radius: 12px;
+            box-shadow: 0 0 20px rgb(0 0 0 / 0.12);
+            margin-top: 60px;
+            max-width: 560px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .form-control:focus {
+            box-shadow: 0 0 6px rgba(13, 110, 253, .2);
+            border-color: #0d6efd;
+        }
+
+        .instructions {
+            font-size: 1rem;
+            color: #5b5b5b;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow">
+        <div class="container">
+            <a class="navbar-brand" href="{% url 'custom_admin_home' %}">Sootrank Admin</a>
+            <a href="{% url 'course_instructors_assign' %}" class="btn btn-light ms-auto">Back to
+                Courses</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="form-section">
+            <h2 class="mb-3 text-primary text-center">Bulk Add Course Faculties</h2>
+            <div class="instructions">
+                <p class="mb-2">
+                    Upload a CSV file with columns: <strong>course_code, faculty_email</strong>. One mapping per line.
+                    [memory:10]
+                </p>
+                <p class="mb-2">
+                    Recommended: ensure Course.code and Faculty.email_id exist before upload. [memory:10]
+                </p>
+                
+            </div>
+
+            <form method="post" enctype="multipart/form-data" action="{% url 'course_instructors_assign_bulk' %}">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label for="csv_file" class="form-label fw-semibold">CSV File</label>
+                    <input type="file" class="form-control" id="csv_file" name="csv_file" accept=".csv" required>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-12 col-md-6">
+                        <label class="form-label fw-semibold" for="conflict_policy">On conflict</label>
+                        <select class="form-select" id="conflict_policy" name="conflict_policy">
+                            <option value="append">Append to existing</option>
+                            <option value="replace">Replace existing</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label fw-semibold" for="validation_level">Validation</label>
+                        <select class="form-select" id="validation_level" name="validation_level">
+                            <option value="strict">Strict (fail on any unknown)</option>
+                            <option value="lenient">Lenient (skip unknown rows)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100">Upload and Assign Faculties</button>
+            </form>
+
+            {% if messages %}
+            <div class="mt-4">
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }}">
+                    {{ message }}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>
