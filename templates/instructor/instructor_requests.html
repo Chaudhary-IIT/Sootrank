@@ -1,0 +1,182 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Instructor Approvals</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-gray-100 flex items-start justify-center py-10">
+  <div class="w-[1150px]">
+    <div class="mb-5 flex items-center justify-between">
+      <h1 class="text-3xl font-bold">Pre‑Registration Requests</h1>
+      <div class="text-sm text-gray-600">Logged in as: {{ instructor.first_name }} {{ instructor.last_name }}</div>
+    </div>
+
+    <!-- Filters -->
+    <form method="get" class="mb-4 flex items-center gap-3">
+      <label class="text-sm text-gray-700">Status</label>
+      <select name="status" class="bg-white border border-gray-300 text-sm rounded-lg p-2">
+        <option value="PND" {% if status_filter == "PND" %}selected{% endif %}>Pending</option>
+        <option value="INS" {% if status_filter == "INS" %}selected{% endif %}>Instructor OK</option>
+        <option value="ENR" {% if status_filter == "ENR" %}selected{% endif %}>Enrolled</option>
+        <option value="DRP" {% if status_filter == "DRP" %}selected{% endif %}>Rejected</option>
+      </select>
+
+      <label class="text-sm text-gray-700">Course</label>
+      <select name="course" class="bg-white border border-gray-300 text-sm rounded-lg p-2">
+        <option value="">All</option>
+        {% for code,name,slot in my_courses %}
+          <option value="{{ code }}" {% if course_code == code %}selected{% endif %}>{{ code }} — {{ name }}</option>
+        {% endfor %}
+      </select>
+
+      <label class="text-sm text-gray-700">Slot</label>
+      <select name="slot" class="bg-white border border-gray-300 text-sm rounded-lg p-2">
+        <option value="">All</option>
+        {% for s in slots %}
+          <option value="{{ s }}" {% if slot_filter == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+
+      <button class="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-black">Apply</button>
+    </form>
+
+    <!-- Table (no outer form) -->
+    <div class="bg-white rounded-2xl shadow">
+      <div class="overflow-x-auto rounded-2xl">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="bg-gray-50 text-gray-700">
+              <th class="px-5 py-3">
+                <!-- Bulk master checkbox controls bulk checkboxes below table -->
+                <input type="checkbox" id="checkAll">
+              </th>
+              <th class="px-5 py-3 text-sm font-semibold">Student</th>
+              <th class="px-5 py-3 text-sm font-semibold">Roll No</th>
+              <th class="px-5 py-3 text-sm font-semibold">Course</th>
+              <th class="px-5 py-3 text-sm font-semibold">Slot</th>
+              <th class="px-5 py-3 text-sm font-semibold">Credits</th>
+              <th class="px-5 py-3 text-sm font-semibold">Status</th>
+              <th class="px-5 py-3 text-sm font-semibold">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="text-gray-900">
+            {% if requests %}
+              {% for sc in requests %}
+                <tr class="{% cycle '' 'bg-gray-50' %} border-t">
+                  <td class="px-5 py-3">
+                    <!-- Visual row checkbox only toggles bulk list below via JS -->
+                    {% if sc.status == "PND" %}
+                      <input type="checkbox" class="row-check" data-id="{{ sc.id }}">
+                    {% endif %}
+                  </td>
+
+                  <td class="px-5 py-3">{{ sc.student.first_name }}{% if sc.student.last_name %} {{ sc.student.last_name }}{% endif %}</td>
+                  <td class="px-5 py-3 whitespace-nowrap">{{ sc.student.roll_no }}</td>
+
+                  <td class="px-5 py-3 whitespace-normal break-words">
+                    {{ sc.course.code }} — {{ sc.course.name }}
+                  </td>
+
+                  <td class="px-5 py-3 whitespace-nowrap">{{ sc.course.slot }}</td>
+                  <td class="px-5 py-3 whitespace-nowrap">{{ sc.course.credits }}</td>
+
+                  <td class="px-5 py-3">
+                    {% if sc.status == "PND" %}
+                      <span class="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-xs font-medium px-3 py-1">Pending</span>
+                    {% elif sc.status == "ENR" %}
+                      <span class="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1">Enrolled</span>
+                    {% elif sc.status == "DRP" %}
+                      <span class="inline-flex items-center rounded-full bg-red-100 text-red-700 text-xs font-medium px-3 py-1">Rejected</span>
+                    {% else %}
+                      <span class="inline-flex items-center rounded-full bg-gray-100 text-gray-700 text-xs font-medium px-3 py-1">{{ sc.get_status_display }}</span>
+                    {% endif %}
+                  </td>
+
+                  <td class="px-5 py-3">
+                    {% if sc.status == "PND" %}
+                      <div class="flex items-center gap-2 flex-nowrap">
+                        <!-- Per-row standalone forms -->
+                        <form method="post" action="{% url 'instructor_request_action' %}" class="inline">
+                          {% csrf_token %}
+                          <input type="hidden" name="sc_id" value="{{ sc.id }}">
+                          <button type="submit" name="action" value="approve"
+                                  class="px-3 py-1 rounded bg-green-600 text-white hover:bg-green-700 whitespace-nowrap">
+                            Approve
+                          </button>
+                        </form>
+                        <form method="post" action="{% url 'instructor_request_action' %}" class="inline">
+                          {% csrf_token %}
+                          <input type="hidden" name="sc_id" value="{{ sc.id }}">
+                          <button type="submit" name="action" value="reject"
+                                  class="px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700 whitespace-nowrap">
+                            Reject
+                          </button>
+                        </form>
+                      </div>
+                    {% else %}
+                      <span class="text-gray-500 text-sm">No actions</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr class="border-t">
+                <td class="px-5 py-6 text-center text-gray-500" colspan="8">No requests found.</td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Bulk form lives BELOW the table; it is the ONLY form that submits bulk -->
+    <form method="post" action="{% url 'instructor_bulk_action' %}" class="mt-4 bg-white rounded-2xl shadow px-5 py-4 flex items-center justify-between">
+      {% csrf_token %}
+      <div class="flex items-center gap-3 flex-wrap" id="bulkBox">
+        <!-- Hidden checkboxes mirror the row selections; populated by JS -->
+        {% for sc in requests %}
+          {% if sc.status == "PND" %}
+            <input type="checkbox" name="sc_ids" value="{{ sc.id }}" class="hidden" id="bulk-{{ sc.id }}">
+          {% endif %}
+        {% endfor %}
+        <span class="text-sm text-gray-600">Use the row checkboxes or “Select all” to build the bulk list.</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <button name="action" value="approve" class="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700">
+          Approve Selected
+        </button>
+        <button name="action" value="reject" class="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700">
+          Reject Selected
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    // Sync the header "Select all" with row checkboxes and the hidden bulk checkboxes
+    const checkAll = document.getElementById('checkAll');
+    const rowChecks = Array.from(document.querySelectorAll('.row-check'));
+    const bulkMap = {};
+    rowChecks.forEach(cb => {
+      const id = cb.dataset.id;
+      bulkMap[id] = document.getElementById('bulk-' + id);
+      cb.addEventListener('change', () => {
+        if (bulkMap[id]) bulkMap[id].checked = cb.checked;
+        if (!cb.checked && checkAll) checkAll.checked = false;
+      });
+    });
+    if (checkAll) {
+      checkAll.addEventListener('change', () => {
+        rowChecks.forEach(cb => {
+          cb.checked = checkAll.checked;
+          const bulk = bulkMap[cb.dataset.id];
+          if (bulk) bulk.checked = checkAll.checked;
+        });
+      });
+    }
+  </script>
+</body>
+</html>

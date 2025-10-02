@@ -35,12 +35,9 @@
         <div class="container">
             <a class="navbar-brand" href="{% url 'custom_admin_home' %}">Sootrank Admin</a>
             <div class="header-buttons ms-auto d-flex align-items-center">
-                <a href="{% url 'custom_admin_students_bulk_add' %}" class="btn btn-outline-light me-2">
-                    Bulk Add Students
-                </a>
-                <a href="{% url 'custom_admin_students' %}" class="btn btn-light">
-                    Refresh List
-                </a>
+                <a href="{% url 'custom_admin_students_bulk_add' %}" class="btn btn-outline-light me-2">Bulk Add
+                    Students</a>
+                <a href="{% url 'custom_admin_students' %}" class="btn btn-light">Refresh List</a>
             </div>
         </div>
     </nav>
@@ -57,7 +54,7 @@
                     </div>
                     <div class="col-md-6">
                         <label for="last_name" class="form-label">Last Name</label>
-                        <input name="lastname" type="text" class="form-control" id="last_name"  />
+                        <input name="lastname" type="text" class="form-control" id="last_name" />
                     </div>
                     <div class="col-md-6">
                         <label for="email_id" class="form-label">Email</label>
@@ -76,14 +73,12 @@
                             {% endfor %}
                         </select>
                     </div>
-
                     <div class="col-md-6">
                         <label for="branch" class="form-label">Branch</label>
                         <select name="branch_id" id="branch" class="form-select" required>
                             <option value="" selected disabled>Choose...</option>
                         </select>
                     </div>
-
                     <div class="col-md-6">
                         <label for="mobile_no" class="form-label">Mobile Number</label>
                         <input name="mobile_no" type="number" class="form-control" id="mobile_no" />
@@ -99,7 +94,30 @@
             </form>
         </div>
 
-        <h3 class="mb-4 text-primary">Existing Students</h3>
+        <h3 class="mb-3 text-primary">Existing Students</h3>
+
+        <!-- Search and filters -->
+        <div class="row g-2 mb-3">
+            <div class="col-12 col-md-6">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fa fa-search"></i></span>
+                    <input type="text" id="studentSearch" class="form-control"
+                        placeholder="Search by roll no, name, email, department, branch…">
+                </div>
+            </div>
+            <div class="col-12 col-md-3">
+                <select id="deptFilter" class="form-select">
+                    <option value="">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.code }}">{{ dept.code }} — {{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-12 col-md-3">
+                <input type="text" id="branchFilter" class="form-control" placeholder="Filter by branch (e.g., CSE)">
+            </div>
+        </div>
+
         <div class="table-responsive shadow-sm bg-white rounded p-3">
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-primary">
@@ -112,14 +130,14 @@
                         <th>Actions</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="studentsBody">
                     {% for student in students %}
-                    <tr>
-                        <td>{{ student.roll_no }}</td>
-                        <td>{{ student.first_name }} {{ student.last_name|default_if_none:"" }}</td>
-                        <td>{{ student.email_id }}</td>
-                        <td>{{ student.department.code }}</td>
-                        <td>{{ student.branch }}</td>
+                    <tr class="student-row">
+                        <td class="s-roll">{{ student.roll_no }}</td>
+                        <td class="s-name">{{ student.first_name }} {{ student.last_name|default_if_none:"" }}</td>
+                        <td class="s-email">{{ student.email_id }}</td>
+                        <td class="s-dept">{{ student.department.code }}</td>
+                        <td class="s-branch">{{ student.branch }}</td>
                         <td class="table-actions">
                             <a href="{% url 'custom_admin_edit_student' student.roll_no %}"
                                 class="btn btn-sm btn-warning" title="Edit">
@@ -132,7 +150,7 @@
                                 <button type="submit" class="btn btn-sm btn-danger" title="Delete">
                                     <i class="fa fa-trash"></i>
                                 </button>
-                            </form> 
+                            </form>
                         </td>
                     </tr>
                     {% empty %}
@@ -150,6 +168,7 @@
 </body>
 
 <script>
+    // Populate branches based on department
     $('#department').on('change', function () {
         const deptId = $(this).val();
         $('#branch').empty().append('<option value="" selected disabled>Loading...</option>');
@@ -165,6 +184,50 @@
                 $('#branch').empty().append('<option value="" selected disabled>Error</option>');
             });
     });
+
+    // Client-side search/filter for students
+    (function () {
+        const $q = $('#studentSearch');
+        const $dept = $('#deptFilter');
+        const $branch = $('#branchFilter');
+        const $rows = $('#studentsBody .student-row');
+
+        function norm(s) { return (s || '').toString().toLowerCase().trim(); }
+
+        function matches($row, q, d, b) {
+            const roll = $row.find('.s-roll').text();
+            const name = $row.find('.s-name').text();
+            const email = $row.find('.s-email').text();
+            const dept = $row.find('.s-dept').text();
+            const branch = $row.find('.s-branch').text();
+
+            const hay = (roll + ' ' + name + ' ' + email + ' ' + dept + ' ' + branch).toLowerCase();
+            const qHit = !q || hay.includes(q);
+            const dHit = !d || norm(dept) === norm(d);
+            const bHit = !b || norm(branch).includes(norm(b));
+            return qHit && dHit && bHit;
+        }
+
+        let tid = null;
+        function apply() {
+            const q = norm($q.val());
+            const d = norm($dept.val());
+            const b = norm($branch.val());
+            $rows.each(function () {
+                const $r = $(this);
+                $r.toggle(matches($r, q, d, b));
+            });
+        }
+
+        function debouncedApply() {
+            clearTimeout(tid);
+            tid = setTimeout(apply, 120);
+        }
+
+        $q.on('input', debouncedApply);
+        $dept.on('change', apply);
+        $branch.on('input', debouncedApply);
+    })();
 </script>
 
 </html>

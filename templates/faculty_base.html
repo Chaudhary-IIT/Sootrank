@@ -44,11 +44,11 @@
                             <i class="fa-solid fa-book me-1"></i> Courses
                         </a>
                         <ul class="dropdown-menu" aria-labelledby="coursesDropdown">
-                            <li><a class="dropdown-item" href="{%url 'course_request'%}"><i
+                            <li><a class="dropdown-item" href="{%url 'instructor_requests'%}"><i
                                         class="fa-solid fa-plus me-2"></i>Course request</a></li>
-                            <li><a class="dropdown-item" href="{%url 'view_courses'%}"><i
+                            <li><a class="dropdown-item" href="{%url 'instructor_courses'%}"><i
                                         class="fa-solid fa-list me-2"></i>View Courses</a></li>
-                            <li><a class="dropdown-item" href="{%url 'update_courses'%}"><i
+                            <li><a class="dropdown-item" href="#"><i
                                         class="fa-solid fa-pen-to-square me-2"></i>Update Details</a></li>
                         </ul>
                     </li>
@@ -118,8 +118,12 @@
                             <li>
                                 <hr class="dropdown-divider">
                             </li>
-                            <li><a class="dropdown-item text-danger" href="#"><i
-                                        class="fa-solid fa-right-from-bracket me-2"></i>Logout</a></li>
+                            <li><form method="post" action="{% url 'logout' %}">
+                                    {% csrf_token %}
+                                    <button class="dropdown-item text-danger">
+                                        <i class="fa-solid fa-right-from-bracket me-2"></i> Logout
+                                    </button>
+                                </form></li>
                         </ul>
                     </li>
                 </ul>

@@ -1,15 +1,21 @@
 from collections import defaultdict
 from io import TextIOWrapper
+import json
 from django.conf import settings
 from django.contrib import messages
 from django.db import IntegrityError, transaction
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Sum
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from Registration.models import Branch, Category, Course, CourseBranch, Department, ProgramRequirement, Student, Faculty, Admins
+from Registration.models import Branch, Category, Course, CourseBranch, Department, ProgramRequirement, Student, Faculty, Admins, StudentCourse
 from django.contrib.auth import authenticate , login as auth_login
 from django.contrib.auth.hashers import make_password,check_password
+from django.db.models import Count, Q, OuterRef, Exists 
+from django.views.decorators.http import require_POST
+from django.contrib.auth.decorators import login_required
+
+from django.utils import timezone
 from urllib.parse import urlencode
 from django.core.files.storage import default_storage
 import re
@@ -18,6 +24,7 @@ import csv
 from django.http import JsonResponse
 import pandas as pd
 from dataclasses import dataclass
+
 
 EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+-]+@iitmandi\.ac\.in$')
 SLOTS = ["A","B","C","D","E","F","G","H","FS"]
@@ -44,6 +51,34 @@ CATEGORIES = [
 ]
 CATEGORY_HEADERS = ["DC", "DE", "IC", "HSS", "FE", "IKS", "ISTP", "MTP"]
 HEADER_TO_CATEGORY = {h: h for h in CATEGORY_HEADERS}
+
+
+def _compute_semester_from_roll_and_today(roll_no: str, today=None) -> int:
+    if today is None:
+        today = timezone.now().date()
+    try:
+        yr2 = int(roll_no[1:3])
+        admit_year = 2000 + yr2
+    except Exception:
+        # Fallback to student.semester or 1
+        return 1
+    years_delta = max(0, today.year - admit_year)
+    term_index = 1 if today.month >= 7 else 2
+    sem = years_delta * 2 + term_index
+    return max(1, sem)
+
+
+
+def _deadline_open() -> bool:
+    # Use a single global deadline for simplicity; adapt to per-cohort if needed.
+    deadline = getattr(settings, "PREREG_DEADLINE", None)
+    if not deadline:
+        return True  # no deadline configured => open
+    now = timezone.now()
+    # Ensure deadline is aware in same zone
+    if timezone.is_naive(deadline):
+        deadline = timezone.make_aware(deadline, timezone.get_current_timezone())
+    return now <= deadline
 
 
 def _safe_str(v):
@@ -203,63 +238,277 @@ def faculty_dashboard(request):
 def pre_registration(request):
     roll_no = request.session.get("roll_no")
     if not roll_no:
-        return redirect("/")
+        login_url = getattr(settings, "LOGIN_URL", "/login/")
+        return redirect(f"{login_url}?next={request.path}")
+
     student = get_object_or_404(Student, roll_no=roll_no)
     branch = student.branch
+    current_sem = _compute_semester_from_roll_and_today(student.roll_no)
+    window_open = _deadline_open()
 
-    # Base prefetch: only CourseBranch rows for this student's branch
+    if request.method == "POST":
+        if not window_open:
+            messages.error(request, "Pre‑registration window is closed.")
+            return redirect("prereg_page")
+
+        raw = request.POST.get("payload", "")
+        try:
+            payload = json.loads(raw) if raw else {}
+        except Exception:
+            messages.error(request, "Invalid submission payload.")
+            return redirect("prereg_page")
+
+        selections = payload.get("selections") or []
+        if not isinstance(selections, list):
+            messages.error(request, "Invalid selections.")
+            return redirect("prereg_page")
+
+        # Build course cache and process per slot
+        # Expect each selection: { slot, course_code, category, credits }
+        codes = [ (s.get("course_code") or "").strip().upper() for s in selections if s.get("course_code") ]
+        course_map = {c.code.upper(): c for c in Course.objects.filter(code__in=codes)}
+
+        created, updated, skipped_locked = 0, 0, 0
+        with transaction.atomic():
+            for sel in selections:
+                slot = (sel.get("slot") or "").strip().upper()
+                code = (sel.get("course_code") or "").strip().upper()
+                if not slot or not code:
+                    continue
+                course = course_map.get(code)
+                if not course or course.slot != slot:
+                    continue
+
+                # If slot already has an enrolled course, lock it
+                # Remove any non-enrolled existing rows in this slot
+                StudentCourse.objects.filter(
+                    student=student, semester=current_sem, course__slot=slot
+                ).exclude(status="ENR").delete()
+
+                obj, created_now = StudentCourse.objects.get_or_create(
+                    student=student, course=course, semester=current_sem,
+                    defaults={
+                        "status": "PND",
+                        "is_pass_fail": bool(sel.get("is_pass_fail") or False),
+                        "type": chosen_cat or None,
+                    }
+                )
+
+
+                # Remove any non-enrolled existing rows in this slot
+                StudentCourse.objects.filter(
+                    student=student, semester=current_sem, course__slot=slot
+                ).exclude(status="ENR").delete()
+
+                chosen_cat = (sel.get("category") or "").upper()
+                if chosen_cat == "ALL":
+                    primary_cat = (
+                        CourseBranch.objects
+                        .filter(course=course, branch=branch)
+                        .values_list("categories__code", flat=True)
+                        .first()
+                    )
+                    chosen_cat = (primary_cat or "").upper()
+
+                obj, created_now = StudentCourse.objects.get_or_create(
+                    student=student, course=course, semester=current_sem,
+                    defaults={
+                        "status": "PND",
+                        "is_pass_fail": bool(sel.get("is_pass_fail") or False),
+                        "type": chosen_cat or None,
+                    }
+                )
+                if created_now:
+                    created += 1
+                else:
+                    if obj.status != "ENR":
+                        obj.status = "PND"
+                        obj.type = chosen_cat or obj.type
+                        obj.is_pass_fail = bool(sel.get("is_pass_fail") or False)
+                        obj.save(update_fields=["status","type","is_pass_fail"])
+                        updated += 1
+
+        if created:
+            messages.success(request, f"Submitted {created} request(s).")
+        if updated:
+            messages.info(request, f"Updated {updated} request(s).")
+        if skipped_locked:
+            messages.warning(request, f"{skipped_locked} slot(s) are already approved and were not changed.")
+        return redirect("check_status_page")
+
+    # GET: build options and prefill
     base_cb = CourseBranch.objects.filter(branch=branch)
-
-    # Build per-slot, per-category querysets
     slot_map = {}
+    # categories is a list of dicts like: [{"code":"IC","label":"Institute Core"}, ...]
+    CATEGORIES = getattr(settings, "COURSE_CATEGORIES", [
+        {"code": "DC", "label": "Disciplinary Core (DC)"},
+        {"code": "DE", "label": "Disciplinary Elective (DE)"},
+        {"code": "IC", "label": "Institute Core (IC)"},
+        {"code": "HSS", "label": "Humanities and Social Science (HSS)"},
+        {"code": "FE", "label": "Free Elective (FE)"},
+        {"code": "IKS", "label": "Indian Knowledge System (IKS)"},
+        {"code": "ISTP", "label": "Interactive Socio-Technical Practicum (ISTP)"},
+        {"code": "MTP", "label": "Major Technical Project (MTP)"},
+    ])
+
     for slot in SLOTS:
         cat_map = {}
         for cat in [c["code"] for c in CATEGORIES]:
             qs = (
                 Course.objects.filter(
                     slot=slot,
-                    coursebranch__branch=branch,               # reverse FK from CourseBranch to Course is coursebranch (implicit reverse name is coursebranch_set)
-                    coursebranch__categories__code=cat         # go through M2M to Category.code
+                    coursebranch__branch=branch,
+                    coursebranch__categories__code=cat,
                 )
                 .prefetch_related(
                     Prefetch(
-                        "coursebranch_set",                    # reverse name to CourseBranch
+                        "coursebranch_set",
                         queryset=base_cb.prefetch_related("categories"),
-                        to_attr="cb_for_branch"
+                        to_attr="cb_for_branch",
                     )
-                )
-                .distinct()
+                ).distinct()
             )
             cat_map[cat] = qs
         slot_map[slot] = cat_map
+
+    existing = (
+        StudentCourse.objects
+        .filter(student=student, semester=current_sem)
+        .select_related("course")
+    )
+    preselected_by_slot = {}
+    locked_slots = set()
+    for sc in existing:
+        if sc.course and sc.course.slot:
+            preselected_by_slot[sc.course.slot] = sc.course.code
+            if sc.status == "ENR":
+                locked_slots.add(sc.course.slot)
+    slot_map_json = {}
+    for slot, cat_map in slot_map.items():
+        slot_map_json[slot] = {}
+        for cat, qs in cat_map.items():
+            # qs is a QuerySet of Course
+            slot_map_json[slot][cat] = list(
+                qs.values("code", "name", "credits")  # only JSON-safe fields
+            )
 
     context = {
         "student": student,
         "categories": CATEGORIES,
         "slot_map": slot_map,
-        "min_credit": 4,
+        "slot_map_json": slot_map_json,
+        "slots": SLOTS,
+        "min_credit": 12,
         "max_credit": 22,
+        "computed_semester": current_sem,
+        "window_open": window_open,
+        "preselected_by_slot": preselected_by_slot,
+        "locked_slots": list(locked_slots),
     }
     return render(request, "registration/pre_registration.html", context)
 
-def check_status(request):
-    return render(request, 'registration/check_status.html')
 
-def update_registration(request):
-    return render(request, 'registration/update_registration.html')
+def check_status(request):
+    roll_no = request.session.get("roll_no")
+    if not roll_no:
+        login_url = getattr(settings, "LOGIN_URL", "/login/")
+        return redirect(f"{login_url}?next={request.path}")
+
+    student = get_object_or_404(Student, roll_no=roll_no)
+    current_sem = _compute_semester_from_roll_and_today(student.roll_no)
+
+    enrollments = (
+        StudentCourse.objects
+        .filter(student=student, semester=current_sem)
+        .select_related("course")
+        .prefetch_related(Prefetch("course__faculties"))
+        .order_by("course__slot","course__code")
+    )
+    pf_total = (
+        StudentCourse.objects
+        .filter(student=student, is_pass_fail=True)
+        .aggregate(total=Sum("course__credits"))
+        .get("total") or 0
+    )
+    context = {
+        "student": student,
+        "enrollments": enrollments,
+        "pf_total": pf_total,
+        "sem_display": current_sem,
+    }
+    return render(request, "registration/check_status.html", context)
+
+@require_POST
+def apply_pf_changes(request):
+    # Auth: student session
+    roll_no = request.session.get("roll_no")
+    if not roll_no:
+        login_url = getattr(settings, "LOGIN_URL", "/login/")
+        return redirect(f"{login_url}?next={request.path}")
+
+    student = get_object_or_404(Student, roll_no=roll_no)
+
+    raw = request.POST.get("payload") or ""
+    try:
+        data = json.loads(raw)
+        changes = data.get("changes") or []
+    except Exception:
+        messages.error(request, "Invalid update payload.")
+        return redirect("check_status_page")
+
+    # Current PF total
+    pf_total = (
+        StudentCourse.objects
+        .filter(student=student, is_pass_fail=True)
+        .aggregate(total=Sum("course__credits"))
+        .get("total") or 0
+    )
+
+    applied, blocked = 0, 0
+    for item in changes:
+        sc_id = item.get("sc_id")
+        to_pf = bool(item.get("to_pf"))
+        sc = StudentCourse.objects.select_related("course","student").filter(id=sc_id, student=student).first()
+        if not sc:
+            continue
+
+        # Skip approved courses entirely
+        if sc.status == "ENR":
+            blocked += 1
+            continue
+
+        credits = sc.course.credits or 0
+        current = bool(sc.is_pass_fail)
+
+        # If no net change, skip
+        if to_pf == current:
+            continue
+
+        # Enforce 9-credit cap when turning on
+        next_total = pf_total + credits if to_pf and not current else pf_total - credits if (not to_pf and current) else pf_total
+        if to_pf and next_total > 9:
+            blocked += 1
+            continue
+
+        # Apply
+        sc.is_pass_fail = to_pf
+        sc.save(update_fields=["is_pass_fail"])
+        pf_total = next_total
+        applied += 1
+
+    if applied:
+        messages.success(request, f"Applied {applied} change(s).")
+    if blocked:
+        messages.warning(request, f"{blocked} change(s) were blocked (approved or over 9 credits).")
+
+    return redirect("check_status_page")
+
 
 def registered_courses(request):
     return render(request, 'registration/registered_course.html')
 
-def course_request(request):
-    return render(request, 'instructor/course_request.html')
-
-def view_courses(request):
-    return render(request,'instructor/view_courses.html')
-
-def update_courses(request):
-    return render(request,'instructor/edit_courses.html')
-
+# def course_request(request):
+#     return render(request, 'instructor/course_request.html')
 
 def student_profile(request):
     roll_no = request.session.get("roll_no")
@@ -1385,12 +1634,12 @@ def course_instructors_assign(request):
     )
 
 def course_instructors_assign_bulk(request):
-    if request.method=='POST':
-        csv_file = request.FILES.get("csv_file")
-        if not csv_file:
-            messages.error(request, "No CSV file uploaded.")
-            return redirect("course_instructors_assign")
+    if request.method == "POST":
+        upload = request.FILES.get("csv_file")
+        if not upload:
+            return JsonResponse({"ok": False, "message": "Please upload a CSV or Excel file.", "errors": []}, status=400)
 
+        # Optional controls provided by the form
         conflict = (request.POST.get("conflict_policy") or "append").strip().lower()
         validation = (request.POST.get("validation_level") or "strict").strip().lower()
         if conflict not in {"append", "replace"}:
@@ -1398,71 +1647,443 @@ def course_instructors_assign_bulk(request):
         if validation not in {"strict", "lenient"}:
             validation = "strict"
 
+        temp_path = default_storage.save(f"temp/{upload.name}", upload)
+        errors = []
+        links_added = 0
+        rows_processed = 0
+
         try:
-            # Decode to text; adjust encoding if needed
-            wrapper = TextIOWrapper(csv_file.file, encoding="utf-8")
-            reader = csv.reader(wrapper)
-            rows = []
-            for idx, parts in enumerate(reader, start=1):
-                # skip empty lines
-                if not parts or all(not str(p).strip() for p in parts):
-                    continue
-                if len(parts) < 2:
+            ext = upload.name.split(".")[-1].lower()
+            # Load rows as a list of dicts with keys 'course_code' and 'faculty_email'
+            if ext == "csv":
+                with default_storage.open(temp_path, mode="r", encoding="utf-8", newline="") as f:
+                    reader = csv.DictReader(f)
+                    rows = list(reader)
+            elif ext in ["xls", "xlsx"]:
+                with default_storage.open(temp_path, "rb") as f:
+                    df = pd.read_excel(f, engine="openpyxl")
+                rows = df.to_dict(orient="records")
+            else:
+                return JsonResponse(
+                    {"ok": False, "message": "Unsupported file format. Upload CSV or Excel.", "errors": []},
+                    status=400
+                )
+
+            if not rows:
+                return JsonResponse({"ok": False, "message": "The uploaded file has no data rows.", "errors": []}, status=400)
+
+            # Header validation (case-insensitive normalize)
+            sample_keys = {str(k).strip().lower() for k in rows[0].keys()}
+            need = {"course_code", "faculty_email"}
+            missing = [h for h in need if h not in sample_keys]
+            if missing:
+                return JsonResponse(
+                    {"ok": False, "message": "Invalid header row.", "errors": [f"Missing required columns: {', '.join(need)}"]},
+                    status=400
+                )
+
+            # Normalize keys to lower for consistent access
+            norm_rows = []
+            for r in rows:
+                norm = {str(k).strip().lower(): v for k, v in r.items()}
+                norm_rows.append(norm)
+
+            # Preload references
+            codes = set()
+            emails = set()
+            for rix, row in enumerate(norm_rows, start=2):
+                code = str(row.get("course_code") or "").strip()
+                email = str(row.get("faculty_email") or "").strip()
+                if not code or not email:
+                    msg = f"Row {rix}: empty course_code or faculty_email; skipped."
                     if validation == "strict":
-                        messages.error(request, f"Line {idx}: expected 2 columns (course_code, faculty_email).")
-                        return redirect("course_instructors_assign")
-                    else:
-                        continue
-                code = str(parts[0]).strip()
-                email = str(parts[1]).strip()
-                rows.append((code, email))
-        except Exception as exc:
-            messages.error(request, f"Could not read CSV: {exc}")
-            return redirect("course_instructors_assign")
+                        return JsonResponse({"ok": False, "message": msg, "errors": errors}, status=400)
+                    errors.append(msg)
+                    continue
+                codes.add(code)
+                emails.add(email)
 
-        processed = 0
-        try:
+            course_by_code = {c.code: c for c in Course.objects.filter(code__in=codes)}
+            faculty_by_email = {f.email_id: f for f in Faculty.objects.filter(email_id__in=emails)}
+
             with transaction.atomic():
-                codes = {code for code, _ in rows}
-                emails = {email for _, email in rows}
-                course_by_code = {c.code: c for c in Course.objects.filter(code__in=codes)}
-                faculty_by_email = {f.email_id: f for f in Faculty.objects.filter(email_id__in=emails)}
-
+                # Replace clears once per course before applying rows
                 if conflict == "replace":
-                    # Clear once per course code present in the file
                     for code in sorted(codes):
                         course = course_by_code.get(code)
                         if not course:
+                            msg = f"Unknown course: {code}"
                             if validation == "strict":
-                                messages.error(request, f"Unknown course: {code}")
-                                return redirect("course_instructors_assign")
-                            else:
-                                continue
+                                return JsonResponse({"ok": False, "message": msg, "errors": errors}, status=400)
+                            errors.append(msg)
+                            continue
                         course.faculties.clear()
 
-                for code, email in rows:
-                    course = course_by_code.get(code)
-                    faculty = faculty_by_email.get(email)
-                    if not course:
-                        if validation == "strict":
-                            messages.error(request, f"Unknown course: {code}")
-                            return redirect("course_instructors_assign")
-                        else:
-                            continue
-                    if not faculty:
-                        if validation == "strict":
-                            messages.error(request, f"Unknown faculty: {email}")
-                            return redirect("course_instructors_assign")
-                        else:
-                            continue
+                # Apply rows
+                for rix, row in enumerate(norm_rows, start=2):
+                    code = str(row.get("course_code") or "").strip()
+                    email = str(row.get("faculty_email") or "").strip()
+                    if not code or not email:
+                        # already recorded earlier when collecting codes/emails
+                        continue
 
+                    course = course_by_code.get(code)
+                    if not course:
+                        msg = f"Row {rix}: Unknown course: {code}"
+                        if validation == "strict":
+                            return JsonResponse({"ok": False, "message": msg, "errors": errors}, status=400)
+                        errors.append(msg)
+                        continue
+
+                    faculty = faculty_by_email.get(email)
+                    if not faculty:
+                        msg = f"Row {rix}: Unknown faculty: {email}"
+                        if validation == "strict":
+                            return JsonResponse({"ok": False, "message": msg, "errors": errors}, status=400)
+                        errors.append(msg)
+                        continue
+
+                    rows_processed += 1
                     if not course.faculties.filter(pk=faculty.pk).exists():
                         course.faculties.add(faculty)
-                    processed += 1
+                        links_added += 1
 
-            messages.success(request, f"Processed {processed} row(s).")
-        except Exception as exc:
-            messages.error(request, f"Bulk assignment failed: {exc}")
+            return JsonResponse({
+                "ok": True,
+                "message": "Processed file.",
+                "rows": rows_processed,
+                "links_added": links_added,
+                "errors": errors[:100],
+            }, status=200)
 
-        return redirect("course_instructors_assign")
+        except Exception as e:
+            return JsonResponse({
+                "ok": False,
+                "message": f"Failed to process file: {str(e)}",
+                "errors": errors[:100]
+            }, status=500)
+        finally:
+            try:
+                default_storage.delete(temp_path)
+            except Exception:
+                pass
+
+    # GET
     return render(request, "admin/bulk_add_course_instructors.html")
+
+
+
+@require_POST
+def submit_preregistration(request):
+    roll_no = request.session.get("roll_no")
+    if not roll_no:
+        login_url = getattr(settings, "LOGIN_URL", "/login/")
+        return redirect(f"{login_url}?next={request.path}")
+
+    student = get_object_or_404(Student, roll_no=roll_no)
+    payload_raw = request.POST.get("payload", "")
+    try:
+        payload = json.loads(payload_raw) if payload_raw else {}
+    except Exception:
+        messages.error(request, "Invalid submission payload.")
+        return redirect("prereg_page")
+
+    semester = payload.get("semester")
+    try:
+        semester = int(semester)
+    except Exception:
+        messages.error(request, "Select a valid semester.")
+        return redirect("prereg_page")
+
+    selections = payload.get("selections") or []
+    if not isinstance(selections, list):
+        messages.error(request, "Invalid selections.")
+        return redirect("prereg_page")
+
+    # Build a map from course_code to Course
+    codes = [s.get("course_code","").strip().upper() for s in selections if s.get("course_code")]
+    codes = [c for c in codes if c]
+    if not codes:
+        messages.error(request, "Select at least one course.")
+        return redirect("prereg_page")
+
+    courses = {c.code.upper(): c for c in Course.objects.filter(code__in=codes)}
+    missing = [c for c in codes if c not in courses]
+    if missing:
+        messages.error(request, f"Unknown courses: {', '.join(missing)}")
+        return redirect("prereg_page")
+
+    # Validate credit bounds server-side as well
+    total_credits = sum(int(selections[i].get("credits") or 0) for i in range(len(selections)))
+    if total_credits < (request.GET.get("min_credit") or 0):
+        # front-end already enforces; server trust existing min/max from context if desired
+        pass
+
+    created, skipped = 0, 0
+    with transaction.atomic():
+        for sel in selections:
+            code = (sel.get("course_code") or "").strip().upper()
+            if not code:
+                continue
+            course = courses.get(code)
+            # PND = pending request
+            obj, is_created = StudentCourse.objects.get_or_create(
+                student=student, course=course, semester=semester,
+                defaults={
+                    "status": "PND",
+                    "is_pass_fail": bool(sel.get("is_pass_fail") or False),
+                    "type": sel.get("category") or None,
+                }
+            )
+            if not is_created:
+                # If already exists but not enrolled, keep it pending to allow resubmission window
+                if obj.status in ("DRP",):
+                    obj.status = "PND"
+                    obj.is_pass_fail = bool(sel.get("is_pass_fail") or False)
+                    obj.type = sel.get("category") or None
+                    obj.save(update_fields=["status", "is_pass_fail", "type"])
+                skipped += 1
+            else:
+                created += 1
+
+    if created:
+        messages.success(request, f"Submitted {created} request(s) for approval.")
+    if skipped:
+        messages.info(request, f"{skipped} existing request(s) retained.")
+    return redirect("check_status_page")
+
+
+##Should be changed -- Faculty Advisor
+@require_POST
+def advisor_request_action(request):
+    # Assume Admins act as advisors; refine later to advisor mapping
+    admin_email = request.session.get("email_id")
+    if not admin_email or not Admins.objects.filter(email_id=admin_email).exists():
+        login_url = getattr(settings, "LOGIN_URL", "/login/")
+        return redirect(f"{login_url}?next={request.path}")
+
+    sc_id = request.POST.get("sc_id")
+    action = (request.POST.get("action") or "").lower()
+
+    sc = get_object_or_404(StudentCourse, id=sc_id)
+
+    if sc.status != "INS":
+        messages.info(request, "Request not ready for advisor approval.")
+        return redirect("custom_admin_home")
+
+    if action == "approve":
+        sc.status = "ENR"
+        sc.outcome = "UNK"
+        sc.save(update_fields=["status", "outcome"])
+        messages.success(request, "Student enrolled for this course.")
+    elif action == "reject":
+        sc.status = "DRP"
+        sc.save(update_fields=["status"])
+        messages.success(request, "Request rejected.")
+    else:
+        messages.error(request, "Unknown action.")
+    return redirect("custom_admin_home")
+
+
+def _compute_semester_from_roll_and_today(roll_no: str, today=None) -> int:
+    if today is None:
+        today = timezone.now().date()
+    try:
+        yr2 = int(roll_no[1:3])
+        admit_year = 2000 + yr2
+    except Exception:
+        return 1
+    years_delta = max(0, today.year - admit_year)
+    term_index = 1 if today.month >= 7 else 2
+    return max(1, years_delta * 2 + term_index)
+
+def instructor_requests(request):
+    email_id = request.session.get("email_id")
+    if not email_id:
+        login_url = getattr(settings, "LOGIN_URL", "/login/")
+        return redirect(f"{login_url}?next={request.path}")
+    instructor = get_object_or_404(Faculty, email_id=email_id)
+
+    status_filter = request.GET.get("status", "PND")
+    course_code = (request.GET.get("course") or "").strip().upper()
+    slot = (request.GET.get("slot") or "").strip().upper()
+
+    qs = (
+        StudentCourse.objects
+        .filter(course__faculties__email_id=email_id)
+        .select_related("course","student")
+        .prefetch_related("course__faculties")
+        .order_by("course__code","student__roll_no")
+        .distinct()
+    )
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+    if course_code:
+        qs = qs.filter(course__code=course_code)
+    if slot:
+        qs = qs.filter(course__slot=slot)
+
+    # Model-agnostic my_courses
+    my_courses = (
+        Course.objects.filter(faculties__email_id=email_id)
+        .order_by("code")
+        .values_list("code","name","slot")
+    )
+
+    context = {
+        "instructor": instructor,
+        "requests": qs,
+        "status_filter": status_filter,
+        "course_code": course_code,
+        "slot_filter": slot,
+        "my_courses": my_courses,
+    }
+    return render(request, "instructor/instructor_requests.html", context)
+
+@require_POST
+def instructor_request_action(request):
+    email_id = request.session.get("email_id")
+    if not email_id:
+        login_url = getattr(settings, "LOGIN_URL", "/login/")
+        return redirect(f"{login_url}?next={request.path}")
+    faculty = get_object_or_404(Faculty, email_id=email_id)
+
+    sc_id = request.POST.get("sc_id")
+    action = (request.POST.get("action") or "").lower()
+
+    if not sc_id:
+        messages.error(request, "No request selected.")
+        return redirect("instructor_requests")  # page with table
+
+    sc = get_object_or_404(
+        StudentCourse.objects.select_related("course", "student"),
+        id=sc_id
+    )
+
+    # Ownership guard
+    if not sc.course.faculties.filter(id=faculty.id).exists():
+        messages.error(request, "Not authorized for this course.")
+        return redirect("instructor_requests")
+
+    # Only pending can change
+    if sc.status != "PND":
+        messages.info(request, "Request is not pending.")
+        return redirect("instructor_requests")
+
+    # Apply single action
+    if action == "approve":
+        sc.status = "ENR"
+    elif action == "reject":
+        sc.status = "DRP"
+    else:
+        messages.error(request, "Unknown action.")
+        return redirect("instructor_requests")
+
+    sc.save(update_fields=["status"])
+    messages.success(request, f"Request {action}ed.")
+    return redirect("instructor_requests")
+
+
+@require_POST
+def instructor_bulk_action(request):
+    email_id = request.session.get("email_id")
+    if not email_id:
+        login_url = getattr(settings, "LOGIN_URL", "/login/")
+        return redirect(f"{login_url}?next={request.path}")
+    faculty = get_object_or_404(Faculty, email_id=email_id)
+
+    ids = request.POST.getlist("sc_ids")
+    action = (request.POST.get("action") or "").lower()
+
+    if not ids:
+        messages.info(request, "No requests selected.")
+        return redirect("instructor_requests")
+
+    if action not in ("approve", "reject"):
+        messages.error(request, "Unknown action.")
+        return redirect("instructor_requests")
+
+    qs = StudentCourse.objects.filter(id__in=ids).select_related("course", "student")
+    updated = 0
+    for sc in qs:
+        if not sc.course.faculties.filter(id=faculty.id).exists():
+            continue
+        if sc.status != "PND":
+            continue
+        sc.status = "ENR" if action == "approve" else "DRP"
+        sc.save(update_fields=["status"])
+        updated += 1
+
+    messages.success(request, f"{updated} request(s) {action}d.")
+    return redirect("instructor_requests")
+
+
+def instructor_courses(request):
+    # Authn: get instructor
+    email_id = request.session.get("email_id")
+    if not email_id:
+        login_url = getattr(settings, "LOGIN_URL", "/login/")
+        return redirect(f"{login_url}?next={request.path}")
+    instructor = get_object_or_404(Faculty, email_id=email_id)
+
+    # Optional semester label to display and use as default in links
+    current_sem = _compute_semester_from_roll_and_today(instructor.email_id)
+
+    # All courses this instructor teaches (ever), with total enrolled across all semesters
+    courses = (
+        Course.objects.filter(faculties=instructor)
+        .distinct()
+        .annotate(
+            total_enrolled=Count("enrollments", filter=Q(enrollments__status="ENR"))
+        )
+        .order_by("code")
+    )
+
+    context = {
+        "instructor": instructor,
+        "courses": courses,
+        "default_semester": str(current_sem),  # used in roster links
+    }
+    return render(request, "instructor/view_courses.html", context)
+
+
+def course_roster(request, course_code, semester=None):
+    email_id = request.session.get("email_id")
+    if not email_id:
+        login_url = getattr(settings, "LOGIN_URL", "/login/")
+        return redirect(f"{login_url}?next={request.path}")
+    instructor = get_object_or_404(Faculty, email_id=email_id)
+
+    course = get_object_or_404(Course.objects.prefetch_related("faculties"), code=course_code)
+    if not course.faculties.filter(id=instructor.id).exists():
+        return redirect("instructor_courses")
+
+    # List all ENR rows for this course across all semesters
+    enrollments = (
+        StudentCourse.objects.filter(course__code=course_code, status="ENR")
+        .select_related("student", "course")
+        .order_by("student__roll_no", "semester")
+    )
+
+    # Optional: unique students only (one row per student, earliest semester)
+    # from django.db.models import Min
+    # first_sem = (
+    #     StudentCourse.objects.filter(course__code=course_code, status="ENR")
+    #     .values("student_id").annotate(min_sem=Min("semester"))
+    # )
+    # enrollments = (
+    #     StudentCourse.objects.filter(
+    #         course__code=course_code, status="ENR",
+    #         semester__in=[r["min_sem"] for r in first_sem]
+    #     )
+    #     .select_related("student","course")
+    #     .order_by("student__roll_no")
+    # )
+
+    context = {
+        "instructor": instructor,
+        "course": course,
+        "semester": "All",  # label for the page header
+        "enrollments": enrollments,
+    }
+    return render(request, "instructor/course_roster.html", context)

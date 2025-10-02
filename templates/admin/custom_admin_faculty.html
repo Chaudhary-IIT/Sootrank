@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Manage Faculty - Sootrank Admin</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
         body {
             background-color: #f9fafb;
@@ -29,10 +30,9 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow">
         <div class="container">
             <a class="navbar-brand" href="{% url 'custom_admin_home' %}">Sootrank Admin</a>
-            <a href="{% url 'custom_admin_faculty' %}" class="btn btn-light ms-auto me-2">
-                Refresh List
-            </a>
-            <a href="{%url 'custom_admin_faculty_bulk_add'%}" class="btn btn-outline-light me-2">Bulk Add Faculties</a>
+            <a href="{% url 'custom_admin_faculty' %}" class="btn btn-light ms-auto me-2">Refresh List</a>
+            <a href="{% url 'custom_admin_faculty_bulk_add' %}" class="btn btn-outline-light me-2">Bulk Add
+                Faculties</a>
         </div>
     </nav>
 
@@ -78,7 +78,31 @@
             </form>
         </div>
 
-        <h3 class="mb-4 text-primary">Existing Faculty Members</h3>
+        <h3 class="mb-3 text-primary">Existing Faculty Members</h3>
+
+        <!-- Search and filters -->
+        <div class="row g-2 mb-3">
+            <div class="col-12 col-md-6">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fa fa-search"></i></span>
+                    <input type="text" id="facultySearch" class="form-control"
+                        placeholder="Search by name, email, department…">
+                </div>
+            </div>
+            <div class="col-12 col-md-3">
+                <select id="deptFilter" class="form-select">
+                    <option value="">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.code }}">{{ dept.code }} — {{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-12 col-md-3">
+                <input type="text" id="emailFilter" class="form-control"
+                    placeholder="Filter by email domain (e.g., @iitmandi.ac.in)">
+            </div>
+        </div>
+
         <div class="table-responsive shadow-sm bg-white rounded p-3">
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-primary">
@@ -89,19 +113,20 @@
                         <th>Actions</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="facultyBody">
                     {% for faculty in faculties %}
-                    <tr>
-                        <td>{{ faculty.first_name }} {{ faculty.last_name|default_if_none:"" }}</td>
-                        <td>{{ faculty.email_id }}</td>
-                        <td>{{ faculty.department }}</td>
+                    <tr class="faculty-row">
+                        <td class="f-name">{{ faculty.first_name }} {{ faculty.last_name|default_if_none:"" }}</td>
+                        <td class="f-email">{{ faculty.email_id }}</td>
+                        <td class="f-dept">
+                            {% if faculty.department %}{{ faculty.department.code }}{% else %}—{% endif %}
+                        </td>
                         <td class="table-actions">
                             <a href="{% url 'custom_admin_edit_faculty' faculty.id %}" class="btn btn-sm btn-warning"
                                 title="Edit">
                                 <i class="fa fa-pencil"></i>
                             </a>
-                            <form action="{% url 'delete_faculty' faculty.id %}" method="post"
-                                style="display:inline;"
+                            <form action="{% url 'delete_faculty' faculty.id %}" method="post" style="display:inline;"
                                 onsubmit="return confirm('Are you sure you want to delete this faculty member?');">
                                 {% csrf_token %}
                                 <button type="submit" class="btn btn-sm btn-danger" title="Delete">
@@ -123,5 +148,48 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 </body>
+
+<script>
+    (function () {
+        const $q = $('#facultySearch');
+        const $dept = $('#deptFilter');
+        const $email = $('#emailFilter');
+        const $rows = $('#facultyBody .faculty-row');
+
+        function norm(s) { return (s || '').toString().toLowerCase().trim(); }
+
+        function matches($row, q, d, e) {
+            const name = $row.find('.f-name').text();
+            const email = $row.find('.f-email').text();
+            const dept = $row.find('.f-dept').text();
+
+            const hay = (name + ' ' + email + ' ' + dept).toLowerCase();
+            const qHit = !q || hay.includes(q);
+            const dHit = !d || norm(dept) === norm(d);
+            const eHit = !e || norm(email).includes(norm(e));
+            return qHit && dHit && eHit;
+        }
+
+        let tid = null;
+        function apply() {
+            const q = norm($q.val());
+            const d = norm($dept.val());
+            const e = norm($email.val());
+            $rows.each(function () {
+                const $r = $(this);
+                $r.toggle(matches($r, q, d, e));
+            });
+        }
+
+        function debouncedApply() {
+            clearTimeout(tid);
+            tid = setTimeout(apply, 120);
+        }
+
+        $q.on('input', debouncedApply);
+        $dept.on('change', apply);
+        $email.on('input', debouncedApply);
+    })();
+</script>
 
 </html>
