@@ -1,239 +1,364 @@
+{% load dict_extras %}
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8" />
-    <title>Course Pre-Registration</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="UTF-8" />
+  <title>Course Pre-Registration</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-
 <body class="min-h-screen bg-gray-100 flex items-start justify-center py-10">
-    <div class="w-[1150px]">
-
-        <!-- Header -->
-        <div class="mb-5">
-            <h1 class="text-3xl font-bold">Course Pre-Registration</h1>
-            <p class="text-red-500 mt-1">Last day for course pre-registration is 15-08-2025</p>
-        </div>
-
-        <!-- Card -->
-        <div class="bg-white rounded-2xl shadow">
-            <form id="courseForm" class="p-6">
-
-                <!-- Grid of slots -->
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-
-                    <!-- Slot A -->
-                    <div class="flex flex-col">
-                        <label for="slot-A" class="font-medium mb-1">Slot-A</label>
-                        <select id="slot-A" name="slot-A"
-                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
-                            <option value="none">None</option>
-                            <option value="CS101">Programming in C (CS101) - 4 credits</option>
-                            <option value="MA201">Linear Algebra (MA201) - 3 credits</option>
-                        </select>
-                    </div>
-
-                    <!-- Slot B -->
-                    <div class="flex flex-col">
-                        <label for="slot-B" class="font-medium mb-1">Slot-B</label>
-                        <select id="slot-B" name="slot-B"
-                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
-                            <option value="none">None</option>
-                            <option value="EE202">Digital Systems (EE202) - 4 credits</option>
-                            <option value="HS101">Economics (HS101) - 3 credits</option>
-                        </select>
-                    </div>
-
-                    <!-- Slot C -->
-                    <div class="flex flex-col">
-                        <label for="slot-C" class="font-medium mb-1">Slot-C</label>
-                        <select id="slot-C" name="slot-C"
-                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
-                            <option value="none">None</option>
-                            <option value="EE202">Digital Systems (EE202) - 4 credits</option>
-                            <option value="HS101">Economics (HS101) - 3 credits</option>
-                        </select>
-                    </div>
-
-                    <!-- Slot D -->
-                    <div class="flex flex-col">
-                        <label for="slot-D" class="font-medium mb-1">Slot-D</label>
-                        <select id="slot-D" name="slot-D"
-                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
-                            <option value="none">None</option>
-                            <option value="EE202">Digital Systems (EE202) - 4 credits</option>
-                            <option value="HS101">Economics (HS101) - 3 credits</option>
-                        </select>
-                    </div>
-
-                    <!-- Slot E -->
-                    <div class="flex flex-col">
-                        <label for="slot-E" class="font-medium mb-1">Slot-E</label>
-                        <select id="slot-E" name="slot-E"
-                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
-                            <option value="none">None</option>
-                            <option value="EE202">Digital Systems (EE202) - 4 credits</option>
-                            <option value="HS101">Economics (HS101) - 3 credits</option>
-                        </select>
-                    </div>
-
-                    <!-- Slot F -->
-                    <div class="flex flex-col">
-                        <label for="slot-F" class="font-medium mb-1">Slot-F</label>
-                        <select id="slot-F" name="slot-F"
-                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
-                            <option value="none">None</option>
-                            <option value="EE202">Digital Systems (EE202) - 4 credits</option>
-                            <option value="HS101">Economics (HS101) - 3 credits</option>
-                        </select>
-                    </div>
-
-                    <!-- Slot G -->
-                    <div class="flex flex-col">
-                        <label for="slot-G" class="font-medium mb-1">Slot-G</label>
-                        <select id="slot-G" name="slot-G"
-                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
-                            <option value="none">None</option>
-                            <option value="EE202">Digital Systems (EE202) - 4 credits</option>
-                            <option value="HS101">Economics (HS101) - 3 credits</option>
-                        </select>
-                    </div>
-
-                    <!-- Slot H -->
-                    <div class="flex flex-col">
-                        <label for="slot-H" class="font-medium mb-1">Slot-H</label>
-                        <select id="slot-H" name="slot-H"
-                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
-                            <option value="none">None</option>
-                            <option value="EE202">Digital Systems (EE202) - 4 credits</option>
-                            <option value="HS101">Economics (HS101) - 3 credits</option>
-                        </select>
-                    </div>
-
-                    <!-- Slot FS -->
-                    <div class="flex flex-col">
-                        <label for="slot-FS" class="font-medium mb-1">Slot-FS</label>
-                        <select id="slot-FS" name="slot-FS"
-                            class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
-                            <option value="none">None</option>
-                            <option value="EE202">Digital Systems (EE202) - 4 credits</option>
-                            <option value="HS101">Economics (HS101) - 3 credits</option>
-                        </select>
-                    </div>
-
-                </div>
-
-                <!-- Credits and errors -->
-                <div class="mt-6 flex items-center justify-between">
-                    <p class=" text-lg font-semibold ">
-                        Total Credits: <span id="totalCredits" class="text-green-600">0</span>
-                    </p>
-                    <p id="creditError" class="text-red-500 hidden"></p>
-                </div>
-
-                <!-- Divider -->
-                <div class="h-px bg-gray-200 my-6"></div>
-
-                <!-- Footer actions -->
-                <div class="flex items-center justify-end gap-3">
-                    <button type="button" id="resetBtn"
-                        class="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50">
-                        Reset
-                    </button>
-                    <button type="submit" class="bg-gray-800 text-white px-5 py-2 rounded-lg hover:bg-black">
-                        Submit
-                    </button>
-                </div>
-            </form>
-        </div>
+  <div class="w-[1150px]">
+    <div class="mb-5 flex items-center justify-between">
+      <h1 class="text-3xl font-bold">Course Pre-Registration</h1>
+      <span class="inline-flex items-center rounded-full bg-blue-100 text-blue-800 text-xs font-medium px-3 py-1">
+        Semester {{ computed_semester }}
+      </span>
     </div>
 
-    <!-- Confirmation Modal -->
-    <div id="popup" class="fixed inset-0 hidden justify-center items-center bg-black/60 z-50">
-        <div class="bg-white rounded-2xl shadow-lg w-[420px] p-6">
-            <h2 class="text-xl font-bold mb-2">Confirm Submission</h2>
-            <p class="text-red-500 mb-4">
-                You will not be able to edit your course selection for this semester after this.
-                Are you sure you'd like to proceed?
-            </p>
-            <div class="flex justify-between">
-                <button id="backBtn" class="bg-gray-400 text-white px-4 py-2 rounded-lg hover:bg-gray-500">
-                    Back
-                </button>
-                <button id="proceedBtn" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
-                    Proceed
-                </button>
+    <p class="text-red-500 mb-4">
+      {% if window_open %}Pre‑registration is open.{% else %}Pre‑registration window is closed.{% endif %}
+    </p>
+
+    <div class="bg-white rounded-2xl shadow">
+      <form id="courseForm" method="post" action="{% url 'submit_preregistration' %}" class="p-6">
+        {% csrf_token %}
+        <input type="hidden" name="payload" id="payloadInput" />
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {% for slot in slots %}
+          <div class="flex flex-col" data-slot="{{ slot }}">
+            <label class="font-medium mb-1">Slot-{{ slot }}</label>
+
+            <!-- Category select -->
+            <select id="slot-{{ slot }}-cat" name="slot-{{ slot }}-cat"
+                    class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 slot-cat"
+                    data-slot="{{ slot }}" {% if slot in locked_slots %}disabled{% endif %}>
+              <option value="">Select category</option>
+              <option value="ALL">All courses (Slot {{ slot }})</option>
+              {% for c in categories %}
+                <option value="{{ c.code }}">{{ c.code }} — {{ c.label }}</option>
+              {% endfor %}
+            </select>
+
+            <!-- Course select -->
+            <select id="slot-{{ slot }}-course" name="slot-{{ slot }}-course"
+                    class="mt-2 w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 slot-course"
+                    data-slot="{{ slot }}"
+                    {% if slot in locked_slots %}disabled{% elif not preselected_by_slot|get_item:slot %}disabled{% endif %}>
+              {% if preselected_by_slot|get_item:slot %}
+                <option value="">Select a course</option>
+              {% else %}
+                <option value="">Select a category first</option>
+              {% endif %}
+
+              <!-- Hidden: ALL options for this slot -->
+              {% for c in categories %}
+                {% with cat_code=c.code %}
+                  {% for course in slot_map|get_item:slot|get_item:cat_code %}
+                    <option value="{{ course.code }}" data-credits="{{ course.credits }}"
+                            data-category="ALL" data-cat="ALL" class="hidden all-slot-{{ slot }}">
+                      {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat_code }}
+                    </option>
+                  {% endfor %}
+                {% endwith %}
+              {% endfor %}
+
+              <!-- Hidden: category-specific options -->
+              {% for c in categories %}
+                {% with cat_code=c.code %}
+                  {% for course in slot_map|get_item:slot|get_item:cat_code %}
+                    {% if course.cb_for_branch and course.cb_for_branch.0 %}
+                      {% with cat=course.cb_for_branch.0.category %}
+                        <option value="{{ course.code }}" data-credits="{{ course.credits }}"
+                                data-category="{{ cat }}" data-cat="{{ cat_code }}" class="hidden">
+                          {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat }}
+                        </option>
+                      {% endwith %}
+                    {% else %}
+                      <option value="{{ course.code }}" data-credits="{{ course.credits }}"
+                              data-category="{{ cat_code }}" data-cat="{{ cat_code }}" class="hidden">
+                        {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat_code }}
+                      </option>
+                    {% endif %}
+                  {% endfor %}
+                {% endwith %}
+              {% endfor %}
+            </select>
+
+            <div class="cat-badge text-xs mt-1 {% if slot in locked_slots %}text-green-700{% else %}text-gray-600{% endif %}">
+              {% if slot in locked_slots %}Approved; selection locked{% endif %}
             </div>
+          </div>
+          {% endfor %}
         </div>
+
+        <div class="mt-6 flex items-center justify-between">
+          <p class="text-lg font-semibold">
+            Total Credits: <span id="totalCredits" class="text-green-600">0</span>
+          </p>
+          <p id="creditError" class="text-red-500 hidden"></p>
+        </div>
+
+        <div class="h-px bg-gray-200 my-6"></div>
+
+        <div class="mt-4 flex items-center justify-between">
+          <!-- Left side: Home -->
+          <a href="{% url 'students_dashboard' %}"
+              class="px-4 py-2 bg-green-600 rounded-lg border border-green-300 text-white hover:bg-green-800 inline-flex items-center gap-2">
+            <!-- Optional home icon -->
+            <span>Home</span>
+          </a>
+
+          <!-- Right side: Reset + Submit -->
+          <div class="flex items-center gap-3">
+            <button type="button" id="resetBtn"
+                    class="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+                    {% if not window_open %}disabled{% endif %}>
+              Reset
+            </button>
+            <button type="submit"
+                    class="bg-gray-800 text-white px-5 py-2 rounded-lg hover:bg-black"
+                    {% if not window_open %}disabled{% endif %}>
+              {% if preselected_by_slot %}Update{% else %}Submit{% endif %}
+            </button>
+          </div>
+          </div>
+
+      </form>
     </div>
+  </div>
 
-    <!-- Script -->
-    <script>
-        const minCredit = 4;
-        const maxCredit = 22;
-        const courseCredits = {
-            "CS101": 4,
-            "MA201": 3,
-            "EE202": 4,
-            "HS101": 3
-        };
+  <!-- Confirmation Modal -->
+  <div id="popup" class="fixed inset-0 hidden justify-center items-center bg-black/60 z-50">
+    <div class="bg-white rounded-2xl shadow-lg w-[420px] p-6">
+      <h2 class="text-xl font-bold mb-2">Confirm {% if preselected_by_slot %}Update{% else %}Submission{% endif %}</h2>
+      <p class="text-red-500 mb-4">
+        You will not be able to edit your course selection for this semester after this when the window closes.
+        Are you sure you'd like to proceed?
+      </p>
+      <div class="flex justify-between">
+        
+        <button id="backBtn" class="bg-gray-400 text-white px-4 py-2 rounded-lg hover:bg-gray-500">Back</button>
+        <button id="proceedBtn" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">Proceed</button>
+      </div>
+    </div>
+  </div>
 
-        function updateCredits() {
-            let total = 0;
-            document.querySelectorAll("select").forEach((sel) => {
-                if (sel.value !== "none") total += courseCredits[sel.value] || 0;
-            });
+  <!-- Safe JSON data -->
+  {{ slot_map_json|json_script:"slot-map-data" }}
+  {{ preselected_by_slot|json_script:"preselected-data" }}
+  {{ locked_slots|json_script:"locked-slots-data" }}
 
-            document.getElementById("totalCredits").textContent = total;
-            const errorEl = document.getElementById("creditError");
+  <script>
+    const minCredit = {{ min_credit|default_if_none:0 }};
+    const maxCredit = {{ max_credit|default_if_none:999 }};
+    const preselected = JSON.parse(document.getElementById("preselected-data").textContent || "{}");
+    const lockedSlots = JSON.parse(document.getElementById("locked-slots-data").textContent || "[]");
 
-            if (total < minCredit) {
-                errorEl.textContent = `Minimum ${minCredit} credits required`;
-                errorEl.classList.remove("hidden");
-            } else if (total > maxCredit) {
-                errorEl.textContent = `Maximum ${maxCredit} credits allowed`;
-                errorEl.classList.remove("hidden");
-            } else {
-                errorEl.classList.add("hidden");
-            }
+    // Build per-slot code -> credits map from slot_map JSON
+    const slotMapJson = JSON.parse(document.getElementById("slot-map-data").textContent || "{}");
+    const slotCredits = {};
+    Object.keys(slotMapJson || {}).forEach(slot => {
+      slotCredits[slot] = slotCredits[slot] || {};
+      const byCat = slotMapJson[slot] || {};
+      Object.keys(byCat).forEach(cat => {
+        const arr = byCat[cat] || [];
+        arr.forEach(course => {
+          if (course && course.code) {
+            slotCredits[slot][course.code] = parseInt(course.credits || 0, 10) || 0;
+          }
+        });
+      });
+    });
+
+    function updateCredits() {
+      let total = 0;
+
+      // Sum once per slot: locked => preselected credits; unlocked => selected option credits
+      document.querySelectorAll('div.flex.flex-col[data-slot]').forEach(wrap => {
+        const slot = wrap.getAttribute('data-slot');
+        const isLocked = Array.isArray(lockedSlots) ? lockedSlots.includes(slot) : false;
+
+        if (isLocked) {
+          const code = preselected ? preselected[slot] : null;
+          const cr = (slotCredits[slot] && code) ? (slotCredits[slot][code] || 0) : 0;
+          total += cr;
+        } else {
+          const sel = wrap.querySelector('.slot-course');
+          if (!sel || sel.disabled) return;
+          const opt = sel.options[sel.selectedIndex];
+          if (opt && opt.value) {
+            const c = parseInt(opt.dataset.credits || '0', 10);
+            if (!Number.isNaN(c)) total += c;
+          }
+        }
+      });
+
+      document.getElementById("totalCredits").textContent = total;
+      const errorEl = document.getElementById("creditError");
+      if (total < minCredit) {
+        errorEl.textContent = `Minimum ${minCredit} credits required`;
+        errorEl.classList.remove("hidden");
+      } else if (total > maxCredit) {
+        errorEl.textContent = `Maximum ${maxCredit} credits allowed`;
+        errorEl.classList.remove("hidden");
+      } else {
+        errorEl.classList.add("hidden");
+      }
+    }
+
+    function onCategoryChange(catSel) {
+      const slot = catSel.dataset.slot;
+      const courseSel = document.getElementById(`slot-${slot}-course`);
+      const chosenCat = catSel.value;
+
+      if (lockedSlots.includes(slot)) {
+        return; // locked; do nothing
+      }
+
+      // Reset course select
+      courseSel.innerHTML = "";
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = chosenCat ? "Select a course" : "Select a category first";
+      courseSel.appendChild(placeholder);
+
+      // Pull options
+      let selector;
+      if (chosenCat === "ALL") {
+        selector = `.all-slot-${slot}`;
+      } else {
+        selector = `#slot-${slot}-course-template option[data-cat="${chosenCat}"]`;
+      }
+      const preRendered = document.querySelectorAll(selector);
+
+      if (chosenCat) {
+        preRendered.forEach((opt) => {
+          const clone = opt.cloneNode(true);
+          clone.classList.remove("hidden");
+          courseSel.appendChild(clone);
+        });
+        courseSel.disabled = false;
+
+        // Apply preselected if exists
+        const selectedCode = preselected[slot];
+        if (selectedCode) {
+          const idx = Array.from(courseSel.options).findIndex(o => o.value === selectedCode);
+          if (idx >= 0) courseSel.selectedIndex = idx;
+        }
+      } else {
+        courseSel.disabled = true;
+      }
+
+      const badge = courseSel.parentElement.querySelector(".cat-badge");
+      if (badge) badge.textContent = chosenCat ? (chosenCat === "ALL" ? "All categories" : `Category: ${chosenCat}`) : "";
+      updateCredits();
+    }
+
+    function wireSlots() {
+      document.querySelectorAll(".slot-course").forEach((sel) => {
+        const slot = sel.dataset.slot;
+
+        // Create hidden template select per slot
+        const tmpl = document.createElement("select");
+        tmpl.id = `slot-${slot}-course-template`;
+        tmpl.className = "hidden";
+
+        // Move hidden options into template store
+        const opts = Array.from(sel.querySelectorAll("option.hidden, option[data-cat]"));
+        opts.forEach((o) => tmpl.appendChild(o));
+        sel.parentElement.insertBefore(tmpl, sel.nextSibling);
+
+        if (lockedSlots.includes(slot)) {
+          sel.disabled = true;
+          return;
         }
 
-        // Attach change handler to all selects
-        document.querySelectorAll("select").forEach((sel) => {
-            sel.addEventListener("change", updateCredits);
-        });
-
-        // Reset button clears selections and recalculates
-        document.getElementById("resetBtn").addEventListener("click", () => {
-            document.querySelectorAll("select").forEach((sel) => (sel.value = "none"));
-            updateCredits();
-        });
-
-        // Submit shows modal when credits valid
-        document.getElementById("courseForm").addEventListener("submit", (e) => {
-            e.preventDefault();
-            const total = parseInt(document.getElementById("totalCredits").textContent, 10);
-            if (total >= minCredit && total <= maxCredit) {
-                const m = document.getElementById("popup");
-                m.classList.remove("hidden");
-                m.classList.add("flex");
+        const selectedCode = preselected[slot];
+        if (selectedCode) {
+          // find category for preselected
+          const allOpts = tmpl.querySelectorAll("option");
+          let catForCourse = "";
+          allOpts.forEach((o) => {
+            if (o.value === selectedCode && !catForCourse) {
+              catForCourse = o.getAttribute("data-cat") || "";
             }
-        });
+          });
+          const catSel = document.getElementById(`slot-${slot}-cat`);
+          catSel.value = catForCourse || "ALL";
+          onCategoryChange(catSel);
+        } else {
+          sel.innerHTML = '<option value="">Select a category first</option>';
+          sel.disabled = true;
+        }
+      });
 
-        // Modal controls
-        document.getElementById("backBtn").addEventListener("click", () => {
-            document.getElementById("popup").classList.add("hidden");
-        });
+      // Bind changes
+      document.querySelectorAll(".slot-cat").forEach((catSel) => {
+        catSel.addEventListener("change", () => onCategoryChange(catSel));
+      });
+    }
 
-        document.getElementById("proceedBtn").addEventListener("click", () => {
-            window.location.href = "/thanku";
-        });
+    function collectSelections() {
+      const selections = [];
+      document.querySelectorAll(".slot-course").forEach((sel) => {
+        if (sel.disabled) return;
+        const opt = sel.options[sel.selectedIndex];
+        if (opt && opt.value) {
+          selections.push({
+            slot: sel.dataset.slot,
+            course_code: opt.value,
+            category: opt.dataset.category || opt.dataset.cat || "",
+            credits: parseInt(opt.dataset.credits || "0", 10) || 0
+          });
+        }
+      });
+      return selections;
+    }
 
-        // Initialize credits on load
-        updateCredits();
-    </script>
+    document.getElementById("resetBtn").addEventListener("click", () => {
+      document.querySelectorAll(".slot-cat").forEach((sel) => (sel.value = ""));
+      document.querySelectorAll(".slot-course").forEach((sel) => {
+        if (lockedSlots.includes(sel.dataset.slot)) return;
+        sel.innerHTML = '<option value="">Select a category first</option>';
+        sel.disabled = true;
+        const badge = sel.parentElement.querySelector(".cat-badge");
+        if (badge) badge.textContent = "";
+      });
+      updateCredits();
+    });
+
+    document.getElementById("courseForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const windowOpen = {% if window_open %}true{% else %}false{% endif %};
+      if (!windowOpen) return;
+
+      const total = parseInt(document.getElementById("totalCredits").textContent, 10);
+      if (total >= minCredit && total <= maxCredit) {
+        const payload = {
+          semester: {{ computed_semester }},
+          selections: collectSelections()
+        };
+        document.getElementById("payloadInput").value = JSON.stringify(payload);
+        const m = document.getElementById("popup");
+        m.classList.remove("hidden");
+        m.classList.add("flex");
+      }
+    });
+
+    document.getElementById("backBtn").addEventListener("click", () => {
+      document.getElementById("popup").classList.add("hidden");
+    });
+
+    document.getElementById("proceedBtn").addEventListener("click", () => {
+      document.getElementById("popup").classList.add("hidden");
+      document.getElementById("courseForm").submit();
+    });
+
+    document.querySelectorAll(".slot-course").forEach((sel) => sel.addEventListener("change", updateCredits));
+    wireSlots();
+    updateCredits();
+  </script>
 </body>
-
 </html>

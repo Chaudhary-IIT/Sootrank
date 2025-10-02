@@ -67,7 +67,7 @@
                     </div>
                 </a>
             </div>
-
+<!-- 
             <div class="col-md-4 col-lg-3">
                 <a href="#" class="text-decoration-none">
                     <div class="card shadow-sm text-center py-4 px-3 bg-white rounded">
@@ -76,20 +76,10 @@
                         <p class="card-text text-muted">Administrator account management</p>
                     </div>
                 </a>
-            </div>
+            </div> -->
 
             <div class="col-md-4 col-lg-3">
-                <a href="#" class="text-decoration-none">
-                    <div class="card shadow-sm text-center py-4 px-3 bg-white rounded">
-                        <i class="fa-solid fa-code-branch icon mb-3"></i>
-                        <h5 class="card-title text-dark">Branches</h5>
-                        <p class="card-text text-muted">Department and branch details</p>
-                    </div>
-                </a>
-            </div>
-
-            <div class="col-md-4 col-lg-3">
-                <a href="#" class="text-decoration-none">
+                <a href="{% url 'custom_admin_courses' %}" class="text-decoration-none">
                     <div class="card shadow-sm text-center py-4 px-3 bg-white rounded">
                         <i class="fa-solid fa-book-open icon mb-3"></i>
                         <h5 class="card-title text-dark">Courses</h5>
@@ -99,11 +89,47 @@
             </div>
 
             <div class="col-md-4 col-lg-3">
+                <a href="{% url 'custom_admin_branch' %}" class="text-decoration-none">
+                    <div class="card shadow-sm text-center py-4 px-3 bg-white rounded">
+                        <i class="fa-solid fa-code-branch icon mb-3"></i>
+                        <h5 class="card-title text-dark">Branches</h5>
+                        <p class="card-text text-muted">Department and branch details</p>
+                    </div>
+                </a>
+            </div>
+            <!-- <div class="col-md-4 col-lg-3">
                 <a href="#" class="text-decoration-none">
+                    <div class="card shadow-sm text-center py-4 px-3 bg-white rounded">
+                        <i class="fa-solid fa-code-branch icon mb-3"></i>
+                        <h5 class="card-title text-dark">Department</h5>
+                        <p class="card-text text-muted">Department and Branch details</p>
+                    </div>
+                </a>
+            </div> -->
+            <div class="col-md-4 col-lg-3">
+                <a href="{% url 'course_branch_index' %}" class="text-decoration-none">
                     <div class="card shadow-sm text-center py-4 px-3 bg-white rounded">
                         <i class="fa-solid fa-layer-group icon mb-3"></i>
                         <h5 class="card-title text-dark">Course Branch Categories</h5>
                         <p class="card-text text-muted">Categorize courses by branch</p>
+                    </div>
+                </a>
+            </div>
+            <div class="col-md-4 col-lg-3">
+                <a href="{% url 'requirements_index' %}" class="text-decoration-none">
+                    <div class="card shadow-sm text-center py-4 px-3 bg-white rounded">
+                        <i class="fa-solid fa-layer-group icon mb-3"></i>
+                        <h5 class="card-title text-dark">Credits Required</h5>
+                        <p class="card-text text-muted">Manage credits required for each branch</p>
+                    </div>
+                </a>
+            </div>
+            <div class="col-md-4 col-lg-3">
+                <a href="{% url 'course_instructors_assign' %}" class="text-decoration-none">
+                    <div class="card shadow-sm text-center py-4 px-3 bg-white rounded">
+                        <i class="fa-solid fa-layer-group icon mb-3"></i>
+                        <h5 class="card-title text-dark">Course Instructor</h5>
+                        <p class="card-text text-muted">Manage Instructors for each Course</p>
                     </div>
                 </a>
             </div>

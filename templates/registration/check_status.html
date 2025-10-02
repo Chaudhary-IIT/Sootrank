@@ -1,342 +1,314 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8" />
-    <title>Course Selection Status</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="UTF-8" />
+  <title>Course Selection Status</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
 
 <body class="min-h-screen bg-gray-100 flex items-start justify-center py-10">
-    <!-- Main Container -->
-    <div class="w-[1150px]">
+  <div class="w-[1150px]">
 
-        <!-- Page Title + Note -->
-        <div class="mb-5">
-            <h1 class="text-3xl font-bold">Course Summary</h1>
-            <p class="text-sm text-gray-600 mt-1">
-                Here a student can see the status of all pre-registered courses and set priorities among accepted ones
-                sharing the same slot.
-            </p>
-        </div>
-
-        <!-- Card -->
-        <div class="bg-white rounded-2xl shadow">
-
-            <!-- Table -->
-            <div class="overflow-x-auto rounded-2xl">
-                <table class="w-full text-left border-collapse">
-                    <thead>
-                        <tr class="bg-gray-50 text-gray-700">
-                            <th class="px-5 py-3 text-sm font-semibold">Course Code</th>
-                            <th class="px-5 py-3 text-sm font-semibold">Course Name</th>
-                            <th class="px-5 py-3 text-sm font-semibold">Instructor</th>
-                            <th class="px-5 py-3 text-sm font-semibold">Type</th>
-                            <th class="px-5 py-3 text-sm font-semibold">Slot</th>
-                            <th class="px-5 py-3 text-sm font-semibold">Credits</th>
-                            <th class="px-5 py-3 text-sm font-semibold">LTPC</th>
-                            <th class="px-5 py-3 text-sm font-semibold">Status</th>
-                            <th class="px-5 py-3 text-sm font-semibold">Priority</th>
-                        </tr>
-                    </thead>
-                    <tbody class="text-gray-900">
-
-                        <!-- Row 1 -->
-                        <tr class="border-t">
-                            <td class="px-5 py-3">MA-101</td>
-                            <td class="px-5 py-3">Calculus I</td>
-                            <td class="px-5 py-3">Dr. A. Mathur</td>
-                            <td class="px-5 py-3">IC</td>
-                            <td class="px-5 py-3">A</td>
-                            <td class="px-5 py-3">4</td>
-                            <td class="px-5 py-3">3-1-0-4</td>
-                            <td class="px-5 py-3">
-                                <span
-                                    class="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1">
-                                    Accepted
-                                </span>
-                            </td>
-                            <td class="px-5 py-3">
-                                <select
-                                    class="w-44 bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
-                                    <option>Select Priority</option>
-                                    <option>1</option>
-                                    <option>2</option>
-                                    <option>3</option>
-                                </select>
-                            </td>
-                        </tr>
-
-                        <!-- Row 2 -->
-                        <tr class="bg-gray-50 border-t">
-                            <td class="px-5 py-3">CS-310</td>
-                            <td class="px-5 py-3">Algorithms</td>
-                            <td class="px-5 py-3">Dr. P. Mehta</td>
-                            <td class="px-5 py-3">IC</td>
-                            <td class="px-5 py-3">D</td>
-                            <td class="px-5 py-3">3</td>
-                            <td class="px-5 py-3">3-0-0-3</td>
-                            <td class="px-5 py-3">
-                                <span
-                                    class="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-xs font-medium px-3 py-1">
-                                    Pending
-                                </span>
-                            </td>
-                            <td class="px-5 py-3">-</td>
-                        </tr>
-
-                        <!-- Row 3 -->
-                        <tr class="border-t">
-                            <td class="px-5 py-3">CS-214</td>
-                            <td class="px-5 py-3">Computer Organization and Computing</td>
-                            <td class="px-5 py-3">Dr. Sambhav Kumar Pandey</td>
-                            <td class="px-5 py-3">DC</td>
-                            <td class="px-5 py-3">H</td>
-                            <td class="px-5 py-3">4</td>
-                            <td class="px-5 py-3">3-0-4-1</td>
-                            <td class="px-5 py-3">
-                                <span
-                                    class="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1">
-                                    Accepted
-                                </span>
-                            </td>
-                            <td class="px-5 py-3">-</td>
-                        </tr>
-
-                        <!-- Row 4 -->
-                        <tr class="bg-gray-50 border-t">
-                            <td class="px-5 py-3">PH-101</td>
-                            <td class="px-5 py-3">Physics I</td>
-                            <td class="px-5 py-3">Dr. B. Raman</td>
-                            <td class="px-5 py-3">IC</td>
-                            <td class="px-5 py-3">A</td>
-                            <td class="px-5 py-3">4</td>
-                            <td class="px-5 py-3">3-0-2-4</td>
-                            <td class="px-5 py-3">
-                                <span
-                                    class="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1">
-                                    Accepted
-                                </span>
-                            </td>
-                            <td class="px-5 py-3">
-                                <select
-                                    class="w-44 bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
-                                    <option>Select Priority</option>
-                                    <option>1</option>
-                                    <option>2</option>
-                                    <option>3</option>
-                                </select>
-                            </td>
-                        </tr>
-
-                        <!-- Row 5 -->
-                        <tr class="border-t">
-                            <td class="px-5 py-3">CS-110</td>
-                            <td class="px-5 py-3">Introduction to Programming</td>
-                            <td class="px-5 py-3">Dr. Jane Smith</td>
-                            <td class="px-5 py-3">IC</td>
-                            <td class="px-5 py-3">B</td>
-                            <td class="px-5 py-3">3</td>
-                            <td class="px-5 py-3">3-0-2-4</td>
-                            <td class="px-5 py-3">
-                                <span
-                                    class="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1">
-                                    Accepted
-                                </span>
-                            </td>
-                            <td class="px-5 py-3">-</td>
-                        </tr>
-
-                        <!-- Row 6 -->
-                        <tr class="bg-gray-50 border-t">
-                            <td class="px-5 py-3">CH-101</td>
-                            <td class="px-5 py-3">Chemistry I</td>
-                            <td class="px-5 py-3">Dr. C. Nair</td>
-                            <td class="px-5 py-3">IC</td>
-                            <td class="px-5 py-3">A</td>
-                            <td class="px-5 py-3">4</td>
-                            <td class="px-5 py-3">3-1-0-4</td>
-                            <td class="px-5 py-3">
-                                <span
-                                    class="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1">
-                                    Accepted
-                                </span>
-                            </td>
-                            <td class="px-5 py-3">
-                                <select
-                                    class="w-44 bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
-                                    <option>Select Priority</option>
-                                    <option>1</option>
-                                    <option>2</option>
-                                    <option>3</option>
-                                </select>
-                            </td>
-                        </tr>
-
-                        <!-- Row 7 -->
-                        <tr class="border-t">
-                            <td class="px-5 py-3">CS-101</td>
-                            <td class="px-5 py-3">Introduction to Computer Science</td>
-                            <td class="px-5 py-3">Dr. John Doe</td>
-                            <td class="px-5 py-3">IC</td>
-                            <td class="px-5 py-3">A</td>
-                            <td class="px-5 py-3">8</td>
-                            <td class="px-5 py-3">3-0-2-4</td>
-                            <td class="px-5 py-3">
-                                <span
-                                    class="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-xs font-medium px-3 py-1">
-                                    Pending
-                                </span>
-                            </td>
-                            <td class="px-5 py-3">
-                                <select
-                                    class="w-44 bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
-                                    <option>Select Priority</option>
-                                    <option>1</option>
-                                    <option>2</option>
-                                    <option>3</option>
-                                </select>
-                            </td>
-                        </tr>
-
-                        <!-- Row 8 -->
-                        <tr class="bg-gray-50 border-t">
-                            <td class="px-5 py-3">ES-101</td>
-                            <td class="px-5 py-3">Engineering Science</td>
-                            <td class="px-5 py-3">Dr. E. Roy</td>
-                            <td class="px-5 py-3">IC</td>
-                            <td class="px-5 py-3">A</td>
-                            <td class="px-5 py-3">3</td>
-                            <td class="px-5 py-3">2-0-2-3</td>
-                            <td class="px-5 py-3">
-                                <span
-                                    class="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1">
-                                    Accepted
-                                </span>
-                            </td>
-                            <td class="px-5 py-3">
-                                <select
-                                    class="w-44 bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2">
-                                    <option>Select Priority</option>
-                                    <option>1</option>
-                                    <option>2</option>
-                                    <option>3</option>
-                                </select>
-                            </td>
-                        </tr>
-
-                        <!-- Row 9 -->
-                        <tr class="border-t">
-                            <td class="px-5 py-3">HS-202</td>
-                            <td class="px-5 py-3">Information Security And Privacy</td>
-                            <td class="px-5 py-3">bb</td>
-                            <td class="px-5 py-3">IC</td>
-                            <td class="px-5 py-3">D</td>
-                            <td class="px-5 py-3">4</td>
-                            <td class="px-5 py-3">3-2-0-1</td>
-                            <td class="px-5 py-3">
-                                <span
-                                    class="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-xs font-medium px-3 py-1">
-                                    Pending
-                                </span>
-                            </td>
-                            <td class="px-5 py-3">-</td>
-                        </tr>
-
-                        <!-- Row 10 -->
-                        <tr class="bg-gray-50 border-t">
-                            <td class="px-5 py-3">DS-313</td>
-                            <td class="px-5 py-3">Statistical Foundations Of Data Science</td>
-                            <td class="px-5 py-3">Dr. Sameer</td>
-                            <td class="px-5 py-3">DE</td>
-                            <td class="px-5 py-3">C</td>
-                            <td class="px-5 py-3">3</td>
-                            <td class="px-5 py-3">3-0-0-3</td>
-                            <td class="px-5 py-3">
-                                <span
-                                    class="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-xs font-medium px-3 py-1">
-                                    Pending
-                                </span>
-                            </td>
-                            <td class="px-5 py-3">-</td>
-                        </tr>
-
-                        <!-- Row 11 -->
-                        <tr class="border-t">
-                            <td class="px-5 py-3">CS-102</td>
-                            <td class="px-5 py-3">Data Structures and Algorithms</td>
-                            <td class="px-5 py-3">Dr. John Doe</td>
-                            <td class="px-5 py-3">IC</td>
-                            <td class="px-5 py-3">B</td>
-                            <td class="px-5 py-3">4</td>
-                            <td class="px-5 py-3">3-1-2-4</td>
-                            <td class="px-5 py-3">
-                                <span
-                                    class="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-xs font-medium px-3 py-1">
-                                    Pending
-                                </span>
-                            </td>
-                            <td class="px-5 py-3">-</td>
-                        </tr>
-
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Footer Note -->
-            <div class="px-5">
-                <div class="mt-5 rounded-lg bg-yellow-100 text-yellow-900 text-sm p-4">
-                    For DC (discipline core) courses, status is automatically accepted as these are compulsory;
-                    instructors still need to update status in this case.
-                </div>
-            </div>
-
-            <!-- Submit Section -->
-            <div class="flex items-center justify-between px-5 py-6">
-                <p class="text-red-500 font-medium">Fill all priorities before submitting.</p>
-                <button id="submitBtn" class="bg-gray-800 text-white px-5 py-2 rounded-lg hover:bg-black">
-                    Submit
-                </button>
-            </div>
-        </div>
+    <!-- Header -->
+    <div class="mb-5 flex items-center justify-between">
+      <div>
+        <h1 class="text-3xl font-bold">Course Summary</h1>
+        <p class="text-sm text-gray-600 mt-1">
+          Review the current pre‑registration status for one selected course per slot for this semester.
+        </p>
+      </div>
+      <span class="inline-flex items-center rounded-full bg-blue-100 text-blue-800 text-xs font-medium px-3 py-1">
+        Semester {{ sem_display }}
+      </span>
     </div>
 
-    <!-- Confirmation Modal -->
-    <div id="confirmModal" class="fixed inset-0 hidden justify-center items-center bg-black/60 z-50">
-        <div class="bg-white rounded-2xl shadow-lg w-[420px] p-6">
-            <h2 class="text-xl font-bold mb-2">Confirm Submission</h2>
-            <p class="text-red-500 mb-4">
-                You will not be able to edit your course priorities for this semester after this.
-                Are you sure you'd like to proceed?
-            </p>
-            <div class="flex justify-between">
-                <button id="backBtn" class="bg-gray-400 text-white px-4 py-2 rounded-lg hover:bg-gray-500">Back</button>
-                <button id="proceedBtn"
-                    class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">Proceed</button>
-            </div>
-        </div>
+    <!-- PF info -->
+    <div class="mb-3 text-sm text-gray-700">
+      Pass/Fail credits used: <span class="font-semibold" id="pfUsed">{{ pf_total }}</span> / 9
+    </div>
+    <div class="mb-4 text-xs text-gray-500">
+      Changes to Pass/Fail are staged locally until Update is pressed. Approved courses cannot be set to P/F.
     </div>
 
-    <!-- Script -->
-    <script>
-        // Open modal on submit
-        document.getElementById('submitBtn').addEventListener('click', () => {
-            const m = document.getElementById('confirmModal');
-            m.classList.remove('hidden');
-            m.classList.add('flex');
-        });
+    <!-- Card -->
+    <div class="bg-white rounded-2xl shadow">
 
-        // Close modal
-        document.getElementById('backBtn').addEventListener('click', () => {
-            document.getElementById('confirmModal').classList.add('hidden');
-        });
+      <!-- Scrollable table wrapper to avoid clipping -->
+      <div class="rounded-2xl overflow-x-auto">
+        <table class="w-full text-left border-collapse table-fixed min-w-[1050px]">
+          <thead>
+            <tr class="bg-gray-50 text-gray-700">
+              <th class="px-5 py-3 text-sm font-semibold w-24">Course Code</th>
+              <th class="px-5 py-3 text-sm font-semibold w-[260px]">Course Name</th>
+              <th class="px-5 py-3 text-sm font-semibold w-[220px]">Instructor</th>
+              <th class="px-5 py-3 text-sm font-semibold w-20">Type</th>
+              <th class="px-5 py-3 text-sm font-semibold w-12">Slot</th>
+              <th class="px-5 py-3 text-sm font-semibold w-16">Credits</th>
+              <th class="px-5 py-3 text-sm font-semibold w-20">LTPC</th>
+              <th class="px-5 py-3 text-sm font-semibold min-w-[140px]">Status</th>
+              <th class="px-5 py-3 text-sm font-semibold min-w-[160px]">Pass/Fail</th>
+            </tr>
+          </thead>
+          <tbody class="text-gray-900">
 
-        // Proceed navigation
-        document.getElementById('proceedBtn').addEventListener('click', () => {
-            window.location.href = '/thanku';
-        });
-    </script>
+            {% if enrollments %}
+              {% for sc in enrollments %}
+                {% with course=sc.course %}
+                <tr class="{% cycle '' 'bg-gray-50' %} border-t"
+                    data-sc-id="{{ sc.id }}"
+                    data-credits="{{ course.credits }}"
+                    {% if sc.status == 'ENR' %}data-approved="1"{% else %}data-approved="0"{% endif %}
+                    {% if sc.is_pass_fail %}data-current-pf="1"{% else %}data-current-pf="0"{% endif %}>
+
+                  <td class="px-5 py-3 whitespace-nowrap">{{ course.code }}</td>
+
+                  <!-- Wrap long names to next line -->
+                  <td class="px-5 py-3 whitespace-normal break-words">{{ course.name }}</td>
+
+                  <td class="px-5 py-3 whitespace-normal break-words">
+                    {% with facs=course.faculties.all %}
+                      {% if facs %}
+                        {% for f in facs %}
+                          {{ f.first_name }}{% if f.last_name %} {{ f.last_name }}{% endif %}{% if not forloop.last %}, {% endif %}
+                        {% endfor %}
+                      {% else %}
+                        —
+                      {% endif %}
+                    {% endwith %}
+                  </td>
+
+                  <td class="px-5 py-3 whitespace-nowrap">
+                    {% if sc.type and sc.type != "ALL" %}
+                      {{ sc.type }}
+                    {% else %}
+                      {% with cb=course.coursebranch_set.all %}
+                        {% if cb and cb.0 and cb.0.categories.all %}
+                          {{ cb.0.categories.all.0.code }}
+                        {% else %}
+                          —
+                        {% endif %}
+                      {% endwith %}
+                    {% endif %}
+                  </td>
+
+                  <td class="px-5 py-3 whitespace-nowrap">{{ course.slot }}</td>
+                  <td class="px-5 py-3 whitespace-nowrap">{{ course.credits }}</td>
+                  <td class="px-5 py-3 whitespace-nowrap">{{ course.LTPC }}</td>
+
+                  <td class="px-5 py-3">
+                    {% if sc.status == "ENR" %}
+                      <span class="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1">Approved</span>
+                    {% elif sc.status == "PND" %}
+                      <span class="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-xs font-medium px-3 py-1">Pending at Instructor</span>
+                    {% elif sc.status == "DRP" %}
+                      <span class="inline-flex items-center rounded-full bg-red-100 text-red-700 text-xs font-medium px-3 py-1">Rejected</span>
+                    {% else %}
+                      <span class="inline-flex items-center rounded-full bg-gray-100 text-gray-700 text-xs font-medium px-3 py-1">{{ sc.get_status_display|default:"—" }}</span>
+                    {% endif %}
+                  </td>
+
+                  <!-- PF column with guaranteed width and full-width button -->
+                  <td class="px-5 py-3">
+                    <button type="button"
+                            class="w-full px-3 py-1 rounded text-white bg-gray-800 hover:bg-black border border-gray-800 inline-flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-400"
+                            data-action="toggle-pf">
+                      {% if sc.is_pass_fail %}Unset P/F{% else %}Set P/F{% endif %}
+                    </button>
+                    <div class="text-[11px] mt-1 text-gray-600" data-pf-hint></div>
+                  </td>
+
+                </tr>
+                {% endwith %}
+              {% endfor %}
+            {% else %}
+              <tr class="border-t">
+                <td class="px-5 py-6 text-center text-gray-500" colspan="9">
+                  No pre‑registrations yet for this semester.
+                </td>
+              </tr>
+            {% endif %}
+
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Footer actions -->
+      <div class="flex items-center justify-between px-5 py-4">
+        <div class="text-sm">
+          Staged P/F changes: <span id="stagedCount" class="font-semibold">0</span>
+        </div>
+        <div class="flex gap-3">
+    <a href="{% url 'students_dashboard' %}" 
+      class="px-5 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700">
+        Home
+      </a>
+      <button id="applyBtn" type="button"
+              class="px-5 py-2 rounded-lg bg-gray-800 text-white hover:bg-black disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled>
+        Update
+      </button>
+    </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirmation Modal -->
+  <div id="confirmModal" class="fixed inset-0 hidden justify-center items-center bg-black/60 z-50 pointer-events-none">
+    <div class="bg-white rounded-2xl shadow-lg w-[520px] p-6 pointer-events-auto">
+      <h2 class="text-xl font-bold mb-2">Confirm Update</h2>
+      <p class="text-red-600 text-sm mb-4">
+        Pass/Fail updates can’t be undone. Proceed to apply the staged changes?
+      </p>
+      <div class="border rounded bg-gray-50 p-3 text-sm mb-4 max-h-56 overflow-auto">
+        <div id="changeList"></div>
+      </div>
+      <div class="flex justify-between">
+        <button id="cancelModal" type="button" class="px-4 py-2 rounded bg-gray-300 text-gray-800 hover:bg-gray-400">Back</button>
+        <form id="applyForm" method="post" action="{% url 'apply_pf_changes' %}">
+          {% csrf_token %}
+          <input type="hidden" name="payload" id="changesPayload">
+          <button type="submit" class="px-5 py-2 rounded bg-green-600 text-white hover:bg-green-700">Apply</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const modal = document.getElementById("confirmModal");
+    let pfUsed = parseInt(document.getElementById("pfUsed").textContent || "0", 10) || 0;
+    const staged = {};
+
+    function setBtnStyle(btn, variant) {
+      btn.className = "w-full px-3 py-1 rounded inline-flex items-center justify-center border focus:outline-none focus:ring-2 focus:ring-offset-1 transition";
+      if (variant === "disabled") {
+        btn.classList.add("bg-gray-300","text-gray-600","border-gray-300","cursor-not-allowed");
+      } else if (variant === "on") {
+        btn.classList.add("bg-purple-600","text-white","border-purple-600","hover:bg-purple-700","focus:ring-purple-400");
+      } else {
+        btn.classList.add("bg-gray-800","text-white","border-gray-800","hover:bg-black","focus:ring-gray-400");
+      }
+    }
+
+    function syncRow(row) {
+      const btn = row.querySelector('[data-action="toggle-pf"]');
+      const hint = row.querySelector('[data-pf-hint]');
+      const approved = row.getAttribute("data-approved") === "1";
+      const currentPF = row.getAttribute("data-current-pf") === "1";
+      const scId = row.getAttribute("data-sc-id");
+      const credits = parseInt(row.getAttribute("data-credits") || "0", 10) || 0;
+
+      const stagedEntry = staged[scId];
+      const effectivePF = stagedEntry ? stagedEntry.toPF : currentPF;
+
+      if (approved) {
+        btn.textContent = effectivePF ? "Unset P/F" : "Set P/F";
+        setBtnStyle(btn, "disabled");
+        if (hint) hint.textContent = "Approved; P/F cannot be changed.";
+        return;
+      }
+
+      let preview = pfUsed;
+      if (!currentPF && effectivePF) preview += credits;
+      if (currentPF && !effectivePF) preview -= credits;
+
+      if (effectivePF) {
+        btn.textContent = "Unset P/F";
+        setBtnStyle(btn, "on");
+      } else {
+        btn.textContent = "Set P/F";
+        setBtnStyle(btn, "off");
+      }
+
+      if (hint) {
+        hint.textContent = (!effectivePF && preview > 9) ? `Would exceed 9 credits (→ ${preview}).` : "";
+      }
+    }
+
+    function refreshAll() {
+      document.querySelectorAll("tbody tr[data-sc-id]").forEach(syncRow);
+      const count = Object.keys(staged).length;
+      document.getElementById("stagedCount").textContent = count;
+      document.getElementById("applyBtn").disabled = count === 0;
+    }
+
+    document.querySelectorAll('tbody tr[data-sc-id] [data-action="toggle-pf"]').forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        const row = e.currentTarget.closest("tr[data-sc-id]");
+        const scId = row.getAttribute("data-sc-id");
+        const approved = row.getAttribute("data-approved") === "1";
+        if (approved) return;
+
+        const currentPF = row.getAttribute("data-current-pf") === "1";
+        const credits = parseInt(row.getAttribute("data-credits") || "0", 10) || 0;
+
+        const stagedEntry = staged[scId];
+        const effectivePF = stagedEntry ? stagedEntry.toPF : currentPF;
+        const nextPF = !effectivePF;
+
+        let preview = pfUsed;
+        if (stagedEntry) {
+          if (!currentPF && stagedEntry.toPF) preview -= credits;
+          if (currentPF && !stagedEntry.toPF) preview += credits;
+        }
+        if (!currentPF && nextPF) preview += credits;
+        if (currentPF && !nextPF) preview -= credits;
+
+        if (!currentPF && nextPF && preview > 9) {
+          const hint = row.querySelector('[data-pf-hint]');
+          if (hint) hint.textContent = `Cannot exceed 9 P/F credits (→ ${preview}).`;
+          return;
+        }
+
+        if (nextPF === currentPF) {
+          delete staged[scId];
+        } else {
+          staged[scId] = { toPF: nextPF, credits: credits, code: row.children[0].textContent.trim() };
+        }
+
+        refreshAll();
+      });
+    });
+
+    document.getElementById("applyBtn").addEventListener("click", () => {
+      const entries = Object.entries(staged);
+      if (entries.length === 0) return;
+
+      const list = document.getElementById("changeList");
+      list.innerHTML = "";
+
+      let preview = pfUsed;
+      entries.forEach(([scId, info]) => {
+        const row = document.querySelector(`tr[data-sc-id="${scId}"]`);
+        const currentPF = row.getAttribute("data-current-pf") === "1";
+        if (!currentPF && info.toPF) preview += info.credits;
+        if (currentPF && !info.toPF) preview -= info.credits;
+
+        const div = document.createElement("div");
+        div.textContent = `${info.code}: ${currentPF ? 'Unset' : 'Set'} P/F`;
+        list.appendChild(div);
+      });
+
+      const totalLine = document.createElement("div");
+      totalLine.className = "mt-2 text-gray-700";
+      totalLine.textContent = `P/F total after update: ${preview} / 9`;
+      list.appendChild(totalLine);
+
+      const payload = entries.map(([scId, info]) => ({ sc_id: scId, to_pf: info.toPF }));
+      document.getElementById("changesPayload").value = JSON.stringify({ changes: payload });
+
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+      modal.classList.remove("pointer-events-none");
+    });
+
+    document.getElementById("cancelModal").addEventListener("click", () => {
+      modal.classList.add("hidden");
+      modal.classList.add("pointer-events-none");
+    });
+
+    refreshAll();
+  </script>
 </body>
-
 </html>

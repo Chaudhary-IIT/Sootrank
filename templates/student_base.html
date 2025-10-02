@@ -78,7 +78,6 @@
                         <ul class="dropdown-menu" aria-labelledby="regDrop">
                             <li><a class="dropdown-item" href="{% url 'prereg_page' %}">Pre-Registration</a></li>
                             <li><a class="dropdown-item" href="{% url 'check_status_page' %}">Check Status</a></li>
-                            <li><a class="dropdown-item" href="{% url 'update_reg_page' %}">Update Registration</a></li>
                         </ul>
                     </li>
 
@@ -95,18 +94,19 @@
                     </li>
 
                     <!-- Quick links -->
-                    <li class="nav-item">
-                        <a class="nav-link{% block nav_attendance_active %}{% endblock %}" href="#">Attendance</a>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle{% block nav_quick_links_active %}{% endblock %}" href="#"
+                            id="resDrop" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            Quick Links
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="resDrop">
+                            <li><a class="dropdown-item" href="#">Attendance</a></li>
+                            <li><a class="dropdown-item" href="#">Fee Status</a></li>
+                            <li><a class="dropdown-item" href="#">Time Table</a></li>
+                            <li><a class="dropdown-item" href="https://academics.iitmandi.ac.in/calendar">Academic Calendar</a></li>
+                        </ul>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link{% block nav_fees_active %}{% endblock %}" href="#">Fee Status</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link{% block nav_timetable_active %}{% endblock %}" href="#">Time Table</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link{% block nav_calendar_active %}{% endblock %}" href="https://academics.iitmandi.ac.in/calendar">Academic Calendar</a>
-                    </li>
+
                 </ul>
 
                 <!-- Right Utilities -->

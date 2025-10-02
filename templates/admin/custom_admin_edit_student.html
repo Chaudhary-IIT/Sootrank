@@ -33,7 +33,8 @@
 
     <div class="form-section">
         <h2 class="mb-4 text-primary">Edit Student Details</h2>
-        <form method="post" enctype="multipart/form-data" action="{% url 'custom_admin_edit_student' student.roll_no %}">
+        <form method="post" enctype="multipart/form-data"
+            action="{% url 'custom_admin_edit_student' student.roll_no %}">
             {% csrf_token %}
             <div class="row g-3">
                 <div class="col-md-6">
@@ -58,14 +59,31 @@
                 </div>
                 <div class="col-md-6">
                     <label for="department" class="form-label">Department</label>
-                    <input type="text" class="form-control" id="department" name="department"
-                        value="{{ student.department }}" required />
+                    <select class="form-select" id="department" name="department" required>
+                        <option value="" {% if not student or not student.department %}selected{% endif %}>Choose...
+                        </option>
+                        {% for dept in departments %}
+                        <option value="{{ dept.id }}" {% if student and student.department and student.department.id == dept.id %}selected{% endif %}>
+                            {{ dept.code }} - {{ dept.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
                 </div>
+
                 <div class="col-md-6">
                     <label for="branch" class="form-label">Branch</label>
-                    <input type="text" class="form-control" id="branch" name="branch" value="{{ student.branch }}"
-                        required />
+                    <select class="form-select" id="branch" name="branch" required>
+                        <option value="" {% if not student or not student.branch %}selected{% endif %}>Choose...
+                        </option>
+                        {% for br in branches %}
+                        <option value="{{ br.id }}" {% if student and student.branch and student.branch.id == br.id %}selected{% endif %}>
+                            {{ br.get_name_display }}
+                        </option>
+                        {% endfor %}
+                    </select>
                 </div>
+
+
                 <div class="col-md-6">
                     <label for="mobile_no" class="form-label">Mobile Number</label>
                     <input type="text" class="form-control" id="mobile_no" name="mobile_no"

@@ -12,7 +12,7 @@
             <i class="fa-solid fa-chalkboard-teacher fa-3x text-primary"></i>
         </div>
         <div>
-            <h2 class="fs-4 fw-semibold mb-1">{{faculty.first_name}} {{faculty.last_name}}</h2>
+            <h2 class="fs-4 fw-semibold mb-1">{{faculty.first_name}} {{ faculty.last_name|default_if_none:"" }}</h2>
             <p class="mb-1">Department: {{faculty.department}}</p>
             <p class="mb-1">Email: {{faculty.email_id}}</p>
             <a href="{%url 'faculty_edit_profile' %}" class="btn btn-outline-primary btn-sm">
@@ -27,9 +27,9 @@
     <div class="card-body p-4">
         <h2 class="fs-5 fw-semibold mb-3">📚 Course Management</h2>
         <div class="d-flex gap-3 flex-wrap">
-            <a class="btn btn-primary" href="{%url 'course_request'%}">Course Request</a>
-            <a class="btn btn-secondary" href="{%url 'view_courses'%}">View Courses</a>
-            <a class="btn btn-outline-primary" href="{%url 'update_courses'%}">Update Course Details</a>
+            <a class="btn btn-primary" href="{%url 'instructor_requests'%}">Course Request</a>
+            <a class="btn btn-secondary" href="{%url 'instructor_courses'%}">View Courses</a>
+            <a class="btn btn-outline-primary" href="#">Update Course Details</a>
         </div>
     </div>
 </div>

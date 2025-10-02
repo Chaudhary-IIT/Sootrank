@@ -1,5 +1,5 @@
 from django import forms  
-from .models import Student, Faculty
+from .models import Branch, Department, Student, Faculty
 
 class StudentEditForm(forms.ModelForm):
     class Meta:
@@ -37,3 +37,15 @@ class FacultyEditForm(forms.ModelForm):
         # Make mobile_no and profile_image optional in the form
         self.fields["mobile_no"].required = False
         self.fields["profile_image"].required = False
+
+# class StudentForm(forms.ModelForm):
+#     class Meta:
+#         model = Student
+#         fields = ["first_name","last_name","email_id","roll_no","department","branch","mobile_no","password","profile_image"]
+#         widgets = {
+#             "password": forms.PasswordInput(render_value=False),
+#         }
+
+#     # Optional: order dropdowns
+#     department = forms.ModelChoiceField(queryset=Department.objects.all().order_by("code"))
+#     branch = forms.ModelChoiceField(queryset=Branch.objects.all().order_by("name"))

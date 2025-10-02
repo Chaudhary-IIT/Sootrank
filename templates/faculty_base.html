@@ -17,7 +17,7 @@
     <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom shadow-sm">
         <div class="container">
             <!-- Brand -->
-            <a class="navbar-brand fw-semibold d-flex align-items-center gap-2" href="#">
+            <a class="navbar-brand fw-semibold d-flex align-items-center gap-2" href="{% url 'faculty_dashboard' %}">
                 <i class="fa-solid fa-chalkboard-teacher text-primary"></i>
                 Faculty Dashboard
             </a>
@@ -44,11 +44,11 @@
                             <i class="fa-solid fa-book me-1"></i> Courses
                         </a>
                         <ul class="dropdown-menu" aria-labelledby="coursesDropdown">
-                            <li><a class="dropdown-item" href="{%url 'course_request'%}"><i
+                            <li><a class="dropdown-item" href="{%url 'instructor_requests'%}"><i
                                         class="fa-solid fa-plus me-2"></i>Course request</a></li>
-                            <li><a class="dropdown-item" href="{%url 'view_courses'%}"><i
+                            <li><a class="dropdown-item" href="{%url 'instructor_courses'%}"><i
                                         class="fa-solid fa-list me-2"></i>View Courses</a></li>
-                            <li><a class="dropdown-item" href="{%url 'update_courses'%}"><i
+                            <li><a class="dropdown-item" href="#"><i
                                         class="fa-solid fa-pen-to-square me-2"></i>Update Details</a></li>
                         </ul>
                     </li>
@@ -108,7 +108,7 @@
                         <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" id="profileDropdown"
                             role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="fa-solid fa-circle-user fa-lg me-2 text-primary"></i>
-                            <span>{{faculty.first_name}} {{faculty.last_name}}</span>
+                            <span>{{faculty.first_name}}  {{ faculty.last_name|default_if_none:"" }}</span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="profileDropdown">
                             <li><a class="dropdown-item" href="{%url 'faculty_profile'%}"><i
@@ -118,8 +118,12 @@
                             <li>
                                 <hr class="dropdown-divider">
                             </li>
-                            <li><a class="dropdown-item text-danger" href="#"><i
-                                        class="fa-solid fa-right-from-bracket me-2"></i>Logout</a></li>
+                            <li><form method="post" action="{% url 'logout' %}">
+                                    {% csrf_token %}
+                                    <button class="dropdown-item text-danger">
+                                        <i class="fa-solid fa-right-from-bracket me-2"></i> Logout
+                                    </button>
+                                </form></li>
                         </ul>
                     </li>
                 </ul>

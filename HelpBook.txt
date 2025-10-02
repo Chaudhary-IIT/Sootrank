@@ -32,7 +32,7 @@ python manage.py runserver
 # Create a PostgreSQL database (through pgAdmin or terminal):
 
 CREATE DATABASE sootrank_db;
-CREATE USER sootrank_user WITH PASSWORD 'yourpassword';
+CREATE USER sootrank_user WITH PASSWORD 'YO123#yo';
 ALTER ROLE sootrank_user SET client_encoding TO 'utf8';
 ALTER ROLE sootrank_user SET default_transaction_isolation TO 'read committed';
 ALTER ROLE sootrank_user SET timezone TO 'UTC';
@@ -48,3 +48,21 @@ python manage.py createsuperuser
 
 ---------------------------------------------------------------------------------------------------------------------
 
+# Running Scripts
+
+
+python manage.py shell
+import sys
+sys.path.append("Sootrank/scripts")
+import orm_scripts
+orm_scripts.run()
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+# Fix Permission For Database on PostgreSQL
+
+psql -U postgres -d sootrank_db
+
+GRANT ALL PRIVILEGES ON DATABASE sootrank_db TO sootrank_user;
+GRANT ALL ON SCHEMA public TO sootrank_user;
+ALTER USER sootrank_user WITH SUPERUSER;

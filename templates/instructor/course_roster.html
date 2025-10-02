@@ -1,0 +1,77 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>{{ course.code }} — Roster ({{ semester }})</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-gray-100">
+  <!-- Header -->
+  <header class="bg-white shadow">
+    <div class="max-w-6xl mx-auto px-4 py-5 flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold">{{ course.code }} — {{ course.name }}</h1>
+        <p class="text-sm text-gray-600">
+          Viewing: {{ semester }} • Slot {{ course.slot }} • Credits {{ course.credits }} • LTPC {{ course.LTPC }}
+        </p>
+      </div>
+      <a href="{% url 'instructor_courses' %}" class="text-sm text-blue-700 hover:underline">Back to courses</a>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="max-w-6xl mx-auto px-4 py-8 space-y-6">
+    <!-- Summary -->
+    <div class="bg-white rounded-2xl shadow p-5 flex items-center justify-between">
+      <div class="text-sm text-gray-700">
+        All enrolled students across semesters. Each row shows the student’s semester at enrollment time.
+      </div>
+      <div class="text-sm">
+        <span class="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1">
+          Enrolled rows: {{ enrollments|length }}
+        </span>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="bg-white rounded-2xl shadow overflow-x-auto">
+      <table class="w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-gray-50 text-gray-700">
+            <th class="px-5 py-3 text-sm font-semibold">#</th>
+            <th class="px-5 py-3 text-sm font-semibold">Roll No</th>
+            <th class="px-5 py-3 text-sm font-semibold">Student</th>
+            <th class="px-5 py-3 text-sm font-semibold">Semester</th>
+            <th class="px-5 py-3 text-sm font-semibold">Status</th>
+          </tr>
+        </thead>
+        <tbody class="text-gray-900">
+          {% if enrollments %}
+            {% for sc in enrollments %}
+              <tr class="{% cycle '' 'bg-gray-50' %} border-t">
+                <td class="px-5 py-3 whitespace-nowrap">{{ forloop.counter }}</td>
+                <td class="px-5 py-3 whitespace-nowrap">{{ sc.student.roll_no }}</td>
+                <td class="px-5 py-3">
+                  {{ sc.student.first_name }}{% if sc.student.last_name %} {{ sc.student.last_name }}{% endif %}
+                </td>
+                <td class="px-5 py-3 whitespace-nowrap">{{ sc.semester }}</td>
+                <td class="px-5 py-3">
+                  <span class="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1">
+                    Enrolled
+                  </span>
+                </td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr class="border-t">
+              <td class="px-5 py-6 text-center text-gray-500" colspan="5">No enrolled students found.</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Assign Faculties - Sootrank Admin</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    body { background-color: #f9fafb; }
+    .form-section { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 15px rgb(0 0 0 / 0.1); margin: 40px auto; max-width: 1000px; }
+    .chip { display: inline-flex; align-items: center; gap: .375rem; padding: .25rem .5rem; border-radius: 999px; background: #eef2ff; color: #1e3a8a; font-size: .9rem; margin: 0 .5rem .5rem 0; }
+    .chip .x { cursor: default; font-weight: 700; opacity: .7; }
+    .muted { color: #6b7280; }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow">
+    <div class="container">
+      <a class="navbar-brand" href="{% url 'custom_admin_home' %}">Sootrank Admin</a>
+      <a href="{% url 'custom_admin_courses' %}" class="btn btn-light ms-auto">Back to Courses</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="form-section">
+      <h2 class="mb-1 text-primary">Assign Faculties</h2>
+      <p class="text-muted mb-3">Course: <strong>{{ course.code }}</strong> — {{ course.name }}</p>
+
+      <!-- Assigned summary -->
+      <div class="mb-3">
+        <div class="d-flex align-items-center mb-2">
+          <strong class="me-2">Assigned to this course:</strong>
+          <span class="badge bg-secondary">{{ assigned_ids|length }}</span>
+        </div>
+        <div>
+          {% with any_assigned=False %}
+            {% for f in faculties %}
+              {% if f.id in assigned_ids %}
+                {% if False %}{% endif %}
+                <span class="chip" data-faculty-id="{{ f.id }}">
+                  {{ f.first_name }} {{ f.last_name }}
+                  <span class="x">•</span>
+                  <span class="muted">{{ f.department }}</span>
+                </span>
+                {% with any_assigned=True %}{% endwith %}
+              {% endif %}
+            {% endfor %}
+            {% if not assigned_ids %}
+              <span class="muted">No faculties assigned yet.</span>
+            {% endif %}
+          {% endwith %}
+        </div>
+      </div>
+
+      <!-- Search box -->
+      <div class="input-group mb-4">
+        <span class="input-group-text"><i class="fa fa-search"></i></span>
+        <input type="text" id="facultySearch" class="form-control" placeholder="Search by name, email, or department...">
+      </div>
+
+      <form method="post" action="{% url 'manage_course_faculties' course.id %}">
+        {% csrf_token %}
+
+        <div id="facultyGrid" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+          {% for f in faculties %}
+            <div class="col faculty-card">
+              <div class="form-check border rounded p-3 h-100">
+                <input class="form-check-input faculty-checkbox" type="checkbox" id="f{{ f.id }}" name="faculty_ids"
+                       value="{{ f.id }}" {% if f.id in assigned_ids %}checked{% endif %}>
+                <label class="form-check-label" for="f{{ f.id }}">
+                  <div class="fw-semibold faculty-name">{{ f.first_name }} {{ f.last_name }}</div>
+                  <div class="small text-muted faculty-email">{{ f.email_id }}</div>
+                  <div class="small faculty-dept">{{ f.department }}</div>
+                </label>
+              </div>
+            </div>
+          {% empty %}
+            <div class="col"><em>No faculty records found.</em></div>
+          {% endfor %}
+        </div>
+
+        <div class="mt-4">
+          <button type="submit" class="btn btn-primary">Save Assignments</button>
+          <a href="{% url 'custom_admin_courses' %}" class="btn btn-secondary ms-2">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+  <script>
+    // Client-side search filter
+    (function () {
+      const input = document.getElementById('facultySearch');
+      const cards = Array.from(document.querySelectorAll('#facultyGrid .faculty-card'));
+
+      function normalize(s) { return (s || '').toString().toLowerCase().trim(); }
+
+      function matches(card, q) {
+        if (!q) return true;
+        const name = card.querySelector('.faculty-name')?.textContent || '';
+        const email = card.querySelector('.faculty-email')?.textContent || '';
+        const dept = card.querySelector('.faculty-dept')?.textContent || '';
+        const hay = (name + ' ' + email + ' ' + dept).toLowerCase();
+        return hay.includes(q);
+      }
+
+      input.addEventListener('input', function () {
+        const q = normalize(this.value);
+        cards.forEach(card => {
+          card.style.display = matches(card, q) ? '' : 'none';
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

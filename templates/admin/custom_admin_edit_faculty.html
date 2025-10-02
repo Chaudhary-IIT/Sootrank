@@ -53,9 +53,20 @@
                 </div>
                 <div class="col-md-6">
                     <label for="department" class="form-label">Department</label>
-                    <input type="text" class="form-control" id="department" name="department"
-                        value="{{ faculty.department }}" required />
+                    <select class="form-select" id="department" name="department" required>
+                        <option value="" {% if not faculty or not faculty.department %}selected{% endif %}>Choose...
+                        </option>
+                        {% for dept in departments %}
+                        <option value="{{ dept.id }}" {% if faculty and faculty.department and faculty.department.id == dept.id %}selected{% endif %}>
+                            {{ dept.code }} - {{ dept.name }}
+                        </option>
+
+                        {% endfor %}
+                    </select>
+
+
                 </div>
+
                 <div class="col-md-6">
                     <label for="mobile_no" class="form-label">Mobile Number</label>
                     <input type="text" class="form-control" id="mobile_no" name="mobile_no"
