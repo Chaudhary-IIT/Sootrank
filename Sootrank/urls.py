@@ -70,9 +70,21 @@ urlpatterns = [
     path("students_dashboard/registrated_courses/", views.registered_courses, name="registered_courses"),
     path("logout/", LogoutView.as_view(next_page="login"), name="logout"),
     path("ajax/branches-json/", views.ajax_branches_json, name="ajax_branches_json"),
-    
+    #--------
+    path("instructor/<str:course_code>/roster/<str:semester>/", views.course_roster, name="course_roster"),
+    path("instructor/schema/courses/", views.instructor_schema_courses, name="view_schema_courses"),
+    path("instructor/<str:course_code>/scheme/", views.edit_assessment_scheme, name="edit_assessment_scheme"),
+    path("instructor/<str:course_code>/scheme/<int:component_id>/update/", views.update_component, name="update_component"),
+    path("instructor/<str:course_code>/scheme/<int:component_id>/delete/", views.delete_component, name="delete_component"),
+    #-----------
+    path('instructor/marks/<int:faculty_id>/', views.faculty_marks_courses, name='faculty_marks_courses'),
+    path('instructor/marks/course/<int:course_id>/', views.enter_marks, name='enter_marks'),
+    path('courses/<int:course_id>/marks/overview/', views.course_marks_overview, name='course_marks_overview'),
+    path('courses/<int:course_id>/marks/update/', views.update_mark_cell, name='update_mark_cell'),
+    path('faculty/<int:faculty_id>/courses/', views.all_courses, name='grading_courses'),
+    path('courses/<str:course_code>/grades/assign/',views.assign_grades_csv, name='assign_grades_csv'),
+    path('courses/<str:course_code>/grades/results/', views.grade_results, name='grade_results'),
 ]
-
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT) 

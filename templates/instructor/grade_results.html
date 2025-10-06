@@ -1,0 +1,94 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Grade Results — {{ course.code }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-gray-50">
+
+<header class="bg-white shadow">
+  <div class="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+    <div>
+      <h1 class="text-xl font-semibold">Grade Results</h1>
+      <p class="text-sm text-gray-600">{{ course.code }} — {{ course.name }}{% if semester %} · Semester {{ semester }}{% endif %}</p>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="{% url 'edit_assessment_scheme' course.code %}?sem={{ semester }}" class="text-sm text-blue-700 hover:underline">Edit scheme</a>
+      <a href="{% url 'assign_grades_csv' course.code %}?sem={{ semester }}" class="text-sm text-blue-700 hover:underline">Assign grades</a>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-5xl mx-auto px-4 py-6">
+
+  {% if messages %}
+    <div class="space-y-2 mb-6">
+      {% for message in messages %}
+        <div class="rounded-md px-4 py-3 text-sm
+          {% if message.tags == 'success' %} bg-green-50 text-green-800 border border-green-200
+          {% elif message.tags == 'error' %} bg-red-50 text-red-800 border border-red-200
+          {% elif message.tags == 'warning' %} bg-yellow-50 text-yellow-800 border border-yellow-200
+          {% else %} bg-blue-50 text-blue-800 border border-blue-200 {% endif %}">
+          {{ message }}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <!-- Sort controls -->
+  <div class="mb-4 flex flex-wrap items-center gap-2 text-sm">
+    <span class="text-gray-600">Sort by:</span>
+    <a class="px-2 py-1 rounded border {% if sort == 'name_desc' %}bg-gray-100{% endif %}"
+   href="?sem={{ semester }}&sort=name_desc">Name ↓</a>
+
+<a class="px-2 py-1 rounded border {% if sort == 'roll_asc' %}bg-gray-100{% endif %}"
+   href="?sem={{ semester }}&sort=roll_asc">Roll ↑</a>
+
+<a class="px-2 py-1 rounded border {% if sort == 'roll_desc' %}bg-gray-100{% endif %}"
+   href="?sem={{ semester }}&sort=roll_desc">Roll ↓</a>
+
+<a class="px-2 py-1 rounded border {% if sort == 'points_desc' %}bg-gray-100{% endif %}"
+   href="?sem={{ semester }}&sort=points_desc">Points ↓</a>
+
+<a class="px-2 py-1 rounded border {% if sort == 'points_asc' %}bg-gray-100{% endif %}"
+   href="?sem={{ semester }}&sort=points_asc">Points ↑</a>
+
+<a class="px-2 py-1 rounded border {% if sort == 'letter_asc' %}bg-gray-100{% endif %}"
+   href="?sem={{ semester }}&sort=letter_asc">Letter ↑</a>
+
+<a class="px-2 py-1 rounded border {% if sort == 'letter_desc' %}bg-gray-100{% endif %}"
+   href="?sem={{ semester }}&sort=letter_desc">Letter ↓</a>
+  </div>
+
+  <div class="bg-white rounded-xl shadow overflow-x-auto">
+    <table class="min-w-full divide-y divide-gray-200">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Roll No</th>
+          <th class="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Name</th>
+          <th class="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Letter</th>
+          <th class="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Points</th>
+          <th class="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Outcome</th>
+        </tr>
+      </thead>
+      <tbody class="bg-white divide-y divide-gray-100">
+        {% for r in rows %}
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-2 text-sm font-medium text-gray-900">{{ r.roll }}</td>
+            <td class="px-4 py-2 text-sm text-gray-800">{{ r.name }}</td>
+            <td class="px-4 py-2 text-sm">{{ r.letter }}</td>
+            <td class="px-4 py-2 text-sm">{{ r.points }}</td>
+            <td class="px-4 py-2 text-sm">{{ r.outcome }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="px-4 py-6 text-center text-sm text-gray-600">No grades to display.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</main>
+</body>
+</html>

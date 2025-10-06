@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     "django_extensions",
     'Registration',
+    'widget_tweaks',
 ]
 
 MIDDLEWARE = [
@@ -83,7 +84,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'sootrank_db',
         'USER': 'sootrank_user',
-        'PASSWORD': 'yourpassword',
+        'PASSWORD': 'YO123#yo',
         'HOST': 'localhost',
         'PORT': '5432',
     }
@@ -137,4 +138,4 @@ STATICFILES_DIRS=[
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 MEDIA_URL = "/media/"          
-MEDIA_ROOT = BASE_DIR / "media" 
+MEDIA_ROOT = BASE_DIR / "media"
