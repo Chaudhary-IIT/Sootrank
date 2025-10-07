@@ -202,3 +202,20 @@ class ProgramRequirement(models.Model):
     class Meta:
         unique_together = ("branch", "category")
 
+class AssessmentComponent(models.Model):
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="assessment_components")  # scope by course
+    name = models.CharField(max_length=64)  # e.g., "Quiz 1", "Midsem", "Endsem", "Lab"
+    weight = models.DecimalField(max_digits=5, decimal_places=2)  # percent weight like 10.00, 30.00
+    max_marks = models.DecimalField(max_digits=6, decimal_places=2, default=100)
+
+    class Meta:
+        unique_together = ("course", "name")
+
+class AssessmentScore(models.Model):
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="assessment_scores")
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="assessment_scores")
+    component = models.ForeignKey(AssessmentComponent, on_delete=models.CASCADE, related_name="scores")
+    marks_obtained = models.DecimalField(max_digits=6, decimal_places=2)
+
+    class Meta:
+        unique_together = ("student", "course", "component")

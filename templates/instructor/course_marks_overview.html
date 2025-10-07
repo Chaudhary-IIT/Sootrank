@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Marks Overview — {{ course.code }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    .table thead th { vertical-align: bottom; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    .cell-w { min-width: 120px; }
+    .roll { font-weight: 600; letter-spacing: .3px; }
+    .sticky-actions { position: sticky; top: 0; z-index: 5; }
+    .editable { cursor: pointer; background-color: #fffef5; }
+    .editing { outline: 2px solid #ffc107; }
+    .small-muted { font-size: .875rem; color: #6c757d; }
+  </style>
+</head>
+<body class="bg-light">
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+  <div class="container">
+    <a class="navbar-brand" href="#">Marks Overview</a>
+    <span class="navbar-text ms-3">{{ course.code }} — {{ course.name }}</span>
+    <a class="btn btn-outline-light btn-sm ms-auto" href="javascript:history.back()">Back</a>
+  </div>
+</nav>
+
+<main class="container py-4">
+  <div class="d-flex align-items-end justify-content-between mb-3">
+    <div>
+      <h1 class="h4 mb-1">{{ course.code }} — {{ course.name }}</h1>
+      <div class="text-muted">All uploaded marks by student and component</div>
+    </div>
+    <div class="d-flex gap-2">
+      <span class="small-muted">Click a mark to edit, Enter to save, Esc to cancel</span>
+    </div>
+  </div>
+
+  <div class="input-group mb-3">
+    <span class="input-group-text">🔍</span>
+    <input id="search" type="text" class="form-control" placeholder="Filter by Roll No or Name..." />
+  </div>
+
+  <div id="alert" class="alert d-none" role="alert"></div>
+
+  <div class="table-responsive">
+    <table class="table table-bordered table-striped align-middle">
+      <thead class="table-light sticky-actions">
+        <tr>
+          <th>Roll No</th>
+          <th>Student</th>
+          {% for comp in components %}
+            <th class="cell-w">
+              {{ comp.name }}<br/>
+              <small class="text-muted">
+                Max {{ comp.max_marks }} · Wt {{ comp.weight|default_if_none:1 }}
+              </small>
+            </th>
+          {% endfor %}
+          <th>Total<br/><small class="text-muted">Max {{ max_total }}</small></th>
+          <th>%</th>
+          <th>Percentile</th>
+        </tr>
+      </thead>
+      <tbody id="rows">
+        {% for r in rows %}
+          <tr data-student-id="{{ r.student.id }}">
+            <td class="roll mono">{{ r.student.roll_no|upper }}</td>
+            <td>{{ r.student.first_name }} {{ r.student.last_name|default_if_none:"" }}</td>
+
+            {% for p in r.pairs %}
+              <td class="mono editable"
+                  data-component-id="{{ p.component_id }}"
+                  data-max="{{ p.max }}"
+                  data-weight="{{ p.component.weight|default_if_none:1 }}"
+                  data-value="{% if p.value is not None %}{{ p.value }}{% endif %}">
+                {% if p.value is not None %}
+                  {{ p.value|floatformat:2 }}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+            {% endfor %}
+
+            <td class="mono fw-semibold total-cell">
+              {% if r.total is not None %}{{ r.total|floatformat:2 }}{% else %}—{% endif %}
+            </td>
+            <td class="mono">
+              {% if r.percentage is not None %}{{ r.percentage|floatformat:2 }}{% else %}—{% endif %}
+            </td>
+            <td class="mono">
+              {% if r.percentile is not None %}{{ r.percentile|floatformat:2 }}{% else %}—{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  const input = document.getElementById('search');
+  const alertBox = document.getElementById('alert');
+
+  function showAlert(kind, msg){
+    alertBox.className = `alert alert-${kind}`;
+    alertBox.textContent = msg;
+    alertBox.classList.remove('d-none');
+    clearTimeout(showAlert._t);
+    showAlert._t = setTimeout(()=>alertBox.classList.add('d-none'), 3000);
+  }
+
+  if (input) {
+    input.addEventListener('input', function(){
+      const q = this.value.toLowerCase();
+      document.querySelectorAll('#rows tr').forEach(tr => {
+        tr.style.display = tr.innerText.toLowerCase().includes(q) ? '' : 'none';
+      });
+    });
+  }
+
+  let editing = null;
+  document.querySelectorAll('#rows td.editable').forEach(td => {
+    td.addEventListener('click', () => startEdit(td));
+  });
+
+  function startEdit(td){
+    if (editing) endEdit(false);
+    const current = td.dataset.value || '';
+    const max = td.dataset.max || '';
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.step = '0.01';
+    input.min = '0';
+    if (max !== '') input.max = max;
+    input.className = 'form-control form-control-sm';
+    input.value = current;
+    td.classList.add('editing');
+    td.innerHTML = '';
+    td.appendChild(input);
+    input.focus();
+    input.select();
+    editing = {td, initial: current};
+
+    input.addEventListener('keydown', (e)=>{
+      if (e.key === 'Enter') endEdit(true);
+      if (e.key === 'Escape') endEdit(false);
+    });
+    input.addEventListener('blur', ()=> endEdit(true));
+  }
+
+  function endEdit(commit){
+    if (!editing) return;
+    const {td, initial} = editing;
+    const input = td.querySelector('input');
+    const newVal = input ? input.value.trim() : initial;
+    td.classList.remove('editing');
+
+    if (!commit || newVal === initial){
+      td.innerHTML = renderCell(initial);
+      editing = null;
+      return;
+    }
+
+    const max = td.dataset.max ? parseFloat(td.dataset.max) : null;
+    if (newVal !== '' && (isNaN(parseFloat(newVal)) || (max !== null && parseFloat(newVal) > max) || parseFloat(newVal) < 0)){
+      showAlert('danger', `Invalid value. Expected 0 to ${td.dataset.max}`);
+      td.innerHTML = renderCell(initial);
+      editing = null;
+      return;
+    }
+
+    const tr = td.closest('tr');
+    const studentId = tr.getAttribute('data-student-id');
+    const componentId = td.getAttribute('data-component-id');
+    const formData = new FormData();
+    formData.append('student_id', studentId);
+    formData.append('component_id', componentId);
+    formData.append('value', newVal);
+    const csrftoken = getCookie('csrftoken');
+
+    fetch("{% url 'update_mark_cell' course.id %}", {
+      method: 'POST',
+      headers: {'X-CSRFToken': csrftoken},
+      body: formData
+    }).then(r => r.json()).then(data => {
+      if (data.ok){
+        td.dataset.value = data.value || '';
+        td.innerHTML = renderCell(td.dataset.value);
+        recomputeRow(tr);
+        showAlert('success', 'Saved');
+      } else {
+        showAlert('danger', data.error || 'Save failed');
+        td.innerHTML = renderCell(initial);
+      }
+      editing = null;
+    }).catch(()=>{
+      showAlert('danger', 'Network error');
+      td.innerHTML = renderCell(initial);
+      editing = null;
+    });
+  }
+
+  function renderCell(val){
+    if (val === '' || val === null || typeof val === 'undefined') return '—';
+    const num = parseFloat(val);
+    if (isNaN(num)) return '—';
+    return num.toFixed(2);
+  }
+
+  function recomputeRow(tr){
+    // Weighted total: sum((value/max)*weight), Percentage: / sum(weights) * 100
+    let weighted = 0.0, weightSum = 0.0;
+    tr.querySelectorAll('td.editable').forEach(td => {
+      const v = parseFloat(td.dataset.value || '');
+      const max = parseFloat(td.dataset.max || '');
+      const w = parseFloat(td.dataset.weight || '1');
+      if (!isNaN(w)) weightSum += w;
+      if (!isNaN(v) && !isNaN(max) && max > 0 && !isNaN(w)){
+        weighted += (v / max) * w;
+      }
+    });
+    const totalCell = tr.querySelector('.total-cell');
+    if (totalCell){
+      totalCell.textContent = isNaN(weighted) ? '—' : weighted.toFixed(2);
+    }
+    const percentCell = tr.children[tr.children.length - 2];
+    if (percentCell && weightSum > 0){
+      const pct = weighted / weightSum * 100.0;
+      percentCell.textContent = isNaN(pct) ? '—' : pct.toFixed(2);
+    }
+
+    // Percentile across rows with rank/(n-1)*100
+    const totals = [];
+    document.querySelectorAll('#rows tr').forEach(row => {
+      const tcell = row.querySelector('.total-cell');
+      const val = tcell ? parseFloat(tcell.textContent) : NaN;
+      totals.push(isNaN(val) ? 0 : val);
+    });
+    const sorted = totals.slice().sort((a,b)=>a-b);
+    const n = sorted.length;
+
+    document.querySelectorAll('#rows tr').forEach((row) => {
+      const tcell = row.querySelector('.total-cell');
+      const val = tcell ? parseFloat(tcell.textContent) : NaN;
+      const v = isNaN(val) ? 0 : val;
+      if (n <= 1){
+        row.children[row.children.length - 1].textContent = '100.00';
+        return;
+      }
+      // lower bound index
+      let lo = 0, hi = n;
+      while (lo < hi){
+        const mid = (lo + hi) >> 1;
+        if (sorted[mid] < v) lo = mid + 1;
+        else hi = mid;
+      }
+      const pctile = lo / (n - 1) * 100.0;
+      const percentileCell = row.children[row.children.length - 1];
+      percentileCell.textContent = pctile.toFixed(2);
+    });
+  }
+
+  function getCookie(name){
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== ''){
+      const cookies = document.cookie.split(';');
+      for (let i=0; i<cookies.length; i++){
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length+1) === (name + '=')){
+          cookieValue = decodeURIComponent(cookie.substring(name.length+1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+});
+</script>
+
+</body>
+</html>

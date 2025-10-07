@@ -56,6 +56,16 @@ CATEGORIES = [
 CATEGORY_HEADERS = ["DC", "DE", "IC", "HSS", "FE", "IKS", "ISTP", "MTP"]
 HEADER_TO_CATEGORY = {h: h for h in CATEGORY_HEADERS}
 
+GRADE_BOUNDARIES = [
+    ("A", 85),
+    ("B", 75),
+    ("C", 65),
+    ("D", 55),
+    ("E", 45),
+    ("F", 0),
+]
+PASS_MIN_PERCENT = 45  # for letter-graded; PF handled by is_pass_fail
+
 
 def _compute_semester_from_roll_and_today(roll_no: str, today=None) -> int:
     if today is None:
@@ -2524,3 +2534,936 @@ def export_course_pdf(request, code):
     resp = HttpResponse(pdf_bytes, content_type="application/pdf")
     resp["Content-Disposition"] = f'attachment; filename="{fname}"'
     return resp
+# views.py (faculty, require faculty session)
+from django.forms import modelformset_factory
+from django.db.models import Sum
+
+def require_faculty(view):
+    def _w(request, *a, **k):
+        if not request.session.get("email_id"):
+            return redirect(f"{getattr(settings,'LOGIN_URL','/login/')}?next={request.path}")
+        return view(request, *a, **k)
+    return _w
+
+def instructor_schema_courses(request):
+    email_id = request.session["email_id"]
+    instructor = get_object_or_404(Faculty, email_id=email_id)
+    courses = (
+        Course.objects.filter(faculties=instructor)
+        .annotate(total_enrolled=Count("enrollments", filter=Q(enrollments__status="ENR")))
+        .order_by("code")
+        .distinct()
+    )
+    return render(request, "instructor/schema_courses.html", {
+        "instructor": instructor,
+        "courses": courses,
+    })
+# ----------------- Edit assessment scheme (no semester on component) -----------------
+
+def edit_assessment_scheme(request, course_code):
+    email = request.session["email_id"]
+    faculty = get_object_or_404(Faculty, email_id=email)
+    course = get_object_or_404(Course, code=course_code, faculties=faculty)
+
+    ComponentFormSet = modelformset_factory(
+        AssessmentComponent,
+        fields=["name", "weight", "max_marks"],
+        extra=0, can_delete=True
+    )
+    qs = AssessmentComponent.objects.filter(course=course).order_by("id")
+
+    if request.method == "POST":
+        # Add-only branch
+        if request.POST.get("intent") == "add":
+            add_name = (request.POST.get("add_name") or "").strip()
+            add_weight = request.POST.get("add_weight")
+            add_max = request.POST.get("add_max") or 100
+            if not add_name or add_weight is None:
+                messages.error(request, "Name and weight are required.")
+                return redirect(request.path)
+            AssessmentComponent.objects.update_or_create(
+                course=course, name=add_name,
+                defaults={"weight": add_weight, "max_marks": add_max},
+            )
+            messages.success(request, "Component added.")
+            return redirect(request.path)
+
+        # Save edits/deletes
+        formset = ComponentFormSet(request.POST, queryset=qs)
+        if formset.is_valid():
+            instances = formset.save(commit=False)
+
+            # Delete marked-for-deletion
+            for f in formset.deleted_forms:
+                if f.instance.pk:
+                    f.instance.delete()
+
+            # Save updates/creates, attach course
+            for inst in instances:
+                inst.course = course
+                inst.save()
+
+            total_w = AssessmentComponent.objects.filter(course=course).aggregate(s=Sum("weight"))["s"] or 0
+            if round(float(total_w), 2) != 100.0:
+                messages.warning(request, f"Total weight is {total_w}, should be 100.")
+            else:
+                messages.success(request, "Assessment scheme saved.")
+            return redirect(request.path)
+        else:
+            messages.error(request, "Please correct the errors.")
+    else:
+        formset = ComponentFormSet(queryset=qs)
+
+    return render(request, "instructor/edit_assessment_schema.html", {
+        "course": course,
+        "formset": formset,
+        "sample_headers": ["roll_no", "email"] + [c.name for c in qs],
+    })
+
+from decimal import Decimal, InvalidOperation
+
+def _canon(s: str) -> str:
+    return re.sub(r'[^a-z0-9]+','', (s or "").lower())
+
+from django.views.decorators.http import require_POST
+
+# ----------------- Update/delete single component -----------------
+
+from django.views.decorators.http import require_POST
+
+@require_POST
+def update_component(request, course_code, component_id):
+    email = request.session["email_id"]
+    faculty = get_object_or_404(Faculty, email_id=email)
+    course = get_object_or_404(Course, code=course_code, faculties=faculty)
+    comp = get_object_or_404(AssessmentComponent, id=component_id, course=course)
+    name = (request.POST.get("name") or "").strip()
+    weight = request.POST.get("weight")
+    max_marks = request.POST.get("max_marks")
+    if not name:
+        messages.error(request, "Name is required.")
+    else:
+        comp.name = name
+        if weight is not None:
+            comp.weight = weight or 0
+        if max_marks is not None:
+            comp.max_marks = max_marks or 100
+        comp.save()
+        messages.success(request, "Component updated.")
+    return redirect(reverse('edit_assessment_scheme', args=[course.code]))
+
+
+@require_POST
+def delete_component(request, course_code, component_id):
+    email = request.session["email_id"]
+    faculty = get_object_or_404(Faculty, email_id=email)
+    course = get_object_or_404(Course, code=course_code, faculties=faculty)
+    comp = get_object_or_404(AssessmentComponent, id=component_id, course=course)
+    comp.delete()
+    messages.success(request, "Component removed.")
+    return redirect(reverse('edit_assessment_scheme', args=[course.code]))
+# ----------------- Faculty course cards + enter marks -----------------
+
+def faculty_marks_courses(request, faculty_id):
+    faculty = get_object_or_404(Faculty, id=faculty_id)
+    courses = (
+        Course.objects
+        .filter(faculties=faculty)
+        .order_by('code', 'name')
+        .distinct()
+    )
+    return render(
+        request,
+        'instructor/marks_course_list.html',
+        {'faculty': faculty, 'courses': courses}
+    )
+
+def mark_field_name(student_id, comp_id):
+    return f"mark_{student_id}_{comp_id}"
+
+def enter_marks(request, course_id):
+    course = get_object_or_404(Course, id=course_id)
+
+    # Identify Faculty (for back button)
+    faculty = None
+    fid = request.GET.get('faculty_id')
+    if fid:
+        faculty = Faculty.objects.filter(id=fid).first()
+    if faculty is None:
+        faculty = course.faculties.first()
+
+    # Assessment components
+    components = list(
+        AssessmentComponent.objects.filter(course=course).order_by('id')
+    )
+
+    # Enrollments with students
+    enrollments_qs = (
+        StudentCourse.objects.filter(course=course, status='ENR')
+        .select_related('student')
+        .order_by('student__roll_no')
+    )
+    enrollments = list(enrollments_qs)
+    students = [e.student for e in enrollments]
+
+    # Existing marks map
+    existing = {}
+    if students and components:
+        for s in AssessmentScore.objects.filter(
+            course=course, student__in=students, component__in=components
+        ):
+            existing[(s.student_id, s.component_id)] = s
+
+    # Prefill baseline from DB (used for GET and as base for POST re-render)
+    prefill = {
+        mark_field_name(stu_id, comp_id): f"{s.marks_obtained}"
+        for (stu_id, comp_id), s in existing.items()
+    }
+
+    if request.method == 'POST':
+        cell_errors, to_create, to_update = [], [], []
+
+        is_upload_all = 'upload_all' in request.POST
+        is_upload_component = 'upload_component' in request.POST
+
+        import pandas as pd
+
+        # -------- Bulk upload (one file with columns: roll_no and component names) --------
+        if is_upload_all:
+            file = request.FILES.get('bulk_file')
+            if not file:
+                cell_errors.append(("File Error", "-", "No file provided"))
+            else:
+                try:
+                    df = pd.read_excel(file) if file.name.endswith(('.xls', '.xlsx')) else pd.read_csv(file)
+                    df.columns = [c.strip().lower() for c in df.columns]
+                except Exception as ex:
+                    cell_errors.append(("File Error", "-", f"Failed to parse file: {ex}"))
+                    df = None
+
+                if df is not None:
+                    if 'roll_no' not in df.columns:
+                        cell_errors.append(("File Error", "-", "Missing 'roll_no' column"))
+                    else:
+                        by_roll = {e.student.roll_no.strip().lower(): e.student for e in enrollments}
+                        for _, row in df.iterrows():
+                            roll_key = str(row['roll_no']).strip().lower()
+                            student_obj = by_roll.get(roll_key)
+                            if not student_obj:
+                                cell_errors.append((row.get('roll_no', ''), "N/A", "Not enrolled"))
+                                continue
+                            for comp in components:
+                                cname = comp.name.strip().lower()
+                                if cname not in df.columns:
+                                    continue
+                                val = row[cname]
+                                if pd.isna(val):
+                                    continue
+                                try:
+                                    val = float(val)
+                                except (ValueError, TypeError):
+                                    cell_errors.append((row.get('roll_no', ''), comp.name, "Invalid number"))
+                                    continue
+                                if val < 0 or val > comp.max_marks:
+                                    cell_errors.append((row.get('roll_no', ''), comp.name, f"Must be 0–{comp.max_marks}"))
+                                    continue
+                                obj = existing.get((student_obj.id, comp.id))
+                                if obj:
+                                    obj.marks_obtained = val
+                                    to_update.append(obj)
+                                else:
+                                    to_create.append(AssessmentScore(
+                                        student=student_obj, course=course, component=comp, marks_obtained=val
+                                    ))
+
+            if to_create:
+                AssessmentScore.objects.bulk_create(to_create, batch_size=500)
+                for obj in to_create:
+                    existing[(obj.student_id, obj.component_id)] = obj
+            if to_update:
+                AssessmentScore.objects.bulk_update(to_update, ['marks_obtained'], batch_size=500)
+
+            # Refresh prefill from DB results
+            prefill = {
+                mark_field_name(stu_id, comp_id): f"{s.marks_obtained}"
+                for (stu_id, comp_id), s in existing.items()
+            }
+
+            if cell_errors:
+                return render(request, 'instructor/enter_marks.html', {
+                    'course': course, 'components': components, 'enrollments': enrollments,
+                    'prefill': prefill, 'cell_errors': cell_errors, 'faculty': faculty
+                })
+            url = reverse('enter_marks', kwargs={'course_id': course.id})
+            if faculty:
+                url = f"{url}?faculty_id={faculty.id}"
+            return redirect(url)
+
+        # -------- Per-component upload (multiple component_csv_<id> inputs) --------
+        elif is_upload_component:
+            for comp in components:
+                file = request.FILES.get(f'component_csv_{comp.id}')
+                if not file:
+                    continue
+                try:
+                    df = pd.read_excel(file) if file.name.endswith(('.xls', '.xlsx')) else pd.read_csv(file)
+                    df.columns = [c.strip().lower() for c in df.columns]
+                except Exception as ex:
+                    cell_errors.append((comp.name, "-", f"Failed to parse file: {ex}"))
+                    continue
+                if 'roll_no' not in df.columns or 'marks' not in df.columns:
+                    cell_errors.append((comp.name, "-", "Missing roll_no or marks column"))
+                    continue
+
+                by_roll = {e.student.roll_no.strip().lower(): e.student for e in enrollments}
+                for _, row in df.iterrows():
+                    roll_key = str(row['roll_no']).strip().lower()
+                    val = row['marks']
+                    student_obj = by_roll.get(roll_key)
+                    if not student_obj:
+                        cell_errors.append((row.get('roll_no', ''), comp.name, "Not enrolled"))
+                        continue
+                    try:
+                        val = float(val)
+                    except (ValueError, TypeError):
+                        cell_errors.append((row.get('roll_no', ''), comp.name, "Invalid number"))
+                        continue
+                    if val < 0 or val > comp.max_marks:
+                        cell_errors.append((row.get('roll_no', ''), comp.name, f"Must be 0–{comp.max_marks}"))
+                        continue
+                    obj = existing.get((student_obj.id, comp.id))
+                    if obj:
+                        obj.marks_obtained = val
+                        to_update.append(obj)
+                    else:
+                        to_create.append(AssessmentScore(
+                            student=student_obj, course=course, component=comp, marks_obtained=val
+                        ))
+
+            if to_create:
+                AssessmentScore.objects.bulk_create(to_create, batch_size=500)
+                for obj in to_create:
+                    existing[(obj.student_id, obj.component_id)] = obj
+            if to_update:
+                AssessmentScore.objects.bulk_update(to_update, ['marks_obtained'], batch_size=500)
+
+            prefill = {
+                mark_field_name(stu_id, comp_id): f"{s.marks_obtained}"
+                for (stu_id, comp_id), s in existing.items()
+            }
+
+            if cell_errors:
+                return render(request, 'instructor/enter_marks.html', {
+                    'course': course, 'components': components, 'enrollments': enrollments,
+                    'prefill': prefill, 'cell_errors': cell_errors, 'faculty': faculty
+                })
+            url = reverse('enter_marks', kwargs={'course_id': course.id})
+            if faculty:
+                url = f"{url}?faculty_id={faculty.id}"
+            return redirect(url)
+
+        # -------- Manual grid --------
+        else:
+            for e in enrollments:
+                for comp in components:
+                    field = mark_field_name(e.student_id, comp.id)
+                    raw = (request.POST.get(field) or '').strip()
+                    if raw == '':
+                        continue
+                    try:
+                        val = float(raw)
+                    except ValueError:
+                        cell_errors.append((e.student.roll_no, comp.name, "Invalid number"))
+                        continue
+                    if val < 0 or val > comp.max_marks:
+                        cell_errors.append((e.student.roll_no, comp.name, f"Must be 0–{comp.max_marks}"))
+                        continue
+                    obj = existing.get((e.student_id, comp.id))
+                    if obj:
+                        obj.marks_obtained = val
+                        to_update.append(obj)
+                    else:
+                        to_create.append(AssessmentScore(
+                            student=e.student, course=course, component=comp, marks_obtained=val
+                        ))
+
+            if to_create:
+                AssessmentScore.objects.bulk_create(to_create, batch_size=500)
+                for obj in to_create:
+                    existing[(obj.student_id, obj.component_id)] = obj
+            if to_update:
+                AssessmentScore.objects.bulk_update(to_update, ['marks_obtained'], batch_size=500)
+
+            # Prefill = DB + posted values for failed cells to keep the user's input visible
+            prefill = {
+                mark_field_name(stu_id, comp_id): f"{s.marks_obtained}"
+                for (stu_id, comp_id), s in existing.items()
+            }
+            for e in enrollments:
+                for comp in components:
+                    key = mark_field_name(e.student_id, comp.id)
+                    if key in request.POST:
+                        prefill[key] = request.POST.get(key, '')
+
+            if cell_errors:
+                return render(request, 'instructor/enter_marks.html', {
+                    'course': course, 'components': components, 'enrollments': enrollments,
+                    'prefill': prefill, 'cell_errors': cell_errors, 'faculty': faculty
+                })
+
+            url = reverse('enter_marks', kwargs={'course_id': course.id})
+            if faculty:
+                url = f"{url}?faculty_id={faculty.id}"
+            return redirect(url)
+
+    # GET: show current DB values prefilled
+    return render(request, 'instructor/enter_marks.html', {
+        'course': course, 'components': components, 'enrollments': enrollments,
+        'prefill': prefill, 'cell_errors': [], 'faculty': faculty
+    })
+
+def course_marks_overview(request, course_id):
+    course = get_object_or_404(Course, id=course_id)
+
+    components = list(
+        AssessmentComponent.objects.filter(course=course).order_by('id')
+    )
+
+    enrollments = (
+        StudentCourse.objects
+        .filter(course=course, status='ENR')
+        .select_related('student')
+        .order_by('student__roll_no')
+    )
+    students = [e.student for e in enrollments]
+
+    # Scores lookup as Decimal
+    scores = {}
+    if students and components:
+        for s in AssessmentScore.objects.filter(
+            course=course, student__in=students, component__in=components
+        ):
+            try:
+                scores[(s.student_id, s.component_id)] = Decimal(str(s.marks_obtained))
+            except (InvalidOperation, TypeError):
+                scores[(s.student_id, s.component_id)] = None
+
+    # Component max and weights as Decimal
+    comp_info = []
+    total_weight = Decimal('0')
+    for c in components:
+        max_d = Decimal(str(c.max_marks))
+        # If your model lacks 'weight', replace with Decimal('1') or the appropriate field
+        w = getattr(c, 'weight', None)
+        weight_d = Decimal(str(w)) if w is not None else Decimal('1')
+        comp_info.append((c, max_d, weight_d))
+        total_weight += weight_d
+
+    # Prepare rows with weighted totals
+    rows = []
+    totals_by_student = {}
+    for e in enrollments:
+        stu = e.student
+        pairs = []
+        weighted_total = Decimal('0')
+        for comp, max_d, weight_d in comp_info:
+            val = scores.get((stu.id, comp.id))
+            # value shown as raw marks; weighted used for total
+            if val is not None and max_d > 0:
+                contrib = (val / max_d) * weight_d
+                weighted_total += contrib
+            pairs.append({
+                'component': comp,
+                'value': val,                 # raw mark
+                'max': comp.max_marks,        # for display
+                'component_id': comp.id,
+            })
+
+        totals_by_student[stu.id] = weighted_total
+
+        # Percentage relative to sum of weights
+        if total_weight > 0:
+            percentage = (weighted_total / total_weight) * Decimal('100')
+        else:
+            percentage = None
+
+        rows.append({
+            'student': stu,
+            'pairs': pairs,
+            'total': weighted_total,     # weighted total
+            'percentage': percentage,
+        })
+
+    # Percentile: rank-based, highest ~100, lowest ~0
+    all_totals = [totals_by_student[e.student.id] for e in enrollments]
+    n = len(all_totals)
+    sorted_totals = sorted(all_totals)
+
+    def percentile_rank(total_value):
+        if n == 0:
+            return None
+        if n == 1:
+            return Decimal('100')
+        # count strictly lower totals (lower bound index)
+        lo, hi = 0, n
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if sorted_totals[mid] < total_value:
+                lo = mid + 1
+            else:
+                hi = mid
+        lower = lo
+        # scale to [0, 100] with highest = 100 exactly when unique max
+        return (Decimal(lower) / Decimal(n - 1)) * Decimal('100')
+
+    for r in rows:
+        r['percentile'] = percentile_rank(r['total']) if r['total'] is not None else None
+
+    # For table header "Max total", show sum of weights (the denominator for %)
+    max_total_display = total_weight
+
+    return render(request, 'instructor/course_marks_overview.html', {
+        'course': course,
+        'components': components,
+        'rows': rows,
+        'max_total': max_total_display,   # sum of weights
+    })
+
+@require_POST
+def update_mark_cell(request, course_id):
+    # AJAX endpoint for inline edits
+    try:
+        student_id = int(request.POST.get('student_id'))
+        component_id = int(request.POST.get('component_id'))
+        raw_val = (request.POST.get('value') or '').strip()
+    except (TypeError, ValueError):
+        return HttpResponseBadRequest("Invalid parameters")
+
+    course = get_object_or_404(Course, id=course_id)
+    comp = get_object_or_404(AssessmentComponent, id=component_id, course=course)
+
+    # Validate enrollment
+    enrolled = StudentCourse.objects.filter(
+        course=course, status='ENR', student_id=student_id
+    ).exists()
+    if not enrolled:
+        return JsonResponse({'ok': False, 'error': 'Student not enrolled'}, status=400)
+
+    if raw_val == '':
+        # Treat empty as delete/unset? Here we choose to clear the score record.
+        with transaction.atomic():
+            AssessmentScore.objects.filter(
+                course=course, student_id=student_id, component_id=component_id
+            ).delete()
+        return JsonResponse({'ok': True, 'value': ''})
+
+    # Validate number and bounds
+    try:
+        val = Decimal(raw_val)
+    except InvalidOperation:
+        return JsonResponse({'ok': False, 'error': 'Invalid number'}, status=400)
+    if val < 0 or val > Decimal(str(comp.max_marks)):
+        return JsonResponse({'ok': False, 'error': f'0 to {comp.max_marks}'}, status=400)
+
+    # Upsert
+    with transaction.atomic():
+        obj, created = AssessmentScore.objects.select_for_update().get_or_create(
+            course=course, student_id=student_id, component=comp,
+            defaults={'marks_obtained': val}
+        )
+        if not created:
+            obj.marks_obtained = val
+            obj.save(update_fields=['marks_obtained'])
+
+    return JsonResponse({'ok': True, 'value': str(val)})
+
+from io import TextIOWrapper
+import csv
+from decimal import Decimal, InvalidOperation
+
+from django.conf import settings
+from django.contrib import messages
+from django.db import transaction
+from django.db.models import Q, Count
+from django.shortcuts import get_object_or_404, render, redirect
+from django.urls import reverse
+from openpyxl import load_workbook
+
+# from .models import Faculty, Course, Student, StudentCourse, AssessmentComponent, AssessmentScore
+# from .decorators import require_faculty  # ensure this exists in project
+
+def _canon(s: str) -> str:
+    import re
+    return re.sub(r'[^a-z0-9]+','', (s or "").lower())
+
+def _iter_rows_as_dicts(uploaded_file):
+    """
+    Yield rows as dicts keyed by header from CSV/XLSX/XLS.
+    """
+    name = (getattr(uploaded_file, "name", "") or "").lower()
+
+    # CSV
+    if name.endswith(".csv"):
+        text = TextIOWrapper(uploaded_file.file, encoding="utf-8", newline="")
+        reader = csv.DictReader(text)
+        for row in reader:
+            yield row
+        return
+
+    # Excel
+    if name.endswith(".xlsx") or name.endswith(".xls"):
+        wb = load_workbook(uploaded_file, data_only=True)
+        ws = wb.active  # use first sheet
+        rows = ws.iter_rows(values_only=True)
+        headers = None
+        for idx, r in enumerate(rows):
+            if idx == 0:
+                headers = [str(h or "").strip() for h in r]
+                continue
+            row = {}
+            for h, v in zip(headers, r):
+                row[h] = "" if v is None else v
+            yield row
+        return
+
+    # Fallback to CSV
+    text = TextIOWrapper(uploaded_file.file, encoding="utf-8", newline="")
+    reader = csv.DictReader(text)
+    for row in reader:
+        yield row
+
+
+def all_courses(request, faculty_id):
+    faculty = get_object_or_404(Faculty, id=faculty_id)
+
+    qs = (
+        Course.objects
+        .filter(faculties=faculty)
+        .prefetch_related('faculties')
+        .annotate(
+            enrolled_count=Count(
+                'enrollments',
+                filter=Q(enrollments__status='ENR'),
+                distinct=True
+            )
+        )
+        .order_by('code')
+    )
+
+    q = (request.GET.get('q') or '').strip()
+    if q:
+        qs = qs.filter(Q(code__icontains=q) | Q(name__icontains=q))
+
+    courses = []
+    for c in qs:
+        sem_disp = getattr(c, 'semester_display', None) or getattr(c, 'semester', '') or ''
+        c.semester_display = sem_disp
+        if not hasattr(c, 'enrolled_count') or c.enrolled_count is None:
+            c.enrolled_count = 0
+        courses.append(c)
+
+    return render(request, 'instructor/all_courses.html', {
+        'faculty': faculty,
+        'courses': courses,
+    })
+
+
+@require_faculty
+def assign_grades_csv(request, course_code):
+    """
+    Upload scores (CSV/Excel), choose grading mode and assign CGPA 10..5/4 into StudentCourse.grade,
+    setting outcome PAS/FAI. AssessmentScore has no semester; keys are (student, course, component).
+    Components have no semester; fetched by course only. StudentCourse carries semester.
+    """
+    # Auth and course
+    email = request.session.get("email_id")
+    faculty = get_object_or_404(Faculty, email_id=email)
+    course = get_object_or_404(Course, code=course_code, faculties=faculty)
+
+    # Semester
+    try:
+        current_sem = int(request.GET.get("sem") or 1)
+    except ValueError:
+        current_sem = 1
+
+    # Components (no semester in model)
+    components = list(AssessmentComponent.objects.filter(course=course))
+    if not components:
+        messages.error(request, "Define the assessment scheme before assigning grades.")
+        return redirect(f"{reverse('edit_assessment_scheme', args=[course.code])}?sem={current_sem}")
+
+    comp_by_key = {_canon(c.name): c for c in components}
+
+    if request.method == "POST":
+        # File required
+        f_scores = request.FILES.get("csv_file")
+        if not f_scores:
+            messages.error(request, "Please choose a CSV or Excel file to upload.")
+            return redirect(request.path + (f"?sem={current_sem}" if current_sem else ""))
+
+        # Grading mode and parameters
+        policy_mode = (request.POST.get("mode") or "ABS").upper()
+
+        def _as_int(v, d):
+            try: return int(v)
+            except (TypeError, ValueError): return d
+
+        def _as_float(v, d):
+            try: return float(v)
+            except (TypeError, ValueError): return d
+
+        # Absolute thresholds aligned to A, A-, B, B-, C
+        abs_thresholds = {
+            "A": _as_int(request.POST.get("abs_A"), 85),        # A
+            "A_minus": _as_int(request.POST.get("abs_B"), 75),  # A-
+            "B": _as_int(request.POST.get("abs_C"), 65),        # B
+            "B_minus": _as_int(request.POST.get("abs_D"), 55),  # B-
+            "C": _as_int(request.POST.get("abs_E"), 45),        # C
+        }
+        try:
+            pass_min = Decimal(request.POST.get("pass_min_percent") or getattr(settings, "PASS_MIN_PERCENT", 45))
+        except (InvalidOperation, TypeError):
+            pass_min = Decimal("45")
+
+        # Relative buckets (percent to points)
+        rel_buckets = {
+            "top10": _as_float(request.POST.get("top10"), 10),
+            "next15": _as_float(request.POST.get("next15"), 15),
+            "next25": _as_float(request.POST.get("next25"), 25),
+            "next25b": _as_float(request.POST.get("next25b"), 25),
+            "next15b": _as_float(request.POST.get("next15b"), 15),
+            "next10": _as_float(request.POST.get("next10"), 10),
+            "rest_min": _as_int(request.POST.get("rest_min"), 4),
+        }
+
+        # Read data rows
+        rows_list = list(_iter_rows_as_dicts(f_scores))
+        if not rows_list:
+            messages.error(request, "No rows found in the uploaded file.")
+            return redirect(request.path + (f"?sem={current_sem}" if current_sem else ""))
+
+        headers = list(rows_list[0].keys())
+        roll_aliases = {"roll", "rollno", "rollnumber", "roll_no", "roll no"}
+        has_roll = any(_canon(h) in roll_aliases for h in headers)
+        if not has_roll:
+            messages.error(request, "File must contain a roll_no column.")
+            return redirect(request.path + (f"?sem={current_sem}" if current_sem else ""))
+
+        comp_headers = [h for h in headers if _canon(h) in comp_by_key]
+        if not comp_headers:
+            messages.error(request, "File must contain at least one component matching the scheme.")
+            return redirect(request.path + (f"?sem={current_sem}" if current_sem else ""))
+
+        updated_scores, missing_students, invalid_marks = 0, [], []
+
+        # Persist component marks (AssessmentScore has no semester)
+        with transaction.atomic():
+            for row in rows_list:
+                ident = (row.get("roll_no") or row.get("roll") or row.get("Roll No") or row.get("ROLL_NO") or "")
+                ident = str(ident).strip()
+                if not ident:
+                    missing_students.append("(blank)")
+                    continue
+
+                student = Student.objects.filter(roll_no__iexact=ident).first()
+                if not student:
+                    missing_students.append(ident)
+                    continue
+
+                # Ensure enrollment record exists for the selected semester
+                sc = StudentCourse.objects.filter(student=student, course=course, semester=current_sem).first()
+                if not sc:
+                    # Skip students not enrolled in this offering
+                    continue
+
+                for raw_h, val in row.items():
+                    key = _canon(raw_h)
+                    comp = comp_by_key.get(key)
+                    if not comp:
+                        continue
+                    if val is None or str(val).strip() == "":
+                        continue
+                    try:
+                        m = Decimal(str(val))
+                    except InvalidOperation:
+                        invalid_marks.append((ident, raw_h, val))
+                        continue
+                    # Validate within component max
+                    try:
+                        max_d = Decimal(str(comp.max_marks))
+                    except (InvalidOperation, TypeError):
+                        max_d = Decimal("0")
+                    if m < 0 or m > max_d:
+                        invalid_marks.append((ident, raw_h, val))
+                        continue
+
+                    AssessmentScore.objects.update_or_create(
+                        student=student,
+                        course=course,
+                        component=comp,
+                        defaults={"marks_obtained": m}
+                    )
+                    updated_scores += 1
+
+        # Compute totals for enrolled students (per semester via StudentCourse)
+        affected_qs = StudentCourse.objects.filter(course=course, semester=current_sem).select_related("student")
+        totals_per_student, totals_dict = [], {}
+        for sc in affected_qs:
+            if getattr(sc, "is_pass_fail", False):
+                continue
+            total_percent = Decimal("0")
+            for comp in components:
+                s = AssessmentScore.objects.filter(
+                    student=sc.student, course=course, component=comp
+                ).first()
+                if s and comp.max_marks and comp.weight:
+                    try:
+                        total_percent += (Decimal(str(s.marks_obtained)) / Decimal(str(comp.max_marks))) * Decimal(str(comp.weight))
+                    except (InvalidOperation, TypeError):
+                        continue
+            totals_per_student.append((sc.student_id, total_percent))
+            totals_dict[sc.student_id] = total_percent
+
+        # Assign CGPA points and outcome
+        if policy_mode == "REL":
+            cohort = sorted(totals_per_student, key=lambda x: x[1], reverse=True)
+            n = len(cohort)
+            seq = [("top10", 10), ("next15", 9), ("next25", 8), ("next25b", 7), ("next15b", 6), ("next10", 5)]
+            counts, remaining = [], n
+            for key, _cg in seq:
+                pct = float(rel_buckets.get(key, 0))
+                c = int(round((pct / 100.0) * n))
+                c = max(0, min(c, remaining))
+                counts.append(c)
+                remaining -= c
+            rest_min = int(rel_buckets.get("rest_min", 4))
+            cg_map, idx = {}, 0
+            for (count, (_key, cg)) in zip(counts, seq):
+                for _ in range(count):
+                    if idx < n:
+                        sid, _score = cohort[idx]
+                        cg_map[sid] = cg
+                        idx += 1
+            for i in range(idx, n):
+                sid, _score = cohort[i]
+                cg_map[sid] = rest_min
+
+            for sc in affected_qs:
+                if getattr(sc, "is_pass_fail", False):
+                    continue
+                cg = cg_map.get(sc.student_id)
+                if cg is not None:
+                    sc.grade = str(int(cg))
+                    sc.outcome = "PAS" if cg >= 4 else "FAI"
+                    sc.save(update_fields=["grade", "outcome"])
+        else:
+            # Absolute mapping using A, A-, B, B-, C thresholds to 10..6 (else 5)
+            A = Decimal(abs_thresholds["A"])
+            A_ = Decimal(abs_thresholds["A_minus"])
+            B = Decimal(abs_thresholds["B"])
+            B_ = Decimal(abs_thresholds["B_minus"])
+            C = Decimal(abs_thresholds["C"])
+
+            def cg_from_abs(pct: Decimal) -> int:
+                if pct >= A:  return 10  # A
+                if pct >= A_: return 9   # A-
+                if pct >= B:  return 8   # B
+                if pct >= B_: return 7   # B-
+                if pct >= C:  return 6   # C
+                return 5                 # set to 4 if F is required below C
+
+            for sc in affected_qs:
+                if getattr(sc, "is_pass_fail", False):
+                    continue
+                pct = totals_dict.get(sc.student_id, Decimal("0"))
+                cg = cg_from_abs(pct)
+                sc.grade = str(int(cg))
+                sc.outcome = "PAS" if pct >= pass_min and cg >= 4 else "FAI"
+                sc.save(update_fields=["grade", "outcome"])
+
+        if updated_scores:
+            messages.success(request, f"Uploaded {updated_scores} scores and assigned grades.")
+        if missing_students:
+            messages.warning(request, f"{len(missing_students)} rows had missing or unknown roll_no.")
+        if invalid_marks:
+            messages.warning(request, f"{len(invalid_marks)} invalid marks skipped.")
+
+        return redirect(f"{reverse('grade_results', args=[course.code])}?sem={current_sem}&sort=points_desc")
+
+    # GET: render the upload + policy form
+    return render(request, "instructor/assign_grades.html", {
+        "course": course,
+        "faculty": faculty,
+        "semester": current_sem,
+        "components": components,
+        "total_weight": sum([float(c.weight or 0) for c in components]) if components else None,
+        "sample_headers": ["roll_no"] + [c.name for c in components],
+    })
+
+
+@require_faculty
+def grade_results(request, course_code):
+    email = request.session.get("email_id")
+    faculty = get_object_or_404(Faculty, email_id=email)
+    course = get_object_or_404(Course, code=course_code, faculties=faculty)
+
+    try:
+        current_sem = int(request.GET.get("sem") or 1)
+    except ValueError:
+        current_sem = 1
+
+    enrollments = (
+        StudentCourse.objects
+        .filter(course=course, semester=current_sem)
+        .select_related('student')
+    )
+
+    def letter_for_points(points):
+        try:
+            p = int(points)
+        except (TypeError, ValueError):
+            return ''
+        if p >= 10: return 'A'
+        if p == 9:  return 'A-'
+        if p == 8:  return 'B'
+        if p == 7:  return 'B-'
+        if p == 6:  return 'C'
+        if p == 5:  return 'C-'
+        return 'F'
+
+    rows = []
+    for sc in enrollments:
+        pts_str = sc.grade or ''
+        letter = letter_for_points(pts_str)
+        try:
+            pts_int = int(pts_str)
+        except (TypeError, ValueError):
+            pts_int = -1
+        rows.append({
+            'student': sc.student,
+            'roll': sc.student.roll_no,
+            'name': f"{sc.student.first_name} {sc.student.last_name or ''}".strip(),
+            'letter': letter,
+            'points': pts_int,
+            'outcome': sc.outcome or '',
+        })
+
+    sort = (request.GET.get("sort") or "points_desc").lower()
+    key_map = {
+        "name": lambda r: (r['name'].lower(), r['roll'].lower()),
+        "roll": lambda r: r['roll'].lower(),
+        "points": lambda r: (r['points'], r['name'].lower()),
+        "letter": lambda r: (r['letter'], r['name'].lower()),
+    }
+    reverse = sort.endswith("_desc")
+    base = sort.split("_")[0]
+    key = key_map.get(base, key_map["points"])
+    rows.sort(key=key, reverse=reverse)
+
+    return render(request, 'instructor/grade_results.html', {
+        'course': course,
+        'faculty': faculty,
+        'semester': current_sem,
+        'rows': rows,
+        'sort': sort,
+    })

@@ -29,7 +29,7 @@
         <div class="d-flex gap-3 flex-wrap">
             <a class="btn btn-primary" href="{%url 'instructor_requests'%}">Course Request</a>
             <a class="btn btn-secondary" href="{%url 'instructor_courses'%}">View Courses</a>
-            <a class="btn btn-outline-primary" href="#">Update Course Details</a>
+            <a class="btn btn-outline-primary" href="{% url 'view_schema_courses' %}">Update Course's Schema</a>
         </div>
     </div>
 </div>
@@ -39,8 +39,8 @@
     <div class="card-body p-4">
         <h2 class="fs-5 fw-semibold mb-3">📝 Result Entry & Processing</h2>
         <div class="d-flex gap-3 flex-wrap">
-            <a class="btn btn-primary" href="#">Enter Marks</a>
-            <a class="btn btn-secondary" href="#">Calculate Grades</a>
+            <a class="btn btn-primary" href="{% url 'faculty_marks_courses' faculty.id %}">Enter Marks</a>
+            <a class="btn btn-secondary" href="{% url 'grading_courses' faculty.id %}">Calculate Grades</a>
             <a class="btn btn-outline-primary" href="# ">Publish Results</a>
         </div>
     </div>
