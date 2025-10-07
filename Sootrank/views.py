@@ -5,16 +5,20 @@ from django.conf import settings
 from django.contrib import messages
 from django.db import IntegrityError, transaction
 from django.db.models import Prefetch, Sum
-from django.http import HttpResponse
+from django.utils.text import slugify
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from Registration.models import Branch, Category, Course, CourseBranch, Department, ProgramRequirement, Student, Faculty, Admins, StudentCourse, AssessmentComponent, AssessmentScore
+from openpyxl import Workbook
+from Registration.models import Branch, Category, Course, CourseBranch, Department, ProgramRequirement, Student, Faculty, Admins, StudentCourse
 from django.contrib.auth import authenticate , login as auth_login
 from django.contrib.auth.hashers import make_password,check_password
 from django.db.models import Count, Q, OuterRef, Exists 
 from django.views.decorators.http import require_POST
+from django.template.loader import render_to_string
+from weasyprint import HTML, CSS
 from django.contrib.auth.decorators import login_required
-
+from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 from urllib.parse import urlencode
 from django.core.files.storage import default_storage
@@ -78,14 +82,22 @@ def _compute_semester_from_roll_and_today(roll_no: str, today=None) -> int:
     return max(1, sem)
 
 
+# settings flag name
+TEMP_PREREG_OPEN_FLAG = "PREREG_TEMP_OPEN"
 
 def _deadline_open() -> bool:
-    # Use a single global deadline for simplicity; adapt to per-cohort if needed.
+    # Temporary override has highest priority
+    temp = getattr(settings, TEMP_PREREG_OPEN_FLAG, None)
+    if temp is True:
+        return True
+    if temp is False:
+        return False
+
+    # Date-based logic (existing)
     deadline = getattr(settings, "PREREG_DEADLINE", None)
     if not deadline:
-        return True  # no deadline configured => open
+        return True
     now = timezone.now()
-    # Ensure deadline is aware in same zone
     if timezone.is_naive(deadline):
         deadline = timezone.make_aware(deadline, timezone.get_current_timezone())
     return now <= deadline
@@ -2098,6 +2110,430 @@ def course_roster(request, course_code, semester=None):
     }
     return render(request, "instructor/course_roster.html", context)
 
+
+def custom_admin_preregistration(request):
+    return render(request, "admin/preregistration.html")
+
+
+def admin_prereg_deadline(request):
+    # Read current deadline for display
+    current_deadline = getattr(settings, "PREREG_DEADLINE", None)
+    current_local_iso = ""
+    if current_deadline:
+        aware = current_deadline
+        if timezone.is_naive(aware):
+            aware = timezone.make_aware(aware, timezone.get_current_timezone())
+        local = timezone.localtime(aware, timezone.get_current_timezone())
+        current_local_iso = local.strftime("%Y-%m-%dT%H:%M")
+
+    # Read current temporary override (None => follow deadline)
+    temp_state = getattr(settings, TEMP_PREREG_OPEN_FLAG, None)  # True/False/None
+
+    if request.method == "POST":
+        # Two possible forms submit to this same endpoint:
+        # 1) action=open/close/clear for temporary override
+        # 2) deadline=... for deadline updates
+        action = (request.POST.get("action") or "").lower()
+
+        if action in {"open", "close", "clear"}:
+            if action == "open":
+                settings.PREREG_TEMP_OPEN = True
+                messages.success(request, "Pre‑registration temporarily set to OPEN.")  # [web:647]
+            elif action == "close":
+                settings.PREREG_TEMP_OPEN = False
+                messages.warning(request, "Pre‑registration temporarily set to CLOSED.")  # [web:647]
+            else:
+                settings.PREREG_TEMP_OPEN = None
+                messages.info(request, "Temporary override cleared. Deadline rule applies.")  # [web:647]
+            return redirect("admin_prereg_deadline")
+
+        # Otherwise treat as deadline update (may be empty to clear)
+        raw = (request.POST.get("deadline") or "").strip()
+        if raw == "":
+            settings.PREREG_DEADLINE = None
+            messages.info(request, "Deadline cleared. Window will follow temporary override or remain open if none.")  # [web:647]
+            return redirect("admin_prereg_deadline")
+
+        naive = parse_datetime(raw)  # "YYYY-MM-DDTHH:MM"
+        if not naive:
+            messages.error(request, "Invalid date/time format for deadline.")  # [web:647]
+            return redirect("admin_prereg_deadline")
+
+        aware = naive
+        if timezone.is_naive(aware):
+            aware = timezone.make_aware(aware, timezone.get_current_timezone())  # [web:607]
+        settings.PREREG_DEADLINE = aware  # runtime assignment [web:635]
+        local_disp = timezone.localtime(aware).strftime("%Y-%m-%d %H:%M %Z")
+        messages.success(request, f"Deadline set to {local_disp}.")  # [web:647]
+        return redirect("admin_prereg_deadline")
+
+    ctx = {
+        "current_local_iso": current_local_iso,
+        "temp_state": temp_state,  # True / False / None
+    }
+    return render(request, "admin/prereg_deadline.html", ctx)
+
+
+def admin_prereg_enrollments(request):
+    # GET filters
+    q = (request.GET.get("q") or "").strip()
+    code = (request.GET.get("course") or "").strip().upper()
+
+    courses_qs = Course.objects.all().order_by("slot", "code")
+    if q:
+        courses_qs = courses_qs.filter(Q(code__icontains=q) | Q(name__icontains=q))
+
+    slot = (request.GET.get("slot") or "").strip().upper()
+    if slot:
+        courses_qs = courses_qs.filter(slot=slot)
+
+    # no slicing here
+    courses = list(courses_qs)
+
+    selected_course = None
+    enrolled = []
+    current_sem = None
+
+    if code:
+        selected_course = Course.objects.filter(code__iexact=code).first()
+        if selected_course:
+            # If admin provided ?sem=, show that semester; otherwise show ALL semesters
+            sem_param = request.GET.get("sem")
+            if sem_param and sem_param.isdigit():
+                current_sem = int(sem_param)
+                enrolled = (
+                    StudentCourse.objects
+                    .filter(course=selected_course, semester=current_sem)
+                    .select_related("student")
+                    .order_by("student__roll_no")
+                )
+            else:
+                current_sem = None  # indicate "All"
+                enrolled = (
+                    StudentCourse.objects
+                    .filter(course=selected_course)
+                    .select_related("student")
+                    .order_by("semester", "student__roll_no")
+                )
+
+    # Helper: preserve prior GET params without forcing sem when it wasn't present
+    def redirect_with(query_overrides: dict):
+        base_params = {
+            "q": q,
+            "course": code,
+            "slot": slot,
+        }
+        # Only carry sem forward if it existed in the incoming GET
+        if "sem" in request.GET and request.GET.get("sem"):
+            base_params["sem"] = request.GET.get("sem")
+        # Apply explicit overrides (e.g., after add/remove we may want to include sem used to mutate)
+        base_params.update({k: v for k, v in query_overrides.items() if v not in [None, ""]})
+        return redirect(f"{request.path}?{urlencode({k: v for k, v in base_params.items() if v not in [None, '']})}")
+
+    # Handle add/remove via POST regardless of deadline
+    if request.method == "POST":
+        action = (request.POST.get("action") or "").lower()
+        target_code = (request.POST.get("course_code") or "").strip().upper()
+        roll_no = (request.POST.get("roll_no") or "").strip().upper()
+        sem = request.POST.get("semester")
+        try:
+            sem = int(sem) if sem else None
+        except ValueError:
+            sem = None
+
+        if not target_code or not roll_no:
+            messages.error(request, "Course code and roll number are required.")
+            return redirect_with({})
+
+        course = Course.objects.filter(code__iexact=target_code).first()
+        if not course:
+            messages.error(request, "Invalid course code.")
+            return redirect_with({})
+
+        student = Student.objects.filter(roll_no__iexact=roll_no).first()
+        if not student:
+            messages.error(request, "Student not found.")
+            return redirect_with({})
+
+        if sem is None:
+            try:
+                sem = _compute_semester_from_roll_and_today(student.roll_no)
+            except Exception:
+                agg = StudentCourse.objects.filter(course=course).aggregate(mx=Max("semester"))
+                sem = agg["mx"] or 1
+
+        with transaction.atomic():
+            if action == "remove":
+                deleted, _ = StudentCourse.objects.filter(
+                    student=student, course=course, semester=sem
+                ).delete()
+                if deleted:
+                    messages.success(request, f"Removed {roll_no} from {target_code} (Sem {sem}).")
+                else:
+                    messages.info(request, f"No enrollment found to remove for {roll_no} in {target_code} (Sem {sem}).")
+                # Do NOT force sem into the redirect unless the user had chosen a sem
+                return redirect_with({})
+
+            if action == "add":
+                obj, created = StudentCourse.objects.get_or_create(
+                    student=student, course=course, semester=sem,
+                    defaults={"status": "ENR", "is_pass_fail": False}
+                )
+                if not created:
+                    if obj.status != "ENR":
+                        obj.status = "ENR"
+                        obj.save(update_fields=["status"])
+                        messages.success(request, f"Updated {roll_no} to ENR in {target_code} (Sem {sem}).")
+                    else:
+                        messages.info(request, f"{roll_no} is already enrolled in {target_code} (Sem {sem}).")
+                else:
+                    messages.success(request, f"Enrolled {roll_no} in {target_code} (Sem {sem}).")
+                return redirect_with({})
+
+        messages.error(request, "Unknown action.")
+        return redirect_with({})
+
+    context = {
+        "q": q,
+        "courses": courses,              # pass full list
+        "selected_course": selected_course,
+        "enrolled": enrolled,
+        "current_sem": current_sem,      # None => All
+        "slot": slot,
+    }
+    return render(request, "admin/prereg_enrollments.html", context)
+
+
+def admin_prereg_swap(request):
+    # Filters for course directory (left panel)
+    q = (request.GET.get("q") or "").strip()
+    slot = (request.GET.get("slot") or "").strip().upper()
+
+    courses_qs = Course.objects.all().order_by("slot", "code")
+    if q:
+        courses_qs = courses_qs.filter(Q(code__icontains=q) | Q(name__icontains=q))
+    if slot:
+        courses_qs = courses_qs.filter(slot=slot)
+
+    # No slicing — show all matching courses
+    courses = list(courses_qs)
+
+    context = {
+        "courses": courses,
+        "q": q,
+        "slot": slot,
+    }
+
+    if request.method != "POST":
+        return render(request, "admin/prereg_swap.html", context)
+
+    # POST: perform swap
+    roll_no = (request.POST.get("roll_no") or "").strip().upper()
+    from_code = (request.POST.get("from_code") or "").strip().upper()
+    to_code = (request.POST.get("to_code") or "").strip().upper()
+    sem_raw = (request.POST.get("semester") or "").strip()
+
+    if not roll_no or not from_code or not to_code:
+        messages.error(request, "Roll no, From course and To course are required.")
+        return redirect("admin_prereg_swap")
+
+    if from_code == to_code:
+        messages.info(request, "From and To courses are identical; nothing to swap.")
+        return redirect("admin_prereg_swap")
+
+    try:
+        sem = int(sem_raw) if sem_raw else None
+    except ValueError:
+        sem = None
+
+    student = Student.objects.filter(roll_no__iexact=roll_no).first()
+    if not student:
+        messages.error(request, "Student not found.")
+        return redirect("admin_prereg_swap")
+
+    from_course = Course.objects.filter(code__iexact=from_code).first()
+    to_course   = Course.objects.filter(code__iexact=to_code).first()
+    if not from_course or not to_course:
+        messages.error(request, "Invalid course code(s).")
+        return redirect("admin_prereg_swap")
+
+    if from_course.slot != to_course.slot:
+        messages.error(request, f"Courses must be in the same slot (got {from_course.slot} vs {to_course.slot}).")
+        return redirect("admin_prereg_swap")
+
+    if sem is None:
+        try:
+            sem = _compute_semester_from_roll_and_today(student.roll_no)
+        except Exception:
+            sem = 1
+
+    with transaction.atomic():
+        enrolled_to = StudentCourse.objects.filter(student=student, course=to_course, semester=sem).first()
+        enrolled_from = StudentCourse.objects.filter(student=student, course=from_course, semester=sem).first()
+
+        if not enrolled_from and not enrolled_to:
+            StudentCourse.objects.filter(
+                student=student, semester=sem, course__slot=from_course.slot
+            ).exclude(course=to_course).delete()
+
+            StudentCourse.objects.get_or_create(
+                student=student, course=to_course, semester=sem,
+                defaults={"status": "ENR", "is_pass_fail": False}
+            )
+            messages.success(request, f"Enrolled {roll_no} to {to_code} (Sem {sem}).")
+            return redirect("admin_prereg_swap")
+
+        if enrolled_to and enrolled_from:
+            enrolled_from.delete()
+            if enrolled_to.status != "ENR":
+                enrolled_to.status = "ENR"
+                enrolled_to.save(update_fields=["status"])
+            messages.success(request, f"Swapped {roll_no}: removed {from_code}, kept {to_code} (Sem {sem}).")
+            return redirect("admin_prereg_swap")
+
+        StudentCourse.objects.filter(
+            student=student, semester=sem, course__slot=from_course.slot
+        ).exclude(course=from_course).exclude(course=to_course).delete()
+
+        if enrolled_from:
+            enrolled_from.delete()
+
+        to_obj, created = StudentCourse.objects.get_or_create(
+            student=student, course=to_course, semester=sem,
+            defaults={"status": "ENR", "is_pass_fail": False}
+        )
+        if not created and to_obj.status != "ENR":
+            to_obj.status = "ENR"
+            to_obj.save(update_fields=["status"])
+
+        messages.success(request, f"Swapped {roll_no} from {from_code} to {to_code} (Sem {sem}).")
+        return redirect("admin_prereg_swap")
+    
+def student_registered_courses(request):
+    roll_no = request.session.get("roll_no")
+    if not roll_no:
+        login_url = getattr(settings, "LOGIN_URL", "/login/")
+        return redirect(f"{login_url}?next={request.path}")
+
+    student = get_object_or_404(Student, roll_no=roll_no)
+
+    # Optional filters
+    sem = (request.GET.get("sem") or "").strip()
+    q = (request.GET.get("q") or "").strip()
+
+    sc_qs = (
+        StudentCourse.objects
+        .filter(student=student, status="ENR")
+        .select_related("course")
+        .prefetch_related(Prefetch("course__faculties"))
+        .order_by("semester", "course__slot", "course__code")
+    )
+
+    if sem.isdigit():
+        sc_qs = sc_qs.filter(semester=int(sem))
+
+    if q:
+        sc_qs = sc_qs.filter(
+            Q(course__code__icontains=q) |
+            Q(course__name__icontains=q) |
+            Q(course__slot__icontains=q)
+        )
+
+    # Build a small data list for the template
+    items = []
+    for sc in sc_qs:
+        c = sc.course
+        facs = getattr(c, "faculties", None)
+        fac_names = []
+        if facs:
+            for f in facs.all():
+                parts = [p for p in [f.first_name, f.last_name] if p]
+                if parts:
+                    fac_names.append(" ".join(parts))
+        items.append({
+            "semester": sc.semester,
+            "code": c.code,
+            "name": c.name,
+            "slot": c.slot,
+            "credits": c.credits,
+            "ltpc": getattr(c, "LTPC", ""),
+            "instructors": ", ".join(fac_names) if fac_names else "—",
+        })
+
+    context = {
+        "student": student,
+        "items": items,
+        "q": q,
+        "sem": sem,
+    }
+    return render(request, "registration/registered_course.html", context)
+
+
+def admin_prereg_reports(request):
+    q = (request.GET.get("q") or "").strip()
+    slot = (request.GET.get("slot") or "").strip().upper()
+
+    courses = Course.objects.all().order_by("slot","code")
+    if q:
+        courses = courses.filter(code__icontains=q) | courses.filter(name__icontains=q)
+    if slot:
+        courses = courses.filter(slot=slot)
+
+    # Optionally prefetch for counts
+    # enrolled_count can be computed on demand in template by querying ENR count
+    return render(request, "admin/prereg_reports.html", {"courses": courses, "q": q, "slot": slot})
+
+def export_course_excel(request, code):
+    course = Course.objects.filter(code__iexact=code).first()
+    if not course:
+        raise Http404("Course not found")
+
+    rows = (
+        StudentCourse.objects
+        .filter(course=course, status="ENR")
+        .select_related("student")
+        .order_by("student__roll_no", "semester")
+    )
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Enrolled"
+    ws.append(["Roll No", "Name", "Semester", "Status"])
+
+    for sc in rows:
+        s = sc.student
+        full_name = f"{s.first_name or ''} {s.last_name or ''}".strip()
+        ws.append([s.roll_no, full_name or "—", sc.semester, sc.status])
+
+    fname = f"{slugify(course.code)}-enrolled.xlsx"
+    resp = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    resp["Content-Disposition"] = f'attachment; filename="{fname}"'
+    wb.save(resp)
+    return resp  # [web:779][web:778]
+
+def export_course_pdf(request, code):
+    course = Course.objects.filter(code__iexact=code).first()
+    if not course:
+        raise Http404("Course not found")
+
+    rows = (
+        StudentCourse.objects
+        .filter(course=course, status="ENR")
+        .select_related("student")
+        .order_by("semester", "student__roll_no")
+    )
+
+    html = render_to_string(
+        "admin/prereg_course_pdf.html",
+        {"course": course, "rows": rows}
+    )
+    pdf_bytes = HTML(string=html).write_pdf()  # optional: stylesheets=[CSS(...)] [web:782][web:792]
+    fname = f"{slugify(course.code)}-enrolled.pdf"
+    resp = HttpResponse(pdf_bytes, content_type="application/pdf")
+    resp["Content-Disposition"] = f'attachment; filename="{fname}"'
+    return resp
 # views.py (faculty, require faculty session)
 from django.forms import modelformset_factory
 from django.db.models import Sum

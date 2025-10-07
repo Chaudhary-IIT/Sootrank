@@ -46,6 +46,14 @@ urlpatterns = [
     path("custom-admin/requirements/<int:branch_id>/", views.manage_branch_requirements, name="manage_branch_requirements"),
     path("custom-admin/course-instructors",views.course_instructors_assign,name='course_instructors_assign'),
     path("custom-admin/course-instructors-bulk",views.course_instructors_assign_bulk,name='course_instructors_assign_bulk'),
+    path("custom-admin/prereg/", views.custom_admin_preregistration, name="admin_preregistration"),
+    path("custom-admin/prereg/deadline/", views.admin_prereg_deadline, name="admin_prereg_deadline"),
+    path("custom-admin/prereg/enrollments/", views.admin_prereg_enrollments, name="admin_prereg_enrollments"),
+    path("custom-admin/prereg/swap/", views.admin_prereg_swap, name="admin_prereg_swap"),
+    path("custom-admin/prereg/reports/", views.admin_prereg_reports, name="admin_prereg_reports"),
+    path("custom-admin/prereg/reports/<str:code>/excel/", views.export_course_excel, name="export_course_excel"),
+    path("custom-admin/prereg/reports/<str:code>/pdf/", views.export_course_pdf, name="export_course_pdf"),
+    # other urls
     path('',views.login),
     path('login/', views.login, name='login'),
     path('register/',views.register),
@@ -67,7 +75,8 @@ urlpatterns = [
     path("faculty_dashboard/courses/", views.instructor_courses, name="instructor_courses"),
     path("faculty_dashboard/courses/<str:course_code>/<str:semester>/", views.course_roster , name="course_roster"),
     path("students_dashboard/registration/apply_pf_changes/", views.apply_pf_changes, name="apply_pf_changes"),
-    path("students_dashboard/registrated_courses/", views.registered_courses, name="registered_courses"),
+    path("students_dashboard/registered_courses/", views.student_registered_courses, name="registered_courses"),
+
     path("logout/", LogoutView.as_view(next_page="login"), name="logout"),
     path("ajax/branches-json/", views.ajax_branches_json, name="ajax_branches_json"),
     #--------

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Add/Remove Student | Sootrank Admin</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+  <style>
+    body{ background:#f8f9fa; }
+    .card{ box-shadow:0 8px 20px rgba(0,0,0,.08); }
+    .course-list{ max-height: 420px; overflow:auto; }
+    .roster{ max-height: 360px; overflow:auto; }
+    .code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm mb-4">
+    <div class="container">
+      <a class="navbar-brand fw-bold" href="{% url 'custom_admin_home' %}">Sootrank Admin</a>
+      <div class="ms-auto">
+        <a href="{% url 'admin_preregistration' %}" class="btn btn-outline-light btn-sm">
+          <i class="fa-solid fa-arrow-left me-1"></i> Back
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container">
+    {% if messages %}
+      <div class="mb-3">
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags }} mb-2" role="alert">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="row g-4">
+      <!-- Left: course search and list -->
+      <div class="col-lg-6">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="mb-3">Courses Offered</h5>
+            <form method="get" class="mb-3 d-flex gap-2">
+              <input type="text" name="q" value="{{ q }}" placeholder="Search code or name" class="form-control" />
+              {% if selected_course %}
+                <input type="hidden" name="course" value="{{ selected_course.code }}">
+              {% endif %}
+              <button class="btn btn-primary"><i class="fa-solid fa-magnifying-glass me-1"></i>Search</button>
+            </form>
+            <div class="course-list list-group">
+              {% for c in courses %}
+                <a href="?course={{ c.code }}&q={{ q }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {% if selected_course and selected_course.code == c.code %}active text-white{% endif %}">
+                  <span><span class="code">{{ c.code }}</span> — {{ c.name }}</span>
+                  <span class="badge bg-secondary">{{ c.slot }}</span>
+                </a>
+              {% empty %}
+                <div class="text-muted small">No courses found.</div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: selected course roster and actions -->
+      <div class="col-lg-6">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="mb-1">Selected Course</h5>
+            {% if selected_course %}
+              <div class="mb-2">
+                <div><span class="code">{{ selected_course.code }}</span> — {{ selected_course.name }}</div>
+                {% if current_sem %}<div class="text-muted small">Semester {{ current_sem }}</div>{% endif %}
+              </div>
+
+              <div class="mb-3">
+              <form method="post" class="row g-2 align-items-end">
+                {% csrf_token %}
+                <input type="hidden" name="course_code" value="{{ selected_course.code }}">
+                {% if current_sem %}<input type="hidden" name="semester" value="{{ current_sem }}">{% endif %}
+                
+                <div class="col-sm-7">
+                  <label class="form-label mb-1">Roll No</label>
+                  <input type="text" name="roll_no" class="form-control h-100" placeholder="e.g., B22CS123">
+                </div>
+
+                <div class="col-sm-5 d-flex gap-2 align-items-stretch">
+                  <button name="action" value="add" type="submit" class="btn btn-success w-100">
+                    <i class="fa-solid fa-user-plus me-1"></i> Add
+                  </button>
+                  <button name="action" value="remove" type="submit" class="btn btn-outline-danger w-100">
+                    <i class="fa-solid fa-user-minus me-1"></i> Remove
+                  </button>
+                </div>
+              </form>
+            </div>
+
+
+              <h6 class="mb-2">Currently Enrolled</h6>
+              <div class="roster">
+                <table class="table table-sm align-middle">
+                  <thead>
+                  <tr>
+                    {% if current_sem is None %}<th scope="col">Sem</th>{% endif %}
+                    <th scope="col">Roll No</th>
+                    <th scope="col">Name</th>
+                    <th scope="col" class="text-end">Action</th>
+                  </tr>
+                </thead>
+                  <tbody>
+                    {% for sc in enrolled %}
+                      <tr>
+                        <td class="code">{{ sc.student.roll_no }}</td>
+                        <td>{{ sc.student.first_name }} {{ sc.student.last_name }}</td>
+                        <td class="text-end">
+                          <form method="post" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="course_code" value="{{ selected_course.code }}">
+                            <input type="hidden" name="roll_no" value="{{ sc.student.roll_no }}">
+                            {% if current_sem %}<input type="hidden" name="semester" value="{{ current_sem }}">{% endif %}
+                            <button name="action" value="remove" class="btn btn-sm btn-outline-danger">
+                              <i class="fa-solid fa-trash-can me-1"></i> Remove
+                            </button>
+                          </form>
+                        </td>
+                      </tr>
+                    {% empty %}
+                      <tr><td colspan="3" class="text-muted small">No students enrolled yet.</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <div class="text-muted">Select a course from the left to view and edit its roster.</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
