@@ -1,38 +1,49 @@
+{% extends "student_base.html" %}
 {% load dict_extras %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Course Pre-Registration</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="min-h-screen bg-gray-100 flex items-start justify-center py-10">
-  <div class="w-[1150px]">
-    <div class="mb-5 flex items-center justify-between">
-      <h1 class="text-3xl font-bold">Course Pre-Registration</h1>
-      <span class="inline-flex items-center rounded-full bg-blue-100 text-blue-800 text-xs font-medium px-3 py-1">
-        Semester {{ computed_semester }}
-      </span>
+{% block title %}Course Pre‑Registration{% endblock %}
+{% block nav_registration_active %} active{% endblock %}
+
+{% block content %}
+<!-- Outer wrapper matches course selection card tone -->
+<div class="w-100">
+
+  <!-- Header -->
+  <div class="mb-4 d-flex align-items-center justify-content-between">
+    <div>
+      <h1 class="h3 fw-bold mb-1">Course Pre‑Registration</h1>
+      <p class="text-muted small mb-0">
+        Choose one course per slot for this semester.
+      </p>
     </div>
+    <span class="badge rounded-pill text-bg-primary bg-opacity-10 text-primary border border-primary-subtle">
+      Semester {{ computed_semester }}
+    </span>
+  </div>
 
-    <p class="text-red-500 mb-4">
-      {% if window_open %}Pre‑registration is open.{% else %}Pre‑registration window is closed.{% endif %}
-    </p>
+  <!-- Window info -->
+  <p class="mb-2 {% if window_open %}text-success{% else %}text-danger{% endif %}">
+    {% if window_open %}Pre‑registration is open.{% else %}Pre‑registration window is closed.{% endif %}
+  </p>
+  <p class="text-muted small">
+    Selections are validated on submit. Approved slots are locked and cannot be changed.
+  </p>
 
-    <div class="bg-white rounded-2xl shadow">
-      <form id="courseForm" method="post" action="{% url 'submit_preregistration' %}" class="p-6">
-        {% csrf_token %}
-        <input type="hidden" name="payload" id="payloadInput" />
+  <!-- Card shell already provided by base; keep one more white surface inside -->
+  <div class="bg-white rounded-3 shadow-sm border">
+    <form id="courseForm" method="post" action="{% url 'submit_preregistration' %}" class="p-4">
+      {% csrf_token %}
+      <input type="hidden" name="payload" id="payloadInput" />
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {% for slot in slots %}
-          <div class="flex flex-col" data-slot="{{ slot }}">
-            <label class="font-medium mb-1">Slot-{{ slot }}</label>
+      <!-- Slots grid -->
+      <div class="row g-3">
+        {% for slot in slots %}
+        <div class="col-12 col-md-6 col-lg-4">
+          <div class="d-flex flex-column" data-slot="{{ slot }}">
+            <label class="fw-semibold mb-1">Slot‑{{ slot }}</label>
 
             <!-- Category select -->
             <select id="slot-{{ slot }}-cat" name="slot-{{ slot }}-cat"
-                    class="w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 slot-cat"
+                    class="form-select form-select-sm slot-cat"
                     data-slot="{{ slot }}" {% if slot in locked_slots %}disabled{% endif %}>
               <option value="">Select category</option>
               <option value="ALL">All courses (Slot {{ slot }})</option>
@@ -43,7 +54,7 @@
 
             <!-- Course select -->
             <select id="slot-{{ slot }}-course" name="slot-{{ slot }}-course"
-                    class="mt-2 w-full bg-white border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 slot-course"
+                    class="form-select form-select-sm mt-2 slot-course"
                     data-slot="{{ slot }}"
                     {% if slot in locked_slots %}disabled{% elif not preselected_by_slot|get_item:slot %}disabled{% endif %}>
               {% if preselected_by_slot|get_item:slot %}
@@ -57,7 +68,7 @@
                 {% with cat_code=c.code %}
                   {% for course in slot_map|get_item:slot|get_item:cat_code %}
                     <option value="{{ course.code }}" data-credits="{{ course.credits }}"
-                            data-category="ALL" data-cat="ALL" class="hidden all-slot-{{ slot }}">
+                            data-category="ALL" data-cat="ALL" class="d-none all-slot-{{ slot }}">
                       {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat_code }}
                     </option>
                   {% endfor %}
@@ -71,13 +82,13 @@
                     {% if course.cb_for_branch and course.cb_for_branch.0 %}
                       {% with cat=course.cb_for_branch.0.category %}
                         <option value="{{ course.code }}" data-credits="{{ course.credits }}"
-                                data-category="{{ cat }}" data-cat="{{ cat_code }}" class="hidden">
+                                data-category="{{ cat }}" data-cat="{{ cat_code }}" class="d-none">
                           {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat }}
                         </option>
                       {% endwith %}
                     {% else %}
                       <option value="{{ course.code }}" data-credits="{{ course.credits }}"
-                              data-category="{{ cat_code }}" data-cat="{{ cat_code }}" class="hidden">
+                              data-category="{{ cat_code }}" data-cat="{{ cat_code }}" class="d-none">
                         {{ course.name }} ({{ course.code }}) - {{ course.credits }} credits • {{ cat_code }}
                       </option>
                     {% endif %}
@@ -86,279 +97,274 @@
               {% endfor %}
             </select>
 
-            <div class="cat-badge text-xs mt-1 {% if slot in locked_slots %}text-green-700{% else %}text-gray-600{% endif %}">
+            <div class="cat-badge small mt-1 {% if slot in locked_slots %}text-success{% else %}text-muted{% endif %}">
               {% if slot in locked_slots %}Approved; selection locked{% endif %}
             </div>
           </div>
-          {% endfor %}
         </div>
+        {% endfor %}
+      </div>
 
-        <div class="mt-6 flex items-center justify-between">
-          <p class="text-lg font-semibold">
-            Total Credits: <span id="totalCredits" class="text-green-600">0</span>
-          </p>
-          <p id="creditError" class="text-red-500 hidden"></p>
+      <!-- Totals -->
+      <div class="d-flex align-items-center justify-content-between mt-4">
+        <p class="fw-semibold m-0">
+          Total Credits:
+          <span id="totalCredits" class="text-success">0</span>
+        </p>
+        <p id="creditError" class="text-danger small m-0 d-none"></p>
+      </div>
+
+      <hr class="my-4" />
+
+      <!-- Actions -->
+      <div class="d-flex align-items-center justify-content-between">
+        <a href="{% url 'students_dashboard' %}"
+           class="btn btn-success btn-sm">
+          Home
+        </a>
+        <div class="d-flex gap-2">
+          <button type="button" id="resetBtn" class="btn btn-outline-secondary btn-sm"
+                  {% if not window_open %}disabled{% endif %}>
+            Reset
+          </button>
+          <button type="submit" class="btn btn-dark btn-sm"
+                  {% if not window_open %}disabled{% endif %}>
+            {% if preselected_by_slot %}Update{% else %}Submit{% endif %}
+          </button>
         </div>
-
-        <div class="h-px bg-gray-200 my-6"></div>
-
-        <div class="mt-4 flex items-center justify-between">
-          <!-- Left side: Home -->
-          <a href="{% url 'students_dashboard' %}"
-              class="px-4 py-2 bg-green-600 rounded-lg border border-green-300 text-white hover:bg-green-800 inline-flex items-center gap-2">
-            <!-- Optional home icon -->
-            <span>Home</span>
-          </a>
-
-          <!-- Right side: Reset + Submit -->
-          <div class="flex items-center gap-3">
-            <button type="button" id="resetBtn"
-                    class="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
-                    {% if not window_open %}disabled{% endif %}>
-              Reset
-            </button>
-            <button type="submit"
-                    class="bg-gray-800 text-white px-5 py-2 rounded-lg hover:bg-black"
-                    {% if not window_open %}disabled{% endif %}>
-              {% if preselected_by_slot %}Update{% else %}Submit{% endif %}
-            </button>
-          </div>
-          </div>
-
-      </form>
-    </div>
+      </div>
+    </form>
   </div>
+</div>
 
-  <!-- Confirmation Modal -->
-  <div id="popup" class="fixed inset-0 hidden justify-center items-center bg-black/60 z-50">
-    <div class="bg-white rounded-2xl shadow-lg w-[420px] p-6">
-      <h2 class="text-xl font-bold mb-2">Confirm {% if preselected_by_slot %}Update{% else %}Submission{% endif %}</h2>
-      <p class="text-red-500 mb-4">
+<!-- Confirmation Modal -->
+<div id="popup" class="position-fixed top-0 start-0 end-0 bottom-0 d-none justify-content-center align-items-center bg-black bg-opacity-50 z-3">
+  <div class="bg-white rounded-3 shadow-lg" style="width: 420px;">
+    <div class="p-4">
+      <h2 class="h5 fw-bold mb-2">Confirm {% if preselected_by_slot %}Update{% else %}Submission{% endif %}</h2>
+      <p class="text-danger small mb-4">
         You will not be able to edit your course selection for this semester after this when the window closes.
         Are you sure you'd like to proceed?
       </p>
-      <div class="flex justify-between">
-        
-        <button id="backBtn" class="bg-gray-400 text-white px-4 py-2 rounded-lg hover:bg-gray-500">Back</button>
-        <button id="proceedBtn" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">Proceed</button>
+      <div class="d-flex justify-content-between">
+        <button id="backBtn" class="btn btn-secondary btn-sm">Back</button>
+        <button id="proceedBtn" class="btn btn-success btn-sm">Proceed</button>
       </div>
     </div>
   </div>
+</div>
 
-  <!-- Safe JSON data -->
-  {{ slot_map_json|json_script:"slot-map-data" }}
-  {{ preselected_by_slot|json_script:"preselected-data" }}
-  {{ locked_slots|json_script:"locked-slots-data" }}
+<!-- Safe JSON data -->
+{{ slot_map_json|json_script:"slot-map-data" }}
+{{ preselected_by_slot|json_script:"preselected-data" }}
+{{ locked_slots|json_script:"locked-slots-data" }}
 
-  <script>
-    const minCredit = {{ min_credit|default_if_none:0 }};
-    const maxCredit = {{ max_credit|default_if_none:999 }};
-    const preselected = JSON.parse(document.getElementById("preselected-data").textContent || "{}");
-    const lockedSlots = JSON.parse(document.getElementById("locked-slots-data").textContent || "[]");
+<script>
+  const minCredit = {{ min_credit|default_if_none:0 }};
+  const maxCredit = {{ max_credit|default_if_none:999 }};
+  const preselected = JSON.parse(document.getElementById("preselected-data").textContent || "{}");
+  const lockedSlots = JSON.parse(document.getElementById("locked-slots-data").textContent || "[]");
 
-    // Build per-slot code -> credits map from slot_map JSON
-    const slotMapJson = JSON.parse(document.getElementById("slot-map-data").textContent || "{}");
-    const slotCredits = {};
-    Object.keys(slotMapJson || {}).forEach(slot => {
-      slotCredits[slot] = slotCredits[slot] || {};
-      const byCat = slotMapJson[slot] || {};
-      Object.keys(byCat).forEach(cat => {
-        const arr = byCat[cat] || [];
-        arr.forEach(course => {
-          if (course && course.code) {
-            slotCredits[slot][course.code] = parseInt(course.credits || 0, 10) || 0;
-          }
-        });
+  // Build per-slot code -> credits map from slot_map JSON
+  const slotMapJson = JSON.parse(document.getElementById("slot-map-data").textContent || "{}");
+  const slotCredits = {};
+  Object.keys(slotMapJson || {}).forEach(slot => {
+    slotCredits[slot] = slotCredits[slot] || {};
+    const byCat = slotMapJson[slot] || {};
+    Object.keys(byCat).forEach(cat => {
+      const arr = byCat[cat] || [];
+      arr.forEach(course => {
+        if (course && course.code) {
+          slotCredits[slot][course.code] = parseInt(course.credits || 0, 10) || 0;
+        }
       });
     });
+  });
 
-    function updateCredits() {
-      let total = 0;
+  function updateCredits() {
+    let total = 0;
 
-      // Sum once per slot: locked => preselected credits; unlocked => selected option credits
-      document.querySelectorAll('div.flex.flex-col[data-slot]').forEach(wrap => {
-        const slot = wrap.getAttribute('data-slot');
-        const isLocked = Array.isArray(lockedSlots) ? lockedSlots.includes(slot) : false;
+    // Sum once per slot: locked => preselected credits; unlocked => selected option credits
+    document.querySelectorAll('div[data-slot]').forEach(wrap => {
+      const slot = wrap.getAttribute('data-slot');
+      const isLocked = Array.isArray(lockedSlots) ? lockedSlots.includes(slot) : false;
 
-        if (isLocked) {
-          const code = preselected ? preselected[slot] : null;
-          const cr = (slotCredits[slot] && code) ? (slotCredits[slot][code] || 0) : 0;
-          total += cr;
-        } else {
-          const sel = wrap.querySelector('.slot-course');
-          if (!sel || sel.disabled) return;
-          const opt = sel.options[sel.selectedIndex];
-          if (opt && opt.value) {
-            const c = parseInt(opt.dataset.credits || '0', 10);
-            if (!Number.isNaN(c)) total += c;
-          }
-        }
-      });
-
-      document.getElementById("totalCredits").textContent = total;
-      const errorEl = document.getElementById("creditError");
-      if (total < minCredit) {
-        errorEl.textContent = `Minimum ${minCredit} credits required`;
-        errorEl.classList.remove("hidden");
-      } else if (total > maxCredit) {
-        errorEl.textContent = `Maximum ${maxCredit} credits allowed`;
-        errorEl.classList.remove("hidden");
+      if (isLocked) {
+        const code = preselected ? preselected[slot] : null;
+        const cr = (slotCredits[slot] && code) ? (slotCredits[slot][code] || 0) : 0;
+        total += cr;
       } else {
-        errorEl.classList.add("hidden");
-      }
-    }
-
-    function onCategoryChange(catSel) {
-      const slot = catSel.dataset.slot;
-      const courseSel = document.getElementById(`slot-${slot}-course`);
-      const chosenCat = catSel.value;
-
-      if (lockedSlots.includes(slot)) {
-        return; // locked; do nothing
-      }
-
-      // Reset course select
-      courseSel.innerHTML = "";
-      const placeholder = document.createElement("option");
-      placeholder.value = "";
-      placeholder.textContent = chosenCat ? "Select a course" : "Select a category first";
-      courseSel.appendChild(placeholder);
-
-      // Pull options
-      let selector;
-      if (chosenCat === "ALL") {
-        selector = `.all-slot-${slot}`;
-      } else {
-        selector = `#slot-${slot}-course-template option[data-cat="${chosenCat}"]`;
-      }
-      const preRendered = document.querySelectorAll(selector);
-
-      if (chosenCat) {
-        preRendered.forEach((opt) => {
-          const clone = opt.cloneNode(true);
-          clone.classList.remove("hidden");
-          courseSel.appendChild(clone);
-        });
-        courseSel.disabled = false;
-
-        // Apply preselected if exists
-        const selectedCode = preselected[slot];
-        if (selectedCode) {
-          const idx = Array.from(courseSel.options).findIndex(o => o.value === selectedCode);
-          if (idx >= 0) courseSel.selectedIndex = idx;
-        }
-      } else {
-        courseSel.disabled = true;
-      }
-
-      const badge = courseSel.parentElement.querySelector(".cat-badge");
-      if (badge) badge.textContent = chosenCat ? (chosenCat === "ALL" ? "All categories" : `Category: ${chosenCat}`) : "";
-      updateCredits();
-    }
-
-    function wireSlots() {
-      document.querySelectorAll(".slot-course").forEach((sel) => {
-        const slot = sel.dataset.slot;
-
-        // Create hidden template select per slot
-        const tmpl = document.createElement("select");
-        tmpl.id = `slot-${slot}-course-template`;
-        tmpl.className = "hidden";
-
-        // Move hidden options into template store
-        const opts = Array.from(sel.querySelectorAll("option.hidden, option[data-cat]"));
-        opts.forEach((o) => tmpl.appendChild(o));
-        sel.parentElement.insertBefore(tmpl, sel.nextSibling);
-
-        if (lockedSlots.includes(slot)) {
-          sel.disabled = true;
-          return;
-        }
-
-        const selectedCode = preselected[slot];
-        if (selectedCode) {
-          // find category for preselected
-          const allOpts = tmpl.querySelectorAll("option");
-          let catForCourse = "";
-          allOpts.forEach((o) => {
-            if (o.value === selectedCode && !catForCourse) {
-              catForCourse = o.getAttribute("data-cat") || "";
-            }
-          });
-          const catSel = document.getElementById(`slot-${slot}-cat`);
-          catSel.value = catForCourse || "ALL";
-          onCategoryChange(catSel);
-        } else {
-          sel.innerHTML = '<option value="">Select a category first</option>';
-          sel.disabled = true;
-        }
-      });
-
-      // Bind changes
-      document.querySelectorAll(".slot-cat").forEach((catSel) => {
-        catSel.addEventListener("change", () => onCategoryChange(catSel));
-      });
-    }
-
-    function collectSelections() {
-      const selections = [];
-      document.querySelectorAll(".slot-course").forEach((sel) => {
-        if (sel.disabled) return;
+        const sel = wrap.querySelector('.slot-course');
+        if (!sel || sel.disabled) return;
         const opt = sel.options[sel.selectedIndex];
         if (opt && opt.value) {
-          selections.push({
-            slot: sel.dataset.slot,
-            course_code: opt.value,
-            category: opt.dataset.category || opt.dataset.cat || "",
-            credits: parseInt(opt.dataset.credits || "0", 10) || 0
-          });
+          const c = parseInt(opt.dataset.credits || '0', 10);
+          if (!Number.isNaN(c)) total += c;
         }
-      });
-      return selections;
-    }
-
-    document.getElementById("resetBtn").addEventListener("click", () => {
-      document.querySelectorAll(".slot-cat").forEach((sel) => (sel.value = ""));
-      document.querySelectorAll(".slot-course").forEach((sel) => {
-        if (lockedSlots.includes(sel.dataset.slot)) return;
-        sel.innerHTML = '<option value="">Select a category first</option>';
-        sel.disabled = true;
-        const badge = sel.parentElement.querySelector(".cat-badge");
-        if (badge) badge.textContent = "";
-      });
-      updateCredits();
-    });
-
-    document.getElementById("courseForm").addEventListener("submit", (e) => {
-      e.preventDefault();
-      const windowOpen = {% if window_open %}true{% else %}false{% endif %};
-      if (!windowOpen) return;
-
-      const total = parseInt(document.getElementById("totalCredits").textContent, 10);
-      if (total >= minCredit && total <= maxCredit) {
-        const payload = {
-          semester: {{ computed_semester }},
-          selections: collectSelections()
-        };
-        document.getElementById("payloadInput").value = JSON.stringify(payload);
-        const m = document.getElementById("popup");
-        m.classList.remove("hidden");
-        m.classList.add("flex");
       }
     });
 
-    document.getElementById("backBtn").addEventListener("click", () => {
-      document.getElementById("popup").classList.add("hidden");
-    });
+    document.getElementById("totalCredits").textContent = total;
+    const errorEl = document.getElementById("creditError");
+    if (total < minCredit) {
+      errorEl.textContent = `Minimum ${minCredit} credits required`;
+      errorEl.classList.remove("d-none");
+    } else if (total > maxCredit) {
+      errorEl.textContent = `Maximum ${maxCredit} credits allowed`;
+      errorEl.classList.remove("d-none");
+    } else {
+      errorEl.classList.add("d-none");
+    }
+  }
 
-    document.getElementById("proceedBtn").addEventListener("click", () => {
-      document.getElementById("popup").classList.add("hidden");
-      document.getElementById("courseForm").submit();
-    });
+  function onCategoryChange(catSel) {
+    const slot = catSel.dataset.slot;
+    const courseSel = document.getElementById(`slot-${slot}-course`);
+    const chosenCat = catSel.value;
 
-    document.querySelectorAll(".slot-course").forEach((sel) => sel.addEventListener("change", updateCredits));
-    wireSlots();
+    if (lockedSlots.includes(slot)) return; // locked; do nothing
+
+    // Reset course select
+    courseSel.innerHTML = "";
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = chosenCat ? "Select a course" : "Select a category first";
+    courseSel.appendChild(placeholder);
+
+    // Pull options
+    let selector;
+    if (chosenCat === "ALL") {
+      selector = `.all-slot-${slot}`;
+    } else {
+      selector = `#slot-${slot}-course-template option[data-cat="${chosenCat}"]`;
+    }
+    const preRendered = document.querySelectorAll(selector);
+
+    if (chosenCat) {
+      preRendered.forEach((opt) => {
+        const clone = opt.cloneNode(true);
+        clone.classList.remove("d-none");
+        courseSel.appendChild(clone);
+      });
+      courseSel.disabled = false;
+
+      // Apply preselected if exists
+      const selectedCode = preselected[slot];
+      if (selectedCode) {
+        const idx = Array.from(courseSel.options).findIndex(o => o.value === selectedCode);
+        if (idx >= 0) courseSel.selectedIndex = idx;
+      }
+    } else {
+      courseSel.disabled = true;
+    }
+
+    const badge = courseSel.parentElement.querySelector(".cat-badge");
+    if (badge) badge.textContent = chosenCat ? (chosenCat === "ALL" ? "All categories" : `Category: ${chosenCat}`) : "";
     updateCredits();
-  </script>
-</body>
-</html>
+  }
+
+  function wireSlots() {
+    document.querySelectorAll(".slot-course").forEach((sel) => {
+      const slot = sel.dataset.slot;
+
+      // Create hidden template select per slot
+      const tmpl = document.createElement("select");
+      tmpl.id = `slot-${slot}-course-template`;
+      tmpl.className = "d-none";
+
+      // Move hidden options into template store
+      const opts = Array.from(sel.querySelectorAll("option.d-none, option[data-cat]"));
+      opts.forEach((o) => tmpl.appendChild(o));
+      sel.parentElement.insertBefore(tmpl, sel.nextSibling);
+
+      if (lockedSlots.includes(slot)) {
+        sel.disabled = true;
+        return;
+      }
+
+      const selectedCode = preselected[slot];
+      if (selectedCode) {
+        // find category for preselected
+        const allOpts = tmpl.querySelectorAll("option");
+        let catForCourse = "";
+        allOpts.forEach((o) => {
+          if (o.value === selectedCode && !catForCourse) {
+            catForCourse = o.getAttribute("data-cat") || "";
+          }
+        });
+        const catSel = document.getElementById(`slot-${slot}-cat`);
+        catSel.value = catForCourse || "ALL";
+        onCategoryChange(catSel);
+      } else {
+        sel.innerHTML = '<option value="">Select a category first</option>';
+        sel.disabled = true;
+      }
+    });
+
+    // Bind changes
+    document.querySelectorAll(".slot-cat").forEach((catSel) => {
+      catSel.addEventListener("change", () => onCategoryChange(catSel));
+    });
+  }
+
+  function collectSelections() {
+    const selections = [];
+    document.querySelectorAll(".slot-course").forEach((sel) => {
+      if (sel.disabled) return;
+      const opt = sel.options[sel.selectedIndex];
+      if (opt && opt.value) {
+        selections.push({
+          slot: sel.dataset.slot,
+          course_code: opt.value,
+          category: opt.dataset.category || opt.dataset.cat || "",
+          credits: parseInt(opt.dataset.credits || "0", 10) || 0
+        });
+      }
+    });
+    return selections;
+  }
+
+  document.getElementById("resetBtn").addEventListener("click", () => {
+    document.querySelectorAll(".slot-cat").forEach((sel) => (sel.value = ""));
+    document.querySelectorAll(".slot-course").forEach((sel) => {
+      if (lockedSlots.includes(sel.dataset.slot)) return;
+      sel.innerHTML = '<option value="">Select a category first</option>';
+      sel.disabled = true;
+      const badge = sel.parentElement.querySelector(".cat-badge");
+      if (badge) badge.textContent = "";
+    });
+    updateCredits();
+  });
+
+  document.getElementById("courseForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const windowOpen = {% if window_open %}true{% else %}false{% endif %};
+    if (!windowOpen) return;
+
+    const total = parseInt(document.getElementById("totalCredits").textContent, 10);
+    if (total >= minCredit && total <= maxCredit) {
+      const payload = {
+        semester: {{ computed_semester }},
+        selections: collectSelections()
+      };
+      document.getElementById("payloadInput").value = JSON.stringify(payload);
+      const m = document.getElementById("popup");
+      m.classList.remove("d-none");
+      m.classList.add("d-flex");
+    }
+  });
+
+  document.getElementById("backBtn").addEventListener("click", () => {
+    document.getElementById("popup").classList.add("d-none");
+  });
+
+  document.getElementById("proceedBtn").addEventListener("click", () => {
+    document.getElementById("popup").classList.add("d-none");
+    document.getElementById("courseForm").submit();
+  });
+
+  document.querySelectorAll(".slot-course").forEach((sel) => sel.addEventListener("change", updateCredits));
+  wireSlots();
+  updateCredits();
+</script>
+{% endblock %}

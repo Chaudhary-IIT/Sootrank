@@ -1,73 +1,91 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Registered Courses</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="UTF-8" />
+  <title>Registered Courses</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+  <style>
+    body{ background:#f8f9fa; }
+    .card{ box-shadow:0 8px 20px rgba(0,0,0,.06); }
+    .code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+  </style>
 </head>
-
-<body class="bg-gray-100 p-6">
-    <div class="w-full max-w-6xl mx-auto space-y-6">
-        <div class="mb-5">
-            <h1 class="text-3xl font-bold">Registered Courses</h1>
-            <!-- <p class="text-red-500 mt-1">Last day for course pre-registration is 15-08-2025</p> -->
-        </div>
-        <!-- Table Container -->
-        <div class="rounded-md border overflow-x-auto shadow-md bg-white">
-            <table class="min-w-full table-auto text-sm">
-                <thead>
-                    <tr class="bg-gray-200 text-left text-gray-700">
-                        <th class="px-4 py-2">Course Code</th>
-                        <th class="px-4 py-2">Course Name</th>
-                        <th class="px-4 py-2">Instructor</th>
-                        <th class="px-4 py-2">Type</th>
-                        <th class="px-4 py-2">Slot</th>
-                        <th class="px-4 py-2">Credits</th>
-                        <th class="px-4 py-2">LTPC</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Example Row 1 -->
-                    <tr class="odd:bg-gray-50 even:bg-white">
-                        <td class="px-4 py-2">CS101</td>
-                        <td class="px-4 py-2">Introduction to Computer Science</td>
-                        <td class="px-4 py-2">Dr. Alice Johnson</td>
-                        <td class="px-4 py-2">Core</td>
-                        <td class="px-4 py-2">A</td>
-                        <td class="px-4 py-2">4</td>
-                        <td class="px-4 py-2">3-0-2-4</td>
-                    </tr>
-                    <!-- Example Row 2 -->
-                    <tr class="odd:bg-gray-50 even:bg-white">
-                        <td class="px-4 py-2">MA102</td>
-                        <td class="px-4 py-2">Engineering Mathematics</td>
-                        <td class="px-4 py-2">Prof. Bob Smith</td>
-                        <td class="px-4 py-2">Elective</td>
-                        <td class="px-4 py-2">B</td>
-                        <td class="px-4 py-2">3</td>
-                        <td class="px-4 py-2">3-1-0-3</td>
-                    </tr>
-                    <!-- Example Row 3 -->
-                    <tr class="odd:bg-gray-50 even:bg-white">
-                        <td class="px-4 py-2">PH201</td>
-                        <td class="px-4 py-2">Physics II</td>
-                        <td class="px-4 py-2">Dr. Carol White</td>
-                        <td class="px-4 py-2">Core</td>
-                        <td class="px-4 py-2">C</td>
-                        <td class="px-4 py-2">4</td>
-                        <td class="px-4 py-2">3-0-2-4</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Empty Case -->
-        <div class="hidden text-center text-gray-500">
-            No matching courses found.
-        </div>
+<body>
+  <nav class="navbar navbar-expand-lg bg-white shadow-sm border-bottom mb-4">
+    <div class="container">
+      <a class="navbar-brand fw-bold" href="#">Sootrank</a>
+      <div class="ms-auto">
+        <a href="{% url 'students_dashboard' %}" class="btn btn-outline-primary btn-sm">Dashboard</a>
+      </div>
     </div>
-</body>
+  </nav>
 
+  <div class="container" style="max-width: 1100px;">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h3 class="mb-0">Registered Courses</h3>
+      <span class="text-muted">Student: {{ student.first_name }} {{ student.last_name }} ({{ student.roll_no }})</span>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-body">
+        <form method="get" class="row g-2">
+          <div class="col-sm-7">
+            <label class="form-label mb-1">Search</label>
+            <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="Code, name, or slot">
+          </div>
+          <div class="col-sm-3">
+            <label class="form-label mb-1">Semester</label>
+            <input type="number" name="sem" value="{{ sem }}" class="form-control" min="1" step="1" placeholder="e.g., 3">
+          </div>
+          <div class="col-sm-2 d-grid">
+            <label class="form-label mb-1">&nbsp;</label>
+            <button class="btn btn-primary"><i class="fa-solid fa-magnifying-glass me-1"></i>Filter</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Sem</th>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Instructor</th>
+                <th>Slot</th>
+                <th>Credits</th>
+                <th>LTPC</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for it in items %}
+                <tr>
+                  <td>{{ it.semester }}</td>
+                  <td class="code">{{ it.code }}</td>
+                  <td>{{ it.name }}</td>
+                  <td>{{ it.instructors }}</td>
+                  <td>{{ it.slot }}</td>
+                  <td>{{ it.credits }}</td>
+                  <td>{{ it.ltpc }}</td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="7" class="text-muted text-center">No registered courses found.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
 </html>

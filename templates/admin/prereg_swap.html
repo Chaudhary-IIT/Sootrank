@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Swap Courses | Sootrank Admin</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+  <style>
+    body{ background:#f8f9fa; }
+    .card{ box-shadow:0 8px 20px rgba(0,0,0,.08); }
+    .code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .course-list{ max-height: 520px; overflow:auto; }
+    .sticky-top-20{ position:sticky; top:20px; z-index: 10; }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm mb-4">
+    <div class="container">
+      <a class="navbar-brand fw-bold" href="{% url 'custom_admin_home' %}">Sootrank Admin</a>
+      <div class="ms-auto">
+        <a href="{% url 'admin_preregistration' %}" class="btn btn-outline-light btn-sm">
+          <i class="fa-solid fa-arrow-left me-1"></i> Back
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container" style="max-width: 1120px;">
+    {% if messages %}
+      <div class="mb-3">
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags }} mb-2" role="alert">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="row g-4">
+      <!-- Left: course search, slot filter, and list -->
+      <div class="col-lg-6">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex align-items-end justify-content-between mb-3">
+              <h5 class="mb-0">Course Directory</h5>
+            </div>
+            <!-- Filter bar -->
+            <form method="get" class="row g-2 align-items-end mb-3">
+              <div class="col-sm-7">
+                <label class="form-label mb-1">Search</label>
+                <input type="text" name="q" value="{{ q }}" placeholder="Search code or name" class="form-control" />
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label mb-1">Slot</label>
+                <select name="slot" class="form-select">
+                  <option value="">All</option>
+                  <option value="A" {% if request.GET.slot == "A" %}selected{% endif %}>A</option>
+                  <option value="B" {% if request.GET.slot == "B" %}selected{% endif %}>B</option>
+                  <option value="C" {% if request.GET.slot == "C" %}selected{% endif %}>C</option>
+                  <option value="D" {% if request.GET.slot == "D" %}selected{% endif %}>D</option>
+                  <option value="E" {% if request.GET.slot == "E" %}selected{% endif %}>E</option>
+                  <option value="F" {% if request.GET.slot == "F" %}selected{% endif %}>F</option>
+                  <option value="G" {% if request.GET.slot == "G" %}selected{% endif %}>G</option>
+                </select>
+              </div>
+              <div class="col-sm-2 d-grid">
+                <button class="btn btn-primary">
+                  <i class="fa-solid fa-filter me-1"></i>Go
+                </button>
+              </div>
+            </form>
+
+            <!-- Full list: render all courses passed by the view -->
+            <div class="course-list list-group">
+              {% for c in courses %}
+                {% if not request.GET.slot or c.slot == request.GET.slot %}
+                  <div class="list-group-item d-flex justify-content-between align-items-center">
+                    <div><span class="code">{{ c.code }}</span> — {{ c.name }}</div>
+                    <span class="badge bg-secondary">{{ c.slot }}</span>
+                  </div>
+                {% endif %}
+              {% empty %}
+                <div class="text-muted small">No courses found.</div>
+              {% endfor %}
+            </div>
+            <div class="small text-muted mt-2">
+              Tip: pick any code from the list and enter it in the swap form on the right. Queries use server-side filtering based on GET parameters. [All items rendered]
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: swap form -->
+      <div class="col-lg-6">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="mb-3">Swap a Student Between Two Courses (same slot)</h5>
+            <form method="post" class="row g-3">
+              {% csrf_token %}
+              <div class="col-12">
+                <label class="form-label">Roll No</label>
+                <input type="text" name="roll_no" class="form-control" placeholder="e.g., B22CS123" required>
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label">From Course Code</label>
+                <input type="text" name="from_code" class="form-control" placeholder="e.g., EE-311" required>
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label">To Course Code</label>
+                <input type="text" name="to_code" class="form-control" placeholder="e.g., EE-507" required>
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label">Semester (optional)</label>
+                <input type="number" name="semester" class="form-control" min="1" step="1" placeholder="e.g., 3">
+                <div class="form-text">Leave blank to auto-detect from roll.</div>
+              </div>
+              <div class="col-12">
+                <button type="submit" class="btn btn-warning">
+                  <i class="fa-solid fa-right-left me-1"></i> Swap
+                </button>
+              </div>
+            </form>
+
+            <hr class="my-4" />
+            <div class="small text-muted">
+              The course list renders all items provided by the server; use the Slot dropdown to filter A–G and the search to narrow results by code or name. [Query filtering is server-side]
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{{ course.code }} — Enrolled</title>
+  <style>
+    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-size: 12px; }
+    h1 { font-size: 18px; margin: 0 0 6px 0; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { border: 1px solid #ccc; padding: 6px 8px; }
+    th { background: #f2f2f2; text-align: left; }
+    .meta { margin-bottom: 10px; color:#444; }
+    .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
+  </style>
+</head>
+<body>
+  <h1>{{ course.code }} — {{ course.name }}</h1>
+  <div class="meta">Slot: {{ course.slot }}</div>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Roll No</th>
+        <th>Name</th>
+        <th>Semester</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for sc in rows %}
+        <tr>
+          <td>{{ forloop.counter }}</td>
+          <td class="mono">{{ sc.student.roll_no }}</td>
+          <td>{{ sc.student.first_name }} {{ sc.student.last_name }}</td>
+          <td>{{ sc.semester }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4">No enrolled students (ENR).</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>
