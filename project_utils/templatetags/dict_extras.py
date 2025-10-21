@@ -11,3 +11,12 @@ def get_item(d, key):
         return d[key]
     except Exception:
         return None
+    
+
+
+@register.filter
+def get_attr(obj, name):
+    try:
+        return getattr(obj, name)
+    except Exception:
+        return None

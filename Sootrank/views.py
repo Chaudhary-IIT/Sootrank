@@ -10,7 +10,7 @@ from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from openpyxl import Workbook
-from Registration.models import Branch, Category, Course, CourseBranch, Department, ProgramRequirement, Student, Faculty, Admins, StudentCourse
+from Registration.models import Branch, Category, Course, CourseBranch, Department, ProgramRequirement, Student, Faculty, Admins, StudentCourse, AssessmentComponent,AssessmentScore
 from django.contrib.auth import authenticate , login as auth_login
 from django.contrib.auth.hashers import make_password,check_password
 from django.db.models import Count, Q, OuterRef, Exists 
@@ -587,6 +587,7 @@ def faculty_edit_profile(request):
         form = FacultyEditForm(instance=faculty)
 
     return render(request, "instructor/edit_profile.html", {"form": form, "faculty": faculty})
+
 def custom_admin_home(request):
     return render(request, "admin/custom_admin_home.html")
 
@@ -940,7 +941,7 @@ def delete_faculty(request, faculty_id):
     if request.method == "POST":
         faculty.delete()
         return redirect('custom_admin_faculty')
-    
+
 def custom_admin_edit_faculty(request, faculty_id):
     faculty = get_object_or_404(Faculty, id=faculty_id)
     departments = Department.objects.all().order_by('code')
@@ -2070,43 +2071,108 @@ def instructor_courses(request):
 
 
 def course_roster(request, course_code, semester=None):
+    # Auth
     email_id = request.session.get("email_id")
     if not email_id:
         login_url = getattr(settings, "LOGIN_URL", "/login/")
         return redirect(f"{login_url}?next={request.path}")
+
     instructor = get_object_or_404(Faculty, email_id=email_id)
 
+    # Course ownership
     course = get_object_or_404(Course.objects.prefetch_related("faculties"), code=course_code)
     if not course.faculties.filter(id=instructor.id).exists():
         return redirect("instructor_courses")
 
-    # List all ENR rows for this course across all semesters
-    enrollments = (
-        StudentCourse.objects.filter(course__code=course_code, status="ENR")
-        .select_related("student", "course")
-        .order_by("student__roll_no", "semester")
-    )
+    # Search text
+    q = (request.GET.get("q") or request.POST.get("q") or "").strip()
 
-    # Optional: unique students only (one row per student, earliest semester)
-    # from django.db.models import Min
-    # first_sem = (
-    #     StudentCourse.objects.filter(course__code=course_code, status="ENR")
-    #     .values("student_id").annotate(min_sem=Min("semester"))
-    # )
-    # enrollments = (
-    #     StudentCourse.objects.filter(
-    #         course__code=course_code, status="ENR",
-    #         semester__in=[r["min_sem"] for r in first_sem]
-    #     )
-    #     .select_related("student","course")
-    #     .order_by("student__roll_no")
-    # )
+    # POST actions: add student, remove student, attendance
+    if request.method == "POST":
+        action = (request.POST.get("action") or "").lower()
+
+        if action == "add_student":
+            roll_no = (request.POST.get("roll_no") or "").strip().lower()
+            raw_sem = (request.POST.get("add_semester") or "").strip()
+            if not roll_no:
+                messages.error(request, "Roll number is required.")
+            else:
+                student = Student.objects.filter(roll_no__iexact=roll_no).first()
+                if not student:
+                    messages.error(request, "Student not found.")
+                else:
+                    # still set semester on enrollment to satisfy model constraint, but do not use it for display
+                    try:
+                        sem_val = int(raw_sem) if raw_sem else _compute_semester_from_roll_and_today(student.roll_no)
+                    except Exception:
+                        sem_val = _compute_semester_from_roll_and_today(student.roll_no)
+                    with transaction.atomic():
+                        obj, created = StudentCourse.objects.get_or_create(
+                            student=student,
+                            course=course,
+                            semester=sem_val,
+                            defaults={"status": "ENR", "is_pass_fail": False},
+                        )
+                        if created:
+                            messages.success(request, f"Enrolled {student.roll_no} in {course.code}.")
+                        else:
+                            if obj.status != "ENR":
+                                obj.status = "ENR"
+                                obj.save(update_fields=["status"])
+                                messages.success(request, f"Updated {student.roll_no} to ENR in {course.code}.")
+                            else:
+                                messages.info(request, f"{student.roll_no} is already enrolled in {course.code}.")
+            # Redirect to same page, preserve search
+            return redirect(f"{request.path}{'?q='+q if q else ''}")
+
+        if action == "remove_student":
+            sc_id = request.POST.get("sc_id")
+            try:
+                sc_id_int = int(sc_id)
+            except (TypeError, ValueError):
+                sc_id_int = None
+            if not sc_id_int:
+                messages.error(request, "Invalid selection.")
+            else:
+                with transaction.atomic():
+                    sc = StudentCourse.objects.filter(id=sc_id_int, course=course, status="ENR").first()
+                    if not sc:
+                        messages.info(request, "No matching enrolled record found.")
+                    else:
+                        rid = sc.student.roll_no
+                        sc.delete()
+                        messages.success(request, f"Removed {rid} from {course.code}.")
+            return redirect(f"{request.path}{'?q='+q if q else ''}")
+
+
+        messages.error(request, "Unknown action.")
+        return redirect(f"{request.path}{'?q='+q if q else ''}")
+
+    # GET: all enrolled rows for this course, no semester filter or sort by semester
+    enrollments_qs = (
+        StudentCourse.objects
+        .filter(course__code=course_code, status="ENR")
+        .select_related("student", "course")
+    )
+    if q:
+        enrollments_qs = enrollments_qs.filter(
+            Q(student__roll_no__icontains=q) |
+            Q(student__first_name__icontains=q) |
+            Q(student__last_name__icontains=q)
+        )
+    enrollments_qs = enrollments_qs.order_by("student__roll_no")
+
+    # Compute dynamic semester for display only
+    enrollments = []
+    for sc in enrollments_qs:
+        sc.computed_semester = _compute_semester_from_roll_and_today(sc.student.roll_no)
+        enrollments.append(sc)
 
     context = {
         "instructor": instructor,
         "course": course,
-        "semester": "All",  # label for the page header
         "enrollments": enrollments,
+        "q": q,
     }
     return render(request, "instructor/course_roster.html", context)
 
@@ -3089,8 +3155,6 @@ from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
 from openpyxl import load_workbook
 
-# from .models import Faculty, Course, Student, StudentCourse, AssessmentComponent, AssessmentScore
-# from .decorators import require_faculty  # ensure this exists in project
 
 def _canon(s: str) -> str:
     import re
@@ -3167,30 +3231,24 @@ def all_courses(request, faculty_id):
         'courses': courses,
     })
 
-
-@require_faculty
 def assign_grades_csv(request, course_code):
     """
-    Upload scores (CSV/Excel), choose grading mode and assign CGPA 10..5/4 into StudentCourse.grade,
-    setting outcome PAS/FAI. AssessmentScore has no semester; keys are (student, course, component).
-    Components have no semester; fetched by course only. StudentCourse carries semester.
+    Instructor upload of scores (CSV/Excel) and assignment of grades.
+    - Scores saved to AssessmentScore keyed by (student, course, component).
+    - Enrollment gate uses StudentCourse.status='ENR' (any semester).
+    - Absolute thresholds: A, A-, B, B-, C → 10..6, else 5 (changeable).
+    - Relative buckets: top10, next15, next25, next25b, next15b, next10; remainder = rest_min.
     """
     # Auth and course
     email = request.session.get("email_id")
     faculty = get_object_or_404(Faculty, email_id=email)
     course = get_object_or_404(Course, code=course_code, faculties=faculty)
 
-    # Semester
-    try:
-        current_sem = int(request.GET.get("sem") or 1)
-    except ValueError:
-        current_sem = 1
-
-    # Components (no semester in model)
+    # Components (no semester on model)
     components = list(AssessmentComponent.objects.filter(course=course))
     if not components:
         messages.error(request, "Define the assessment scheme before assigning grades.")
-        return redirect(f"{reverse('edit_assessment_scheme', args=[course.code])}?sem={current_sem}")
+        return redirect(f"{reverse('edit_assessment_scheme', args=[course.code])}")
 
     comp_by_key = {_canon(c.name): c for c in components}
 
@@ -3199,7 +3257,7 @@ def assign_grades_csv(request, course_code):
         f_scores = request.FILES.get("csv_file")
         if not f_scores:
             messages.error(request, "Please choose a CSV or Excel file to upload.")
-            return redirect(request.path + (f"?sem={current_sem}" if current_sem else ""))
+            return redirect(request.path)
 
         # Grading mode and parameters
         policy_mode = (request.POST.get("mode") or "ABS").upper()
@@ -3214,18 +3272,18 @@ def assign_grades_csv(request, course_code):
 
         # Absolute thresholds aligned to A, A-, B, B-, C
         abs_thresholds = {
-            "A": _as_int(request.POST.get("abs_A"), 85),        # A
-            "A_minus": _as_int(request.POST.get("abs_B"), 75),  # A-
-            "B": _as_int(request.POST.get("abs_C"), 65),        # B
-            "B_minus": _as_int(request.POST.get("abs_D"), 55),  # B-
-            "C": _as_int(request.POST.get("abs_E"), 45),        # C
+            "A": _as_int(request.POST.get("abs_A"), 85),
+            "A_minus": _as_int(request.POST.get("abs_B"), 75),
+            "B": _as_int(request.POST.get("abs_C"), 65),
+            "B_minus": _as_int(request.POST.get("abs_D"), 55),
+            "C": _as_int(request.POST.get("abs_E"), 45),
         }
         try:
             pass_min = Decimal(request.POST.get("pass_min_percent") or getattr(settings, "PASS_MIN_PERCENT", 45))
         except (InvalidOperation, TypeError):
             pass_min = Decimal("45")
 
-        # Relative buckets (percent to points)
+        # Relative buckets
         rel_buckets = {
             "top10": _as_float(request.POST.get("top10"), 10),
             "next15": _as_float(request.POST.get("next15"), 15),
@@ -3236,27 +3294,27 @@ def assign_grades_csv(request, course_code):
             "rest_min": _as_int(request.POST.get("rest_min"), 4),
         }
 
-        # Read data rows
+        # Read uploaded rows
         rows_list = list(_iter_rows_as_dicts(f_scores))
         if not rows_list:
             messages.error(request, "No rows found in the uploaded file.")
-            return redirect(request.path + (f"?sem={current_sem}" if current_sem else ""))
+            return redirect(request.path)
 
         headers = list(rows_list[0].keys())
         roll_aliases = {"roll", "rollno", "rollnumber", "roll_no", "roll no"}
         has_roll = any(_canon(h) in roll_aliases for h in headers)
         if not has_roll:
             messages.error(request, "File must contain a roll_no column.")
-            return redirect(request.path + (f"?sem={current_sem}" if current_sem else ""))
+            return redirect(request.path)
 
         comp_headers = [h for h in headers if _canon(h) in comp_by_key]
         if not comp_headers:
             messages.error(request, "File must contain at least one component matching the scheme.")
-            return redirect(request.path + (f"?sem={current_sem}" if current_sem else ""))
+            return redirect(request.path)
 
         updated_scores, missing_students, invalid_marks = 0, [], []
 
-        # Persist component marks (AssessmentScore has no semester)
+        # Persist component marks for currently ENR students (any semester)
         with transaction.atomic():
             for row in rows_list:
                 ident = (row.get("roll_no") or row.get("roll") or row.get("Roll No") or row.get("ROLL_NO") or "")
@@ -3270,10 +3328,9 @@ def assign_grades_csv(request, course_code):
                     missing_students.append(ident)
                     continue
 
-                # Ensure enrollment record exists for the selected semester
-                sc = StudentCourse.objects.filter(student=student, course=course, semester=current_sem).first()
-                if not sc:
-                    # Skip students not enrolled in this offering
+                # Only if student is enrolled (status ENR) in this course (any semester)
+                sc_exists = StudentCourse.objects.filter(student=student, course=course, status='ENR').exists()
+                if not sc_exists:
                     continue
 
                 for raw_h, val in row.items():
@@ -3288,7 +3345,8 @@ def assign_grades_csv(request, course_code):
                     except InvalidOperation:
                         invalid_marks.append((ident, raw_h, val))
                         continue
-                    # Validate within component max
+
+                    # Bounds check against component max
                     try:
                         max_d = Decimal(str(comp.max_marks))
                     except (InvalidOperation, TypeError):
@@ -3305,17 +3363,15 @@ def assign_grades_csv(request, course_code):
                     )
                     updated_scores += 1
 
-        # Compute totals for enrolled students (per semester via StudentCourse)
-        affected_qs = StudentCourse.objects.filter(course=course, semester=current_sem).select_related("student")
+        # Compute totals for currently ENR students (any semester)
+        affected_qs = StudentCourse.objects.filter(course=course, status='ENR').select_related("student")
         totals_per_student, totals_dict = [], {}
         for sc in affected_qs:
             if getattr(sc, "is_pass_fail", False):
                 continue
             total_percent = Decimal("0")
             for comp in components:
-                s = AssessmentScore.objects.filter(
-                    student=sc.student, course=course, component=comp
-                ).first()
+                s = AssessmentScore.objects.filter(student=sc.student, course=course, component=comp).first()
                 if s and comp.max_marks and comp.weight:
                     try:
                         total_percent += (Decimal(str(s.marks_obtained)) / Decimal(str(comp.max_marks))) * Decimal(str(comp.weight))
@@ -3324,7 +3380,7 @@ def assign_grades_csv(request, course_code):
             totals_per_student.append((sc.student_id, total_percent))
             totals_dict[sc.student_id] = total_percent
 
-        # Assign CGPA points and outcome
+        # Assign grades
         if policy_mode == "REL":
             cohort = sorted(totals_per_student, key=lambda x: x[1], reverse=True)
             n = len(cohort)
@@ -3341,11 +3397,11 @@ def assign_grades_csv(request, course_code):
             for (count, (_key, cg)) in zip(counts, seq):
                 for _ in range(count):
                     if idx < n:
-                        sid, _score = cohort[idx]
+                        sid, _ = cohort[idx]
                         cg_map[sid] = cg
                         idx += 1
             for i in range(idx, n):
-                sid, _score = cohort[i]
+                sid, _ = cohort[i]
                 cg_map[sid] = rest_min
 
             for sc in affected_qs:
@@ -3357,7 +3413,6 @@ def assign_grades_csv(request, course_code):
                     sc.outcome = "PAS" if cg >= 4 else "FAI"
                     sc.save(update_fields=["grade", "outcome"])
         else:
-            # Absolute mapping using A, A-, B, B-, C thresholds to 10..6 (else 5)
             A = Decimal(abs_thresholds["A"])
             A_ = Decimal(abs_thresholds["A_minus"])
             B = Decimal(abs_thresholds["B"])
@@ -3365,12 +3420,12 @@ def assign_grades_csv(request, course_code):
             C = Decimal(abs_thresholds["C"])
 
             def cg_from_abs(pct: Decimal) -> int:
-                if pct >= A:  return 10  # A
-                if pct >= A_: return 9   # A-
-                if pct >= B:  return 8   # B
-                if pct >= B_: return 7   # B-
-                if pct >= C:  return 6   # C
-                return 5                 # set to 4 if F is required below C
+                if pct >= A:  return 10
+                if pct >= A_: return 9
+                if pct >= B:  return 8
+                if pct >= B_: return 7
+                if pct >= C:  return 6
+                return 5  # change to 4 to treat below C as F
 
             for sc in affected_qs:
                 if getattr(sc, "is_pass_fail", False):
@@ -3388,34 +3443,33 @@ def assign_grades_csv(request, course_code):
         if invalid_marks:
             messages.warning(request, f"{len(invalid_marks)} invalid marks skipped.")
 
-        return redirect(f"{reverse('grade_results', args=[course.code])}?sem={current_sem}&sort=points_desc")
+        return redirect(f"{reverse('grade_results', args=[course.code])}")
 
-    # GET: render the upload + policy form
+    # GET renders upload + policy form
     return render(request, "instructor/assign_grades.html", {
         "course": course,
         "faculty": faculty,
-        "semester": current_sem,
         "components": components,
         "total_weight": sum([float(c.weight or 0) for c in components]) if components else None,
         "sample_headers": ["roll_no"] + [c.name for c in components],
     })
 
 
-@require_faculty
 def grade_results(request, course_code):
+    # Auth and course
     email = request.session.get("email_id")
     faculty = get_object_or_404(Faculty, email_id=email)
     course = get_object_or_404(Course, code=course_code, faculties=faculty)
 
-    try:
-        current_sem = int(request.GET.get("sem") or 1)
-    except ValueError:
-        current_sem = 1
+    # Components (shown as columns)
+    components = list(AssessmentComponent.objects.filter(course=course))
 
+    # Only ENR enrollments, across all semesters
     enrollments = (
         StudentCourse.objects
-        .filter(course=course, semester=current_sem)
+        .filter(course=course, status='ENR')
         .select_related('student')
+        .order_by('student__roll_no')
     )
 
     def letter_for_points(points):
@@ -3433,37 +3487,53 @@ def grade_results(request, course_code):
 
     rows = []
     for sc in enrollments:
+        comp_marks = {}
+        total_percent = Decimal("0")
+        for comp in components:
+            s = AssessmentScore.objects.filter(student=sc.student, course=course, component=comp).first()
+            mark = s.marks_obtained if s else None
+            comp_marks[comp.id] = mark
+            if s and comp.max_marks and comp.weight:
+                try:
+                    total_percent += (Decimal(str(s.marks_obtained)) / Decimal(str(comp.max_marks))) * Decimal(str(comp.weight))
+                except (InvalidOperation, TypeError):
+                    pass
+
         pts_str = sc.grade or ''
-        letter = letter_for_points(pts_str)
         try:
             pts_int = int(pts_str)
         except (TypeError, ValueError):
-            pts_int = -1
+            pts_int = None
+
         rows.append({
             'student': sc.student,
             'roll': sc.student.roll_no,
             'name': f"{sc.student.first_name} {sc.student.last_name or ''}".strip(),
-            'letter': letter,
+            'components': comp_marks,
+            'total_percent': float(total_percent.quantize(Decimal('0.01'))),
             'points': pts_int,
+            'letter': letter_for_points(pts_int) if pts_int is not None else '',
             'outcome': sc.outcome or '',
         })
 
-    sort = (request.GET.get("sort") or "points_desc").lower()
-    key_map = {
-        "name": lambda r: (r['name'].lower(), r['roll'].lower()),
-        "roll": lambda r: r['roll'].lower(),
-        "points": lambda r: (r['points'], r['name'].lower()),
-        "letter": lambda r: (r['letter'], r['name'].lower()),
-    }
+    # Sorting
+    sort = (request.GET.get("sort") or "roll_asc").lower()
     reverse = sort.endswith("_desc")
     base = sort.split("_")[0]
-    key = key_map.get(base, key_map["points"])
-    rows.sort(key=key, reverse=reverse)
+    if base == "name":
+        rows.sort(key=lambda r: (r['name'].lower(), r['roll'].lower()), reverse=reverse)
+    elif base == "roll":
+        rows.sort(key=lambda r: r['roll'].lower(), reverse=reverse)
+    elif base == "points":
+        rows.sort(key=lambda r: (r['points'] if r['points'] is not None else -1, r['name'].lower()), reverse=reverse)
+    elif base == "letter":
+        rows.sort(key=lambda r: (r['letter'], r['name'].lower()), reverse=reverse)
 
     return render(request, 'instructor/grade_results.html', {
         'course': course,
         'faculty': faculty,
-        'semester': current_sem,
+        'components': components,
         'rows': rows,
         'sort': sort,
     })
+

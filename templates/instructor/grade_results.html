@@ -1,4 +1,5 @@
 {% load static %}
+{% load dict_extras %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -10,19 +11,19 @@
 <body class="min-h-screen bg-gray-50">
 
 <header class="bg-white shadow">
-  <div class="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+  <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
     <div>
       <h1 class="text-xl font-semibold">Grade Results</h1>
-      <p class="text-sm text-gray-600">{{ course.code }} — {{ course.name }}{% if semester %} · Semester {{ semester }}{% endif %}</p>
+      <p class="text-sm text-gray-600">{{ course.code }} — {{ course.name }}</p>
     </div>
     <div class="flex items-center gap-3">
-      <a href="{% url 'edit_assessment_scheme' course.code %}?sem={{ semester }}" class="text-sm text-blue-700 hover:underline">Edit scheme</a>
-      <a href="{% url 'assign_grades_csv' course.code %}?sem={{ semester }}" class="text-sm text-blue-700 hover:underline">Assign grades</a>
+      <a href="{% url 'edit_assessment_scheme' course.code %}" class="text-sm text-blue-700 hover:underline">Edit scheme</a>
+      <a href="{% url 'assign_grades_csv' course.code %}" class="text-sm text-blue-700 hover:underline">Assign grades</a>
     </div>
   </div>
 </header>
 
-<main class="max-w-5xl mx-auto px-4 py-6">
+<main class="max-w-6xl mx-auto px-4 py-6">
 
   {% if messages %}
     <div class="space-y-2 mb-6">
@@ -41,26 +42,17 @@
   <!-- Sort controls -->
   <div class="mb-4 flex flex-wrap items-center gap-2 text-sm">
     <span class="text-gray-600">Sort by:</span>
-    <a class="px-2 py-1 rounded border {% if sort == 'name_desc' %}bg-gray-100{% endif %}"
-   href="?sem={{ semester }}&sort=name_desc">Name ↓</a>
+    <a class="px-2 py-1 rounded border {% if sort == 'name_asc' %}bg-gray-100{% endif %}" href="?sort=name_asc">Name ↑</a>
+    <a class="px-2 py-1 rounded border {% if sort == 'name_desc' %}bg-gray-100{% endif %}" href="?sort=name_desc">Name ↓</a>
 
-<a class="px-2 py-1 rounded border {% if sort == 'roll_asc' %}bg-gray-100{% endif %}"
-   href="?sem={{ semester }}&sort=roll_asc">Roll ↑</a>
+    <a class="px-2 py-1 rounded border {% if sort == 'roll_asc' %}bg-gray-100{% endif %}" href="?sort=roll_asc">Roll ↑</a>
+    <a class="px-2 py-1 rounded border {% if sort == 'roll_desc' %}bg-gray-100{% endif %}" href="?sort=roll_desc">Roll ↓</a>
 
-<a class="px-2 py-1 rounded border {% if sort == 'roll_desc' %}bg-gray-100{% endif %}"
-   href="?sem={{ semester }}&sort=roll_desc">Roll ↓</a>
+    <a class="px-2 py-1 rounded border {% if sort == 'points_asc' %}bg-gray-100{% endif %}" href="?sort=points_asc">Grades ↑</a>
+    <a class="px-2 py-1 rounded border {% if sort == 'points_desc' %}bg-gray-100{% endif %}" href="?sort=points_desc">Grades ↓</a>
 
-<a class="px-2 py-1 rounded border {% if sort == 'points_desc' %}bg-gray-100{% endif %}"
-   href="?sem={{ semester }}&sort=points_desc">Points ↓</a>
-
-<a class="px-2 py-1 rounded border {% if sort == 'points_asc' %}bg-gray-100{% endif %}"
-   href="?sem={{ semester }}&sort=points_asc">Points ↑</a>
-
-<a class="px-2 py-1 rounded border {% if sort == 'letter_asc' %}bg-gray-100{% endif %}"
-   href="?sem={{ semester }}&sort=letter_asc">Letter ↑</a>
-
-<a class="px-2 py-1 rounded border {% if sort == 'letter_desc' %}bg-gray-100{% endif %}"
-   href="?sem={{ semester }}&sort=letter_desc">Letter ↓</a>
+    <a class="px-2 py-1 rounded border {% if sort == 'letter_asc' %}bg-gray-100{% endif %}" href="?sort=letter_asc">Letter ↑</a>
+    <a class="px-2 py-1 rounded border {% if sort == 'letter_desc' %}bg-gray-100{% endif %}" href="?sort=letter_desc">Letter ↓</a>
   </div>
 
   <div class="bg-white rounded-xl shadow overflow-x-auto">
@@ -69,8 +61,12 @@
         <tr>
           <th class="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Roll No</th>
           <th class="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Name</th>
+          {% for comp in components %}
+            <th class="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">{{ comp.name }}</th>
+          {% endfor %}
+          <th class="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Total (%)</th>
+          <th class="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Grade</th>
           <th class="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Letter</th>
-          <th class="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Points</th>
           <th class="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Outcome</th>
         </tr>
       </thead>
@@ -79,12 +75,22 @@
           <tr class="hover:bg-gray-50">
             <td class="px-4 py-2 text-sm font-medium text-gray-900">{{ r.roll }}</td>
             <td class="px-4 py-2 text-sm text-gray-800">{{ r.name }}</td>
-            <td class="px-4 py-2 text-sm">{{ r.letter }}</td>
+            {% for comp in components %}
+              <td class="px-4 py-2 text-sm">
+                {{ r.components|get_item:comp.id }}
+              </td>
+            {% endfor %}
+            <td class="px-4 py-2 text-sm">{{ r.total_percent }}</td>
             <td class="px-4 py-2 text-sm">{{ r.points }}</td>
+            <td class="px-4 py-2 text-sm">{{ r.letter }}</td>
             <td class="px-4 py-2 text-sm">{{ r.outcome }}</td>
           </tr>
         {% empty %}
-          <tr><td colspan="5" class="px-4 py-6 text-center text-sm text-gray-600">No grades to display.</td></tr>
+          <tr>
+            <td colspan="{{ components|length|add:4 }}" class="px-4 py-6 text-center text-sm text-gray-600">
+              No grades to display.
+            </td>
+          </tr>
         {% endfor %}
       </tbody>
     </table>

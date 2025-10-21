@@ -10,6 +10,13 @@
 
 <body class="min-h-screen bg-gray-100 flex items-start justify-center py-10">
   <div class="w-[1150px]">
+    {% if messages %}
+      <div class="mb-3">
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags }} mb-2" role="alert">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
 
     <!-- Header -->
     <div class="mb-5 flex items-center justify-between">

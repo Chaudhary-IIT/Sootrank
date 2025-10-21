@@ -3,34 +3,112 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>{{ course.code }} — Roster ({{ semester }})</title>
+  <title>{{ course.code }} — Roster</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Dialog backdrop shading */
+    dialog::backdrop { background: rgba(0,0,0,0.5); }
+  </style>
 </head>
 <body class="min-h-screen bg-gray-100">
   <!-- Header -->
   <header class="bg-white shadow">
     <div class="max-w-6xl mx-auto px-4 py-5 flex items-center justify-between">
+      <!-- Left Section -->
       <div>
         <h1 class="text-2xl font-bold">{{ course.code }} — {{ course.name }}</h1>
         <p class="text-sm text-gray-600">
-          Viewing: {{ semester }} • Slot {{ course.slot }} • Credits {{ course.credits }} • LTPC {{ course.LTPC }}
+          Slot {{ course.slot }} • Credits {{ course.credits }} • LTPC {{ course.LTPC }}
         </p>
       </div>
-      <a href="{% url 'instructor_courses' %}" class="text-sm text-blue-700 hover:underline">Back to courses</a>
+      <div class="flex items-center space-x-3">
+        <a href="{% url 'instructor_courses' %}" 
+          class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition">
+          Back to Courses
+        </a>
+        <a href="{% url 'faculty_dashboard' %}" 
+          class="px-4 py-2 text-sm font-medium text-blue-600 border border-blue-600 rounded hover:bg-blue-50 transition">
+          Home
+        </a>
+      </div>
     </div>
   </header>
 
+
+  <!-- Messages -->
+  <div class="max-w-6xl mx-auto px-4 pt-4">
+    {% if messages %}
+      <ul class="space-y-2">
+        {% for message in messages %}
+          <li class="text-sm px-3 py-2 rounded
+                     {% if message.tags == 'success' %}bg-green-100 text-green-800
+                     {% elif message.tags == 'warning' %}bg-yellow-100 text-yellow-800
+                     {% elif message.tags == 'error' %}bg-red-100 text-red-800
+                     {% else %}bg-gray-100 text-gray-800{% endif %}">
+            {{ message }}
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+
   <!-- Main -->
-  <main class="max-w-6xl mx-auto px-4 py-8 space-y-6">
+  <main class="max-w-6xl mx-auto px-4 py-6 space-y-6">
+    <!-- Controls: Search, Add Student, Attendance -->
+    <div class="bg-white rounded-2xl shadow p-5 space-y-4">
+      <!-- Search -->
+      <form method="get" class="flex items-center gap-3">
+        <input
+          type="text"
+          name="q"
+          value="{{ q }}"
+          placeholder="Search by roll or name"
+          class="w-full sm:max-w-md px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <button type="submit"
+                class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+          Search
+        </button>
+        {% if q %}
+          <a href="." class="px-3 py-2 text-sm text-gray-700 hover:underline">Clear</a>
+        {% endif %}
+      </form>
+
+      <!-- Add Student -->
+      <form method="post" class="flex flex-col sm:flex-row items-start sm:items-end gap-3">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_student" />
+        <input type="hidden" name="q" value="{{ q }}" />
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Roll No</label>
+          <input type="text" name="roll_no" required
+                 placeholder="e.g., B21001"
+                 class="mt-1 w-56 px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Semester (optional)</label>
+          <input type="number" name="add_semester" min="1" max="20"
+                 placeholder="Auto if empty"
+                 class="mt-1 w-40 px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <button type="submit"
+                class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+          Add student
+        </button>
+      </form>
+
+     
+    </div>
+
     <!-- Summary -->
     <div class="bg-white rounded-2xl shadow p-5 flex items-center justify-between">
       <div class="text-sm text-gray-700">
-        All enrolled students across semesters. Each row shows the student’s semester at enrollment time.
+        All enrolled students; semester shown is computed dynamically from roll number.
       </div>
       <div class="text-sm">
         <span class="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1">
-          Enrolled rows: {{ enrollments|length }}
+          Enrolled students: {{ enrollments|length }}
         </span>
       </div>
     </div>
@@ -45,6 +123,7 @@
             <th class="px-5 py-3 text-sm font-semibold">Student</th>
             <th class="px-5 py-3 text-sm font-semibold">Semester</th>
             <th class="px-5 py-3 text-sm font-semibold">Status</th>
+            <th class="px-5 py-3 text-sm font-semibold">Actions</th>
           </tr>
         </thead>
         <tbody class="text-gray-900">
@@ -56,22 +135,106 @@
                 <td class="px-5 py-3">
                   {{ sc.student.first_name }}{% if sc.student.last_name %} {{ sc.student.last_name }}{% endif %}
                 </td>
-                <td class="px-5 py-3 whitespace-nowrap">{{ sc.semester }}</td>
+                <td class="px-5 py-3 whitespace-nowrap">{{ sc.computed_semester }}</td>
                 <td class="px-5 py-3">
                   <span class="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1">
                     Enrolled
                   </span>
                 </td>
+                <td class="px-5 py-3">
+                  <!-- Trigger modal instead of direct form submit -->
+                  <button type="button"
+                          class="px-3 py-1.5 text-xs rounded bg-red-600 text-white hover:bg-red-700 js-open-remove"
+                          data-sc-id="{{ sc.id }}"
+                          data-roll="{{ sc.student.roll_no }}">
+                    Remove
+                  </button>
+                </td>
               </tr>
             {% endfor %}
           {% else %}
             <tr class="border-t">
-              <td class="px-5 py-6 text-center text-gray-500" colspan="5">No enrolled students found.</td>
+              <td class="px-5 py-6 text-center text-gray-500" colspan="6">No enrolled students found.</td>
             </tr>
           {% endif %}
         </tbody>
       </table>
     </div>
   </main>
+
+  <!-- Remove confirmation modal -->
+  <dialog id="confirmRemoveDialog" class="rounded-lg w-full max-w-md p-0">
+    <form method="post" class="bg-white rounded-lg overflow-hidden">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="remove_student" />
+      <input type="hidden" name="sc_id" id="remove_sc_id" />
+      <input type="hidden" name="q" value="{{ q }}" />
+      <div class="px-5 pt-5">
+        <h2 class="text-lg font-semibold text-gray-900">Remove student</h2>
+        <p class="mt-2 text-sm text-gray-700">
+          You are about to remove <span id="remove_roll_badge" class="font-medium"></span> from {{ course.code }} [this cannot be undone]. 
+        </p>
+      </div>
+      <div class="mt-5 px-5 pb-5 flex items-center justify-end gap-3">
+        <button type="button"
+                class="px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 js-cancel-remove">
+          Cancel
+        </button>
+        <button type="submit"
+                class="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700">
+          Confirm remove
+        </button>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    (function () {
+      const dialog = document.getElementById('confirmRemoveDialog');
+      const removeIdInput = document.getElementById('remove_sc_id');
+      const rollBadge = document.getElementById('remove_roll_badge');
+
+      // Open modal with row context
+      document.querySelectorAll('.js-open-remove').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const scId = btn.getAttribute('data-sc-id');
+          const roll = btn.getAttribute('data-roll');
+          removeIdInput.value = scId;
+          rollBadge.textContent = roll;
+          if (dialog && dialog.showModal) {
+            dialog.showModal();
+          } else {
+            // Fallback to native confirm()
+            if (confirm(`Remove ${roll} from {{ course.code }}? This action cannot be undone.`)) {
+              // Submit via a temporary form if dialog unsupported
+              const tempForm = document.createElement('form');
+              tempForm.method = 'POST';
+              tempForm.action = '';
+              const csrf = document.querySelector('input[name="csrfmiddlewaretoken"]').cloneNode();
+              const a = document.createElement('input');
+              a.type = 'hidden'; a.name = 'action'; a.value = 'remove_student';
+              const b = document.createElement('input');
+              b.type = 'hidden'; b.name = 'sc_id'; b.value = scId;
+              const c = document.createElement('input');
+              c.type = 'hidden'; c.name = 'q'; c.value = '{{ q }}';
+              tempForm.appendChild(csrf);
+              tempForm.appendChild(a);
+              tempForm.appendChild(b);
+              tempForm.appendChild(c);
+              document.body.appendChild(tempForm);
+              tempForm.submit();
+            }
+          }
+        });
+      });
+
+      // Cancel/close modal
+      document.querySelectorAll('.js-cancel-remove').forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (dialog && dialog.close) dialog.close();
+        });
+      });
+    })();
+  </script>
 </body>
 </html>
