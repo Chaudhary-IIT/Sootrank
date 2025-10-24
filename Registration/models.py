@@ -109,41 +109,67 @@ class Student(models.Model):
         return self.enrollments.filter(semester=semester)
 
     def calculate_semester_metrics(self, semester):
+        """
+        Calculate semester metrics (SGPA, RCR, ECR, STCR).
+        Pass/Fail courses:
+        - Count in ECR if passed
+        - Do NOT count in RCR or STCR (no impact on SGPA)
+        """
         enrollments = self.enrollments.filter(semester=semester)
         rcr, ecr, stcr = 0, 0, 0
 
         for enr in enrollments:
-            if enr.is_pass_fail:
-                continue
             credits = enr.course.credits
-            rcr += credits
-            points = GRADE_POINTS.get(enr.grade, 0)
-            stcr += points * credits
-            if enr.outcome == "PAS" and points > 0:
-                ecr += credits
+            
+            if enr.is_pass_fail:
+                # Pass/Fail courses: count in ECR if passed, but not in RCR or STCR
+                if enr.outcome == "PAS":
+                    ecr += credits
+            else:
+                # Regular graded courses
+                rcr += credits
+                points = GRADE_POINTS.get(enr.grade, 0)
+                stcr += points * credits
+                if enr.outcome == "PAS" and points > 0:
+                    ecr += credits
 
         sgpa = round(stcr / rcr, 2) if rcr else 0
         return {"RCR": rcr, "ECR": ecr, "STCR": stcr, "SGPA": sgpa}
 
     def calculate_cumulative_metrics(self):
+        """
+        Calculate cumulative metrics (CGPA, TRCR, TECR, TSTCR).
+        Pass/Fail courses:
+        - Count in TECR if passed
+        - Do NOT count in TRCR or TSTCR (no impact on CGPA)
+        Handles retakes: only the latest attempt of each course counts.
+        """
         enrollments = self.enrollments.order_by('semester').all()
         trcr, tecr, tstcr = 0, 0, 0
         latest_course_grades = {}
 
         for enr in enrollments:
-            if enr.is_pass_fail:
-                continue
-
             course_code = enr.course.code
             credits = enr.course.credits
+            
+            if enr.is_pass_fail:
+                # Pass/Fail courses: count in TECR if passed, but not in TRCR or TSTCR
+                if enr.outcome == "PAS":
+                    tecr += credits
+                continue
+
             grade_points = GRADE_POINTS.get(enr.grade, 0)
 
             existing = latest_course_grades.get(course_code)
             if existing:
+                # If student previously failed (0 grade points) and now passed, update
                 if existing['grade_points'] == 0 and grade_points > 0:
-                    trcr -= credits
+                    # Remove previous failed attempt's contribution
+                    trcr -= existing['credits']
                     tstcr -= 0
                     tecr -= 0
+                    
+                    # Add new attempt's contribution
                     latest_course_grades[course_code] = {
                         'grade_points': grade_points,
                         'credits': credits,
@@ -154,8 +180,10 @@ class Student(models.Model):
                         tecr += credits
                     tstcr += grade_points * credits
                 else:
+                    # If already passed or repeated with lower grade, keep first attempt
                     continue
             else:
+                # First attempt of this course
                 latest_course_grades[course_code] = {
                     'grade_points': grade_points,
                     'credits': credits,
@@ -168,7 +196,6 @@ class Student(models.Model):
 
         cgpa = round(tstcr / trcr, 2) if trcr else 0
         return {"TRCR": trcr, "TECR": tecr, "TSTCR": tstcr, "CGPA": cgpa}
-
 
     def __str__(self):
         return self.first_name+ " " +self.last_name

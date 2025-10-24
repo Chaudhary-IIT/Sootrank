@@ -97,6 +97,11 @@ urlpatterns = [
     path('student/results/<str:roll_no>/', views.student_result_semester_list, name='student_result_semester_list'),
     path('student/results/view/<int:student_id>/<int:semester>/', views.student_view_results, name='student_view_results'),
     path('student/results/pdf/<int:student_id>/<int:semester>/', views.student_result_pdf, name='student_result_pdf'),
+    #------------
+    path('custom-admin/grades/', views.admin_grade_management, name='admin_grade_management'),
+    path('custom-admin/grades/assign/<str:course_code>/', views.admin_assign_grades, name='admin_assign_grades'),
+    path('custom-admin/grades/save/<str:course_code>/', views.admin_save_grades, name='admin_save_grades'),
+
 ]
 
 
