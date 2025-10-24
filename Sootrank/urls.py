@@ -17,7 +17,7 @@ Including another URLconf
 from django.conf import settings
 from django.contrib import admin
 from django.contrib.auth.views import LogoutView
-from django.urls import path
+from django.urls import path, include
 from . import views
 from django.conf.urls.static import static
 
@@ -93,7 +93,12 @@ urlpatterns = [
     path('faculty/<int:faculty_id>/courses/', views.all_courses, name='grading_courses'),
     path('courses/<str:course_code>/grades/assign/',views.assign_grades_csv, name='assign_grades_csv'),
     path('courses/<str:course_code>/grades/results/', views.grade_results, name='grade_results'),
+    #------------
+    path('student/results/<str:roll_no>/', views.student_result_semester_list, name='student_result_semester_list'),
+    path('student/results/view/<int:student_id>/<int:semester>/', views.student_view_results, name='student_view_results'),
+    path('student/results/pdf/<int:student_id>/<int:semester>/', views.student_result_pdf, name='student_result_pdf'),
 ]
+
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT) 

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Marksheet - Semester {{ semester }}</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 15px;
+        }
+        table { width:100%; border-collapse: collapse; margin-top: 20px;}
+        th, td { border: 1px solid #666; padding: 8px; }
+        th { background-color: #f0f0f7; }
+        h2, h3 { margin: 5px 0; }
+    </style>
+</head>
+<body>
+    <h2>Marksheet for Semester {{ semester }}</h2>
+    <h3>Name: {{ student.first_name }} {{ student.last_name }}</h3>
+    <h3>Roll Number: {{ student.roll_no }}</h3>
+    <h3>Branch: {{ student.branch }} | Department: {{ student.department }}</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Course Code</th>
+                <th>Course Name</th>
+                <th>Credits</th>
+                <th>Grade</th>
+                <th>Grade Points</th>
+                <th>Outcome</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in results %}
+            <tr>
+                <td>{{ r.course_code }}</td>
+                <td>{{ r.course_name }}</td>
+                <td>{{ r.credits }}</td>
+                <td>{{ r.grade }}</td>
+                <td>{{ r.points }}</td>
+                <td>{{ r.outcome }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <hr>
+
+    <p><strong>Registered Credits (RCR):</strong> {{ metrics.RCR }}</p>
+    <p><strong>Earned Credits (ECR):</strong> {{ metrics.ECR }}</p>
+    <p><strong>Total Grade Points (STCR):</strong> {{ metrics.STCR }}</p>
+    <p><strong>SGPA:</strong> {{ metrics.SGPA|floatformat:2 }}</p>
+
+    <hr>
+
+    <p><strong>Cumulative Registered Credits (TRCR):</strong> {{ cg_metrics.TRCR }}</p>
+    <p><strong>Cumulative Earned Credits (TECR):</strong> {{ cg_metrics.TECR }}</p>
+    <p><strong>Cumulative Total Grade Points (TSTCR):</strong> {{ cg_metrics.TSTCR }}</p>
+    <p><strong>CGPA:</strong> {{ cg_metrics.CGPA|floatformat:2 }}</p>
+</body>
+</html>

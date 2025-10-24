@@ -66,6 +66,17 @@ GRADE_BOUNDARIES = [
 ]
 PASS_MIN_PERCENT = 45  # for letter-graded; PF handled by is_pass_fail
 
+GRADE_POINTS = {
+    "A": 10,
+    "A-": 9,
+    "B": 8,
+    "B-": 7,
+    "C": 6,
+    "C-": 5,
+    "D": 4,
+    "F": 0,
+    "FS": 0,
+}
 
 def _compute_semester_from_roll_and_today(roll_no: str, today=None) -> int:
     if today is None:
@@ -235,10 +246,12 @@ def students_dashboard(request):
     student = get_object_or_404(Student, roll_no=roll_no)
 
     flash = request.session.pop("flash_ctx", {})  # optional, disappears after first load
+    semesters = StudentCourse.objects.filter(student=student).order_by('semester').values_list('semester', flat=True).distinct()
     context = {
         "student": student,
         "full_name": flash.get("full_name"),
         "role_label": flash.get("role_label", "Student"),
+        "semesters": semesters,
     }
     return render(request, "students_dashboard.html", context)
 
@@ -3236,9 +3249,21 @@ def assign_grades_csv(request, course_code):
     Instructor upload of scores (CSV/Excel) and assignment of grades.
     - Scores saved to AssessmentScore keyed by (student, course, component).
     - Enrollment gate uses StudentCourse.status='ENR' (any semester).
-    - Absolute thresholds: A, A-, B, B-, C → 10..6, else 5 (changeable).
+    - Absolute thresholds: A, A-, B, B-, C, C-, D → 10..4, else 0 (changeable).
     - Relative buckets: top10, next15, next25, next25b, next15b, next10; remainder = rest_min.
     """
+
+    NUM_TO_LETTER_GRADE = {
+        10: "A",
+        9: "A-",
+        8: "B",
+        7: "B-",
+        6: "C",
+        5: "C-",
+        4: "D",
+        0: "F",
+    }
+
     # Auth and course
     email = request.session.get("email_id")
     faculty = get_object_or_404(Faculty, email_id=email)
@@ -3270,13 +3295,15 @@ def assign_grades_csv(request, course_code):
             try: return float(v)
             except (TypeError, ValueError): return d
 
-        # Absolute thresholds aligned to A, A-, B, B-, C
+        # Absolute thresholds aligned to A, A-, B, B-, C, C-, D
         abs_thresholds = {
             "A": _as_int(request.POST.get("abs_A"), 85),
             "A_minus": _as_int(request.POST.get("abs_B"), 75),
             "B": _as_int(request.POST.get("abs_C"), 65),
             "B_minus": _as_int(request.POST.get("abs_D"), 55),
             "C": _as_int(request.POST.get("abs_E"), 45),
+            "C_minus": _as_int(request.POST.get("abs_C_minus"), 40),
+            "D": _as_int(request.POST.get("abs_D_grade"), 35),
         }
         try:
             pass_min = Decimal(request.POST.get("pass_min_percent") or getattr(settings, "PASS_MIN_PERCENT", 45))
@@ -3409,30 +3436,28 @@ def assign_grades_csv(request, course_code):
                     continue
                 cg = cg_map.get(sc.student_id)
                 if cg is not None:
-                    sc.grade = str(int(cg))
+                    letter_grade = NUM_TO_LETTER_GRADE.get(int(cg), "F")
+                    sc.grade = letter_grade
                     sc.outcome = "PAS" if cg >= 4 else "FAI"
                     sc.save(update_fields=["grade", "outcome"])
         else:
-            A = Decimal(abs_thresholds["A"])
-            A_ = Decimal(abs_thresholds["A_minus"])
-            B = Decimal(abs_thresholds["B"])
-            B_ = Decimal(abs_thresholds["B_minus"])
-            C = Decimal(abs_thresholds["C"])
-
             def cg_from_abs(pct: Decimal) -> int:
-                if pct >= A:  return 10
-                if pct >= A_: return 9
-                if pct >= B:  return 8
-                if pct >= B_: return 7
-                if pct >= C:  return 6
-                return 5  # change to 4 to treat below C as F
+                if pct >= abs_thresholds["A"]:  return 10
+                if pct >= abs_thresholds["A_minus"]: return 9
+                if pct >= abs_thresholds["B"]:  return 8
+                if pct >= abs_thresholds["B_minus"]: return 7
+                if pct >= abs_thresholds["C"]:  return 6
+                if pct >= abs_thresholds["C_minus"]: return 5
+                if pct >= abs_thresholds["D"]:  return 4
+                return 0  # Below D treated as F
 
             for sc in affected_qs:
                 if getattr(sc, "is_pass_fail", False):
                     continue
                 pct = totals_dict.get(sc.student_id, Decimal("0"))
                 cg = cg_from_abs(pct)
-                sc.grade = str(int(cg))
+                letter_grade = NUM_TO_LETTER_GRADE.get(cg, "F")
+                sc.grade = letter_grade
                 sc.outcome = "PAS" if pct >= pass_min and cg >= 4 else "FAI"
                 sc.save(update_fields=["grade", "outcome"])
 
@@ -3454,7 +3479,6 @@ def assign_grades_csv(request, course_code):
         "sample_headers": ["roll_no"] + [c.name for c in components],
     })
 
-
 def grade_results(request, course_code):
     # Auth and course
     email = request.session.get("email_id")
@@ -3472,6 +3496,17 @@ def grade_results(request, course_code):
         .order_by('student__roll_no')
     )
 
+    LETTER_TO_POINTS = {
+        "A": 10,
+        "A-": 9,
+        "B": 8,
+        "B-": 7,
+        "C": 6,
+        "C-": 5,
+        "D": 4,
+        "F": 0,
+    }
+
     def letter_for_points(points):
         try:
             p = int(points)
@@ -3483,6 +3518,7 @@ def grade_results(request, course_code):
         if p == 7:  return 'B-'
         if p == 6:  return 'C'
         if p == 5:  return 'C-'
+        if p == 4:  return 'D'
         return 'F'
 
     rows = []
@@ -3499,11 +3535,8 @@ def grade_results(request, course_code):
                 except (InvalidOperation, TypeError):
                     pass
 
-        pts_str = sc.grade or ''
-        try:
-            pts_int = int(pts_str)
-        except (TypeError, ValueError):
-            pts_int = None
+        pts_int = LETTER_TO_POINTS.get(sc.grade, None)
+        letter = sc.grade or (letter_for_points(pts_int) if pts_int is not None else "")
 
         rows.append({
             'student': sc.student,
@@ -3512,7 +3545,7 @@ def grade_results(request, course_code):
             'components': comp_marks,
             'total_percent': float(total_percent.quantize(Decimal('0.01'))),
             'points': pts_int,
-            'letter': letter_for_points(pts_int) if pts_int is not None else '',
+            'letter': letter,
             'outcome': sc.outcome or '',
         })
 
@@ -3527,7 +3560,7 @@ def grade_results(request, course_code):
     elif base == "points":
         rows.sort(key=lambda r: (r['points'] if r['points'] is not None else -1, r['name'].lower()), reverse=reverse)
     elif base == "letter":
-        rows.sort(key=lambda r: (r['letter'], r['name'].lower()), reverse=reverse)
+        rows.sort(key=lambda r: (r['points'] if r['points'] is not None else -1, r['name'].lower()), reverse=reverse)
 
     return render(request, 'instructor/grade_results.html', {
         'course': course,
@@ -3537,3 +3570,82 @@ def grade_results(request, course_code):
         'sort': sort,
     })
 
+def student_result_semester_list(request, roll_no):
+    student = get_object_or_404(Student, roll_no=roll_no)
+
+    semesters = (
+        student.enrollments
+        .values_list('semester', flat=True)
+        .distinct()
+        .order_by('semester')
+    )
+
+    return render(request, "student/result_semester_list.html", {
+        "student": student,
+        "semesters": semesters,
+    })
+
+def student_view_results(request, student_id, semester):
+    student = get_object_or_404(Student, id=student_id)
+    enrollments = StudentCourse.objects.filter(student=student, semester=semester).select_related('course')
+
+    # Prepare detailed list of courses and grades
+    results = []
+    for enr in enrollments:
+        course = enr.course
+        grade = enr.grade or ''
+        points = GRADE_POINTS.get(grade, 0)
+        results.append({
+            "course_code": course.code,
+            "course_name": course.name,
+            "credits": course.credits,
+            "grade": grade,
+            "points": points,
+            "outcome": enr.outcome,
+        })
+
+    metrics = student.calculate_semester_metrics(semester)
+
+    return render(request, "student/result_semester_view.html", {
+        "student": student,
+        "semester": semester,
+        "results": results,
+        "metrics": metrics,
+    })
+
+def student_result_pdf(request, student_id, semester):
+    student = get_object_or_404(Student, id=student_id)
+    enrollments = StudentCourse.objects.filter(student=student, semester=semester).select_related('course')
+
+    results = []
+    for enr in enrollments:
+        course = enr.course
+        grade = enr.grade or ''
+        points = GRADE_POINTS.get(grade, 0)
+        results.append({
+            "course_code": course.code,
+            "course_name": course.name,
+            "credits": course.credits,
+            "grade": grade,
+            "points": points,
+            "outcome": enr.outcome,
+        })
+
+    metrics = student.calculate_semester_metrics(semester)
+    cg_metrics = student.calculate_cumulative_metrics()
+
+    html_string = render_to_string(
+        "student/marksheet_pdf.html",
+        {
+            "student": student,
+            "semester": semester,
+            "results": results,
+            "metrics": metrics,
+            "cg_metrics": cg_metrics,
+        }
+    )
+    html = HTML(string=html_string)
+    pdf = html.write_pdf()
+    response = HttpResponse(pdf, content_type="application/pdf")
+    response["Content-Disposition"] = f"attachment; filename=Marksheet_{student.roll_no}_Sem_{semester}.pdf"
+    return response

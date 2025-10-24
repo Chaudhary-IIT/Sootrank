@@ -1,6 +1,19 @@
 from django.db import models
 from django.contrib.auth.hashers import make_password
 
+GRADE_POINTS = {
+    "A": 10,
+    "A-": 9,
+    "B": 8,
+    "B-": 7,
+    "C": 6,
+    "C-": 5,
+    "D": 4,
+    "F": 0,
+    "FS": 0  # Fail due to attendance
+}
+
+
 class Department(models.Model):
     SCHOOL_CHOICES = [
         ('SCEE', 'School of Computing and Electrical Engineering (SCEE)'),
@@ -70,6 +83,8 @@ class Course(models.Model):
     branches = models.ManyToManyField(Branch, through="CourseBranch", related_name="courses")
     faculties = models.ManyToManyField(Faculty, related_name="courses")
 
+    
+
 
 class Student(models.Model):
     first_name=models.CharField(max_length=255)
@@ -84,21 +99,76 @@ class Student(models.Model):
     mobile_no = models.BigIntegerField(null=True)
     courses = models.ManyToManyField(Course, through="StudentCourse", related_name="students")
 
-    def __str__(self):
-        return self.roll_no
-    
     def save(self, *args, **kwargs):
     # Hash password only if it’s not already hashed
         if not self.password.startswith('pbkdf2_sha256$'):
             self.password = make_password(self.password)
         super().save(*args, **kwargs)
     
+    def get_semester_courses(self, semester):
+        return self.enrollments.filter(semester=semester)
 
-    def save(self, *args, **kwargs):
-        # Hash password only if it’s not already hashed
-        if not self.password.startswith('pbkdf2_sha256$'):
-            self.password = make_password(self.password)
-        super().save(*args, **kwargs)
+    def calculate_semester_metrics(self, semester):
+        enrollments = self.enrollments.filter(semester=semester)
+        rcr, ecr, stcr = 0, 0, 0
+
+        for enr in enrollments:
+            if enr.is_pass_fail:
+                continue
+            credits = enr.course.credits
+            rcr += credits
+            points = GRADE_POINTS.get(enr.grade, 0)
+            stcr += points * credits
+            if enr.outcome == "PAS" and points > 0:
+                ecr += credits
+
+        sgpa = round(stcr / rcr, 2) if rcr else 0
+        return {"RCR": rcr, "ECR": ecr, "STCR": stcr, "SGPA": sgpa}
+
+    def calculate_cumulative_metrics(self):
+        enrollments = self.enrollments.order_by('semester').all()
+        trcr, tecr, tstcr = 0, 0, 0
+        latest_course_grades = {}
+
+        for enr in enrollments:
+            if enr.is_pass_fail:
+                continue
+
+            course_code = enr.course.code
+            credits = enr.course.credits
+            grade_points = GRADE_POINTS.get(enr.grade, 0)
+
+            existing = latest_course_grades.get(course_code)
+            if existing:
+                if existing['grade_points'] == 0 and grade_points > 0:
+                    trcr -= credits
+                    tstcr -= 0
+                    tecr -= 0
+                    latest_course_grades[course_code] = {
+                        'grade_points': grade_points,
+                        'credits': credits,
+                        'outcome': enr.outcome,
+                    }
+                    trcr += credits
+                    if enr.outcome == "PAS":
+                        tecr += credits
+                    tstcr += grade_points * credits
+                else:
+                    continue
+            else:
+                latest_course_grades[course_code] = {
+                    'grade_points': grade_points,
+                    'credits': credits,
+                    'outcome': enr.outcome,
+                }
+                trcr += credits
+                if enr.outcome == "PAS":
+                    tecr += credits
+                tstcr += grade_points * credits
+
+        cgpa = round(tstcr / trcr, 2) if trcr else 0
+        return {"TRCR": trcr, "TECR": tecr, "TSTCR": tstcr, "CGPA": cgpa}
+
 
     def __str__(self):
         return self.first_name+ " " +self.last_name
@@ -170,11 +240,18 @@ class StudentCourse(models.Model):
         ("FAI", "Fail"),
     ]
 
+    GRADES = [(g, g) for g in GRADE_POINTS.keys()]  # Add grade choices list
+
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="enrollments")
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="enrollments")
     status = models.CharField(max_length=3, choices=STATUS, default="PND")
     outcome = models.CharField(max_length=3, choices=OUTCOME, default="UNK")
-    grade = models.CharField(max_length=2, null=True, blank=True)  # for letter-graded only
+    grade = models.CharField(
+        max_length=3,
+        null=True,
+        blank=True,
+        choices=GRADES
+    )
     is_pass_fail = models.BooleanField(default=False)  # NEW: PF selection at registration/approval
     semester = models.IntegerField(null=True)  # e.g., 1, 2, ..., 8
     type = models.CharField(max_length=10, null=True, blank=True)
