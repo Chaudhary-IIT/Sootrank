@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Assign Grades - {{ course.code }} - Sootrank Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <style>
+        body {
+            background-color: #f9fafb;
+        }
+
+        .form-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgb(0 0 0 / 0.1);
+            margin-bottom: 40px;
+        }
+
+        .grade-input {
+            width: 120px;
+        }
+
+        .table-hover tbody tr:hover {
+            background-color: #f0f9ff;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow">
+        <div class="container">
+            <a class="navbar-brand" href="{% url 'custom_admin_home' %}">Sootrank Admin</a>
+            <a href="{% url 'admin_grade_management' %}" class="btn btn-light ms-auto">← Back to Courses</a>
+        </div>
+    </nav>
+
+    <div class="container my-5">
+        <h2 class="mb-3 text-primary">Assign/Edit Grades: {{ course.code }} - {{ course.name }}</h2>
+        <p class="text-muted">
+            <strong>Credits:</strong> {{ course.credits }} | 
+            <strong>Slot:</strong> {{ course.slot }}
+        </p>
+
+        {% if messages %}
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            {% for message in messages %}
+                {{ message }}
+            {% endfor %}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endif %}
+
+        <div class="form-section">
+            <form method="post" action="{% url 'admin_save_grades' course.code %}">
+                {% csrf_token %}
+                <div class="table-responsive shadow-sm bg-white rounded p-3">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-primary">
+                            <tr>
+                                <th>Roll No</th>
+                                <th>Name</th>
+                                <th>Current Grade</th>
+                                <th>Assign Grade</th>
+                                <th>Outcome</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for enrollment in enrollments %}
+                            <tr>
+                                <td>{{ enrollment.student.roll_no }}</td>
+                                <td>{{ enrollment.student.first_name }} {{ enrollment.student.last_name }}</td>
+                                <td>
+                                    {% if enrollment.grade %}
+                                        <span class="badge bg-secondary">{{ enrollment.grade }}</span>
+                                    {% else %}
+                                        <span class="text-muted">Not assigned</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <select name="grade_{{ enrollment.id }}" class="form-select grade-input">
+                                        <option value="">--Select--</option>
+                                        <option value="A" {% if enrollment.grade == 'A' %}selected{% endif %}>A</option>
+                                        <option value="A-" {% if enrollment.grade == 'A-' %}selected{% endif %}>A-</option>
+                                        <option value="B" {% if enrollment.grade == 'B' %}selected{% endif %}>B</option>
+                                        <option value="B-" {% if enrollment.grade == 'B-' %}selected{% endif %}>B-</option>
+                                        <option value="C" {% if enrollment.grade == 'C' %}selected{% endif %}>C</option>
+                                        <option value="C-" {% if enrollment.grade == 'C-' %}selected{% endif %}>C-</option>
+                                        <option value="D" {% if enrollment.grade == 'D' %}selected{% endif %}>D</option>
+                                        <option value="F" {% if enrollment.grade == 'F' %}selected{% endif %}>F</option>
+                                        <option value="FS" {% if enrollment.grade == 'FS' %}selected{% endif %}>FS (Fail - Attendance)</option>
+                                    </select>
+                                </td>
+                                <td>
+                                    <select name="outcome_{{ enrollment.id }}" class="form-select grade-input">
+                                        <option value="UNK" {% if enrollment.outcome == 'UNK' %}selected{% endif %}>Unknown</option>
+                                        <option value="PAS" {% if enrollment.outcome == 'PAS' %}selected{% endif %}>Pass</option>
+                                        <option value="FAI" {% if enrollment.outcome == 'FAI' %}selected{% endif %}>Fail</option>
+                                    </select>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center">No students enrolled in this course.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mt-4 text-end">
+                    <button type="submit" class="btn btn-success btn-lg">
+                        <i class="fa fa-save me-2"></i> Save Grades
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

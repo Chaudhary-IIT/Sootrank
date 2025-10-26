@@ -9,7 +9,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
 </head>
 <body class="min-h-screen bg-gray-100 flex items-start justify-center py-10">
-  <div class="w-[1150px]">
+  <div class="w-[1200px]">
     {% if messages %}
       <div class="mb-3">
         {% for message in messages %}
@@ -23,7 +23,7 @@
     </div>
 
     <!-- Filters -->
-    <form method="get" class="mb-4 flex items-center gap-3">
+    <form method="get" class="mb-4 flex items-center gap-3 flex-wrap">
       <label class="text-sm text-gray-700">Status</label>
       <select name="status" class="bg-white border border-gray-300 text-sm rounded-lg p-2">
         <option value="PND" {% if status_filter == "PND" %}selected{% endif %}>Pending</option>
@@ -51,14 +51,13 @@
       <button class="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-black">Apply</button>
     </form>
 
-    <!-- Table (no outer form) -->
+    <!-- Table -->
     <div class="bg-white rounded-2xl shadow">
       <div class="overflow-x-auto rounded-2xl">
         <table class="w-full text-left border-collapse">
           <thead>
             <tr class="bg-gray-50 text-gray-700">
               <th class="px-5 py-3">
-                <!-- Bulk master checkbox controls bulk checkboxes below table -->
                 <input type="checkbox" id="checkAll">
               </th>
               <th class="px-5 py-3 text-sm font-semibold">Student</th>
@@ -66,6 +65,7 @@
               <th class="px-5 py-3 text-sm font-semibold">Course</th>
               <th class="px-5 py-3 text-sm font-semibold">Slot</th>
               <th class="px-5 py-3 text-sm font-semibold">Credits</th>
+              <th class="px-5 py-3 text-sm font-semibold">Pass/Fail</th>
               <th class="px-5 py-3 text-sm font-semibold">Status</th>
               <th class="px-5 py-3 text-sm font-semibold">Actions</th>
             </tr>
@@ -75,7 +75,6 @@
               {% for sc in requests %}
                 <tr class="{% cycle '' 'bg-gray-50' %} border-t">
                   <td class="px-5 py-3">
-                    <!-- Visual row checkbox only toggles bulk list below via JS -->
                     {% if sc.status == "PND" %}
                       <input type="checkbox" class="row-check" data-id="{{ sc.id }}">
                     {% endif %}
@@ -90,6 +89,19 @@
 
                   <td class="px-5 py-3 whitespace-nowrap">{{ sc.course.slot }}</td>
                   <td class="px-5 py-3 whitespace-nowrap">{{ sc.course.credits }}</td>
+
+                  <!-- Pass/Fail Column with explicit check -->
+                  <td class="px-5 py-3">
+                    {% if sc.is_pass_fail == True %}
+                      <span class="inline-flex items-center rounded-full bg-purple-100 text-purple-800 text-xs font-medium px-3 py-1">
+                        Yes
+                      </span>
+                    {% else %}
+                      <span class="inline-flex items-center rounded-full bg-blue-100 text-blue-800 text-xs font-medium px-3 py-1">
+                        No
+                      </span>
+                    {% endif %}
+                  </td>
 
                   <td class="px-5 py-3">
                     {% if sc.status == "PND" %}
@@ -106,7 +118,6 @@
                   <td class="px-5 py-3">
                     {% if sc.status == "PND" %}
                       <div class="flex items-center gap-2 flex-nowrap">
-                        <!-- Per-row standalone forms -->
                         <form method="post" action="{% url 'instructor_request_action' %}" class="inline">
                           {% csrf_token %}
                           <input type="hidden" name="sc_id" value="{{ sc.id }}">
@@ -132,7 +143,7 @@
               {% endfor %}
             {% else %}
               <tr class="border-t">
-                <td class="px-5 py-6 text-center text-gray-500" colspan="8">No requests found.</td>
+                <td class="px-5 py-6 text-center text-gray-500" colspan="9">No requests found.</td>
               </tr>
             {% endif %}
           </tbody>
@@ -140,17 +151,16 @@
       </div>
     </div>
 
-    <!-- Bulk form lives BELOW the table; it is the ONLY form that submits bulk -->
+    <!-- Bulk form -->
     <form method="post" action="{% url 'instructor_bulk_action' %}" class="mt-4 bg-white rounded-2xl shadow px-5 py-4 flex items-center justify-between">
       {% csrf_token %}
       <div class="flex items-center gap-3 flex-wrap" id="bulkBox">
-        <!-- Hidden checkboxes mirror the row selections; populated by JS -->
         {% for sc in requests %}
           {% if sc.status == "PND" %}
             <input type="checkbox" name="sc_ids" value="{{ sc.id }}" class="hidden" id="bulk-{{ sc.id }}">
           {% endif %}
         {% endfor %}
-        <span class="text-sm text-gray-600">Use the row checkboxes or “Select all” to build the bulk list.</span>
+        <span class="text-sm text-gray-600">Use the row checkboxes or "Select all" to build the bulk list.</span>
       </div>
       <div class="flex items-center gap-3">
         <button name="action" value="approve" class="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700">
@@ -164,7 +174,6 @@
   </div>
 
   <script>
-    // Sync the header "Select all" with row checkboxes and the hidden bulk checkboxes
     const checkAll = document.getElementById('checkAll');
     const rowChecks = Array.from(document.querySelectorAll('.row-check'));
     const bulkMap = {};
@@ -185,7 +194,6 @@
         });
       });
     }
-    // Auto-dismiss messages after 4 seconds
     setTimeout(function () {
         document.querySelectorAll('.alert').forEach(function (alert) {
             var bsAlert = new bootstrap.Alert(alert);

@@ -8,10 +8,26 @@
             font-family: sans-serif;
             margin: 15px;
         }
-        table { width:100%; border-collapse: collapse; margin-top: 20px;}
-        th, td { border: 1px solid #666; padding: 8px; }
-        th { background-color: #f0f0f7; }
-        h2, h3 { margin: 5px 0; }
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 20px;
+        }
+        th, td { 
+            border: 1px solid #666; 
+            padding: 8px; 
+            text-align: center; 
+        }
+        th { 
+            background-color: #f0f0f7; 
+            font-weight: bold; 
+        }
+        h2, h3 { 
+            margin: 5px 0; 
+        }
+        .course-name {
+            text-align: left;
+        }
     </style>
 </head>
 <body>
@@ -35,11 +51,37 @@
             {% for r in results %}
             <tr>
                 <td>{{ r.course_code }}</td>
-                <td>{{ r.course_name }}</td>
+                <td class="course-name">{{ r.course_name }}</td>
                 <td>{{ r.credits }}</td>
-                <td>{{ r.grade }}</td>
-                <td>{{ r.points }}</td>
-                <td>{{ r.outcome }}</td>
+                <td>
+                    {% if r.is_pass_fail %}
+                        Pass/Fail Mode
+                    {% else %}
+                        {% if r.grade %}
+                            {{ r.grade }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    {% endif %}
+                </td>
+                <td>
+                    {% if r.is_pass_fail %}
+                        —
+                    {% else %}
+                        {{ r.points }}
+                    {% endif %}
+                </td>
+                <td>
+                    {% if r.outcome == "PAS" %}
+                        Pass
+                    {% elif r.outcome == "FAI" %}
+                        Fail
+                    {% elif r.outcome == "UNK" %}
+                        UNK
+                    {% else %}
+                        {{ r.outcome }}
+                    {% endif %}
+                </td>
             </tr>
             {% endfor %}
         </tbody>

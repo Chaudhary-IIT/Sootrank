@@ -1959,6 +1959,9 @@ def instructor_requests(request):
     if slot:
         qs = qs.filter(course__slot=slot)
 
+    # Get unique slots for filter
+    slots = Course.objects.filter(faculties__email_id=email_id).values_list('slot', flat=True).distinct()
+
     # Model-agnostic my_courses
     my_courses = (
         Course.objects.filter(faculties__email_id=email_id)
@@ -1972,9 +1975,11 @@ def instructor_requests(request):
         "status_filter": status_filter,
         "course_code": course_code,
         "slot_filter": slot,
+        "slots": slots,
         "my_courses": my_courses,
     }
     return render(request, "instructor/instructor_requests.html", context)
+
 
 @require_POST
 def instructor_request_action(request):
@@ -1989,7 +1994,7 @@ def instructor_request_action(request):
 
     if not sc_id:
         messages.error(request, "No request selected.")
-        return redirect("instructor_requests")  # page with table
+        return redirect("instructor_requests")
 
     sc = get_object_or_404(
         StudentCourse.objects.select_related("course", "student"),
@@ -2052,7 +2057,6 @@ def instructor_bulk_action(request):
 
     messages.success(request, f"{updated} request(s) {action}d.")
     return redirect("instructor_requests")
-
 
 def instructor_courses(request):
     # Authn: get instructor
@@ -3584,7 +3588,6 @@ def student_result_semester_list(request, roll_no):
         "student": student,
         "semesters": semesters,
     })
-
 def student_view_results(request, student_id, semester):
     student = get_object_or_404(Student, id=student_id)
     enrollments = StudentCourse.objects.filter(student=student, semester=semester).select_related('course')
@@ -3602,6 +3605,7 @@ def student_view_results(request, student_id, semester):
             "grade": grade,
             "points": points,
             "outcome": enr.outcome,
+            "is_pass_fail": enr.is_pass_fail,  # Add this flag
         })
 
     metrics = student.calculate_semester_metrics(semester)
@@ -3629,6 +3633,7 @@ def student_result_pdf(request, student_id, semester):
             "grade": grade,
             "points": points,
             "outcome": enr.outcome,
+            "is_pass_fail": enr.is_pass_fail,  # Add this critical flag
         })
 
     metrics = student.calculate_semester_metrics(semester)
@@ -3649,3 +3654,79 @@ def student_result_pdf(request, student_id, semester):
     response = HttpResponse(pdf, content_type="application/pdf")
     response["Content-Disposition"] = f"attachment; filename=Marksheet_{student.roll_no}_Sem_{semester}.pdf"
     return response
+
+def admin_grade_management(request):
+    """
+    Admin landing page: List all courses with enrolled students
+    """
+    # Get all courses with at least one enrolled student
+    courses = Course.objects.annotate(
+        enrolled_count=Count('enrollments', filter=Q(enrollments__status='ENR'))
+    ).filter(enrolled_count__gt=0)
+
+    # Prepare course data (no grading_type needed)
+    course_data = []
+    for course in courses:
+        course_data.append({
+            'code': course.code,
+            'name': course.name,
+            'slot': course.slot,
+            'enrolled_count': course.enrolled_count,
+        })
+
+    # Get unique semesters and slots for filters
+    semesters = StudentCourse.objects.values_list('semester', flat=True).distinct().order_by('semester')
+    slots = Course.objects.values_list('slot', flat=True).distinct().order_by('slot')
+
+    return render(request, 'admin/assign_grade_management.html', {
+        'courses': course_data,
+        'semesters': semesters,
+        'slots': slots,
+    })
+
+def admin_assign_grades(request, course_code):
+    """
+    Display all enrolled students for a course to assign/edit grades
+    """
+    course = get_object_or_404(Course, code=course_code)
+    
+    # Get all enrolled students for this course
+    enrollments = StudentCourse.objects.filter(
+        course=course,
+        status='ENR'
+    ).select_related('student').order_by('student__roll_no')
+
+    return render(request, 'admin/assign_edit_grades.html', {
+        'course': course,
+        'enrollments': enrollments,
+    })
+
+def admin_save_grades(request, course_code):
+    """
+    Save grades submitted by admin for a course
+    """
+    if request.method != 'POST':
+        return redirect('admin_assign_grades', course_code=course_code)
+
+    course = get_object_or_404(Course, code=course_code)
+    
+    # Get all enrollments for this course
+    enrollments = StudentCourse.objects.filter(course=course, status='ENR')
+
+    updated_count = 0
+    for enrollment in enrollments:
+        grade_key = f'grade_{enrollment.id}'
+        outcome_key = f'outcome_{enrollment.id}'
+        
+        grade = request.POST.get(grade_key, '').strip()
+        outcome = request.POST.get(outcome_key, 'UNK')
+
+        # Update if grade is provided
+        if grade and grade in GRADE_POINTS:
+            enrollment.grade = grade
+            enrollment.outcome = outcome
+            enrollment.save()
+            updated_count += 1
+
+    messages.success(request, f'Successfully updated grades for {updated_count} student(s) in {course.code}.')
+    return redirect('admin_assign_grades', course_code=course_code)
