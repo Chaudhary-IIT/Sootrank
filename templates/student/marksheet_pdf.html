@@ -2,49 +2,94 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Marksheet - Semester {{ semester }}</title>
+    <title>Semester Grade Report - Semester {{ semester }}</title>
     <style>
         body {
-            font-family: sans-serif;
-            margin: 15px;
+            font-family: "Times New Roman", serif;
+            margin: 50px;
+            line-height: 1.5;
         }
-        table { 
-            width: 100%; 
-            border-collapse: collapse; 
-            margin-top: 20px;
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
         }
-        th, td { 
-            border: 1px solid #666; 
-            padding: 8px; 
-            text-align: center; 
+        .header h2 {
+            margin: 2px;
+            font-size: 20px;
         }
-        th { 
-            background-color: #f0f0f7; 
-            font-weight: bold; 
+        .header h3 {
+            margin: 2px;
+            font-size: 16px;
         }
-        h2, h3 { 
-            margin: 5px 0; 
+        .info {
+            margin-top: 30px;
+            margin-bottom: 20px;
+            font-size: 15px;
+        }
+        .info p {
+            margin: 3px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 15px;
+            margin-top: 15px;
+        }
+        th, td {
+            border: 1px solid #000;
+            padding: 6px 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
         }
         .course-name {
             text-align: left;
         }
+        .footer {
+            margin-top: 25px;
+            font-size: 15px;
+        }
+        .footer p {
+            margin: 4px 0;
+        }
+        .note {
+            margin-top: 30px;
+            font-size: 14px;
+        }
+        .signatures {
+            margin-top: 40px;
+            width: 100%;
+        }
+        .signatures td {
+            text-align: center;
+            padding-top: 40px;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
-    <h2>Marksheet for Semester {{ semester }}</h2>
-    <h3>Name: {{ student.first_name }} {{ student.last_name }}</h3>
-    <h3>Roll Number: {{ student.roll_no }}</h3>
-    <h3>Branch: {{ student.branch }} | Department: {{ student.department }}</h3>
+    <div class="header">
+        <h2>भारतीय प्रौद्योगिकी संस्थान मंडी</h2>
+        <h2>Indian Institute of Technology Mandi</h2>
+        <h3>Kamand, Himachal Pradesh (175075)</h3>
+        <h3><u>SEMESTER GRADE REPORT</u></h3>
+        <h3>ODD SEMESTER {{ academic_year }}</h3>
+    </div>
+
+    <div class="info">
+        <p><strong>ROLL NO. :</strong> {{ student.roll_no }} &nbsp;&nbsp;&nbsp; <strong>SEMESTER :</strong> {{ semester }}</p>
+        <p><strong>NAME :</strong> {{ student.first_name }} {{ student.last_name }}</p>
+        <p><strong>PROGRAMME :</strong> Bachelor of Technology in {{ student.branch }}</p>
+    </div>
 
     <table>
         <thead>
             <tr>
-                <th>Course Code</th>
-                <th>Course Name</th>
-                <th>Credits</th>
-                <th>Grade</th>
-                <th>Grade Points</th>
-                <th>Outcome</th>
+                <th>SUBJECT CODE</th>
+                <th>COURSE TITLE</th>
+                <th>CREDITS</th>
+                <th>GRADE OBTAINED</th>
             </tr>
         </thead>
         <tbody>
@@ -53,52 +98,25 @@
                 <td>{{ r.course_code }}</td>
                 <td class="course-name">{{ r.course_name }}</td>
                 <td>{{ r.credits }}</td>
-                <td>
-                    {% if r.is_pass_fail %}
-                        Pass/Fail Mode
-                    {% else %}
-                        {% if r.grade %}
-                            {{ r.grade }}
-                        {% else %}
-                            —
-                        {% endif %}
-                    {% endif %}
-                </td>
-                <td>
-                    {% if r.is_pass_fail %}
-                        —
-                    {% else %}
-                        {{ r.points }}
-                    {% endif %}
-                </td>
-                <td>
-                    {% if r.outcome == "PAS" %}
-                        Pass
-                    {% elif r.outcome == "FAI" %}
-                        Fail
-                    {% elif r.outcome == "UNK" %}
-                        UNK
-                    {% else %}
-                        {{ r.outcome }}
-                    {% endif %}
-                </td>
+                <td>{{ r.grade }}</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
 
-    <hr>
+    <div class="footer">
+        <p><strong>REGISTERED CREDITS IN SEMESTER :</strong> {{ metrics.RCR }}</p>
+        <p><strong>TOTAL REGISTERED CREDITS SO FAR :</strong> {{ cg_metrics.TRCR }}</p>
+        <p><strong>EARNED CREDITS IN SEMESTER :</strong> {{ metrics.ECR }}</p>
+        <p><strong>TOTAL EARNED CREDITS SO FAR :</strong> {{ cg_metrics.TECR }}</p>
+        <p><strong>S.G.P.A :</strong> {{ metrics.SGPA|floatformat:2 }}</p>
+        <p><strong>C.G.P.A :</strong> {{ cg_metrics.CGPA|floatformat:2 }}</p>
+    </div>
 
-    <p><strong>Registered Credits (RCR):</strong> {{ metrics.RCR }}</p>
-    <p><strong>Earned Credits (ECR):</strong> {{ metrics.ECR }}</p>
-    <p><strong>Total Grade Points (STCR):</strong> {{ metrics.STCR }}</p>
-    <p><strong>SGPA:</strong> {{ metrics.SGPA|floatformat:2 }}</p>
+    <div class="note">
+        <p>Date : 29/10/2025</p>
+    </div>
 
-    <hr>
-
-    <p><strong>Cumulative Registered Credits (TRCR):</strong> {{ cg_metrics.TRCR }}</p>
-    <p><strong>Cumulative Earned Credits (TECR):</strong> {{ cg_metrics.TECR }}</p>
-    <p><strong>Cumulative Total Grade Points (TSTCR):</strong> {{ cg_metrics.TSTCR }}</p>
-    <p><strong>CGPA:</strong> {{ cg_metrics.CGPA|floatformat:2 }}</p>
+    
 </body>
 </html>

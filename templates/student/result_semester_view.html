@@ -1,72 +1,246 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Results - Semester {{ semester }} for {{ student.first_name }}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body class="p-4">
+{% extends "student_base.html" %}
+{% load dict_extras %}
+{% block title %}Results — Semester {{ semester }}{% endblock %}
+{% block nav_results_active %} active{% endblock %}
 
-<h2>Results for Semester {{ semester }} - {{ student.first_name }} {{ student.last_name }}</h2>
-<p>Roll No: {{ student.roll_no }}</p>
+{% block content %}
+<div class="w-100">
+  {% if messages %}
+    <div class="mb-3">
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} mb-2" role="alert">{{ message }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
 
-<table class="table table-bordered w-75">
-    <thead>
-        <tr>
-            <th>Course Code</th>
-            <th>Course Name</th>
-            <th>Credits</th>
-            <th>Grade</th>
-            <th>Grade Points</th>
-            <th>Outcome</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for r in results %}
-        <tr>
-            <td>{{ r.course_code }}</td>
-            <td>{{ r.course_name }}</td>
-            <td>{{ r.credits }}</td>
-            <td>
-                {% if r.is_pass_fail %}
+  <!-- Print-only header (appears on printed pages) -->
+  <div class="d-none d-print-block mb-3">
+    <div class="text-center">
+      <h2 class="mb-1">Results — Semester {{ semester }}</h2>
+      <div class="small text-muted">
+        {{ student.first_name }} {{ student.last_name }} &nbsp;•&nbsp; Roll: {{ student.roll_no }}
+        {% comment %} show CGPA on print header if available {% endcomment %}
+        {% if cg_metrics and cg_metrics.CGPA %}
+          &nbsp;•&nbsp; CGPA: {{ cg_metrics.CGPA|floatformat:2 }}
+        {% elif cumulative_gpa %}
+          &nbsp;•&nbsp; CGPA: {{ cumulative_gpa|floatformat:2 }}
+        {% elif metrics.CGPA %}
+          &nbsp;•&nbsp; CGPA: {{ metrics.CGPA|floatformat:2 }}
+        {% endif %}
+      </div>
+      <hr class="my-2" />
+    </div>
+  </div>
+
+  <!-- Header -->
+  <div class="mb-4 d-flex align-items-center justify-content-between no-print">
+    <div>
+      <h1 class="h3 fw-bold mb-1">Semester Results</h1>
+      <p class="text-muted small mb-0">
+        Official results for the selected semester. View course outcomes and summary metrics.
+      </p>
+    </div>
+
+    <span class="badge rounded-pill text-bg-primary bg-opacity-10 text-primary border border-primary-subtle">
+      Semester {{ semester }}
+    </span>
+  </div>
+
+  <!-- Print helper styles (keeps layout nice on paper) -->
+  <style>
+    @media print {
+      .no-print { display: none !important; }
+      .row { display: block !important; }
+      .row > [class*="col-"] { width: 100% !important; float: none !important; display: block !important; }
+      .table { width: 100% !important; }
+      tr { page-break-inside: avoid; }
+      @page { margin: 12mm; }
+      body { -webkit-print-color-adjust: exact; }
+    }
+
+    .btn-sm:hover { transform: translateY(-1px); transition: transform .12s ease; }
+  </style>
+
+  <!-- Card shell -->
+  <div class="bg-white rounded-3 shadow-sm border p-4">
+    <div class="row">
+      <!-- Table column -->
+      <div class="col-12 col-lg-8 mb-4 mb-lg-0">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <div>
+            <h2 class="h6 fw-semibold mb-0">Results for {{ student.first_name }} {{ student.last_name }}</h2>
+            <p class="small text-muted mb-0">Roll No: <strong>{{ student.roll_no }}</strong></p>
+          </div>
+
+          <!-- Actions -->
+          <div class="d-flex gap-2 no-print">
+
+            <a id="pdfBtn"
+               href="{% url 'student_result_pdf' student_id=student.id semester=semester %}"
+               target="_blank"
+               class="btn btn-dark btn-sm"
+               title="Open semester PDF in a new tab">
+              Download PDF
+            </a>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm table-borderless align-middle">
+            <thead>
+              <tr class="small text-muted">
+                <th>Course Code</th>
+                <th>Course Name</th>
+                <th class="text-center">Credits</th>
+                <th class="text-center">Grade</th>
+                <th class="text-center">Grade Points</th>
+                <th class="text-center">Outcome</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in results %}
+              <tr class="align-middle">
+                <td class="fw-medium">{{ r.course_code }}</td>
+                <td class="text-truncate" style="max-width:320px;">{{ r.course_name }}</td>
+                <td class="text-center">{{ r.credits }}</td>
+                <td class="text-center">
+                  {% if r.is_pass_fail %}
                     <span class="badge bg-info text-dark">Pass/Fail Mode</span>
-                {% else %}
+                  {% else %}
                     {{ r.grade|default:"—" }}
-                {% endif %}
-            </td>
-            <td>
-                {% if r.is_pass_fail %}
-                    —
-                {% else %}
+                  {% endif %}
+                </td>
+                <td class="text-center">
+                  {% if r.is_pass_fail %}
+                    — 
+                  {% else %}
                     {{ r.points }}
-                {% endif %}
-            </td>
-            <td>
-                {% if r.outcome == "PAS" %}
+                  {% endif %}
+                </td>
+                <td class="text-center">
+                  {% if r.outcome == "PAS" %}
                     <span class="badge bg-success">Pass</span>
-                {% elif r.outcome == "FAI" %}
+                  {% elif r.outcome == "FAI" %}
                     <span class="badge bg-danger">Fail</span>
-                {% elif r.outcome == "UNK" %}
+                  {% elif r.outcome == "UNK" %}
                     <span class="badge bg-secondary">Unknown</span>
+                  {% else %}
+                    <span class="badge bg-light text-dark">{{ r.outcome }}</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="6" class="text-center text-muted small py-4">No results available for this semester.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Metrics / Cumulative column (hidden on print) -->
+      <div class="col-12 col-lg-4 no-print">
+        <div class="bg-white rounded-3 p-3 border shadow-sm h-100">
+          <h3 class="h6 fw-semibold mb-3">Semester Metrics</h3>
+
+          <ul class="list-unstyled mb-3 small">
+            <li class="d-flex justify-content-between mb-2">
+              <span class="text-muted">Registered Credits (RCR)</span>
+              <strong>{{ metrics.RCR }}</strong>
+            </li>
+            <li class="d-flex justify-content-between mb-2">
+              <span class="text-muted">Earned Credits (ECR)</span>
+              <strong>{{ metrics.ECR }}</strong>
+            </li>
+            <li class="d-flex justify-content-between mb-2">
+              <span class="text-muted">Total Grade Points (STCR)</span>
+              <strong>{{ metrics.STCR }}</strong>
+            </li>
+            <li class="d-flex justify-content-between align-items-baseline mt-3">
+              <span class="text-muted">SGPA</span>
+              <h4 class="mb-0">{{ metrics.SGPA|floatformat:2 }}</h4>
+            </li>
+          </ul>
+
+          <hr />
+
+          <h6 class="small fw-semibold text-muted mb-2">Cumulative (All Semesters)</h6>
+
+          <ul class="list-unstyled small mb-3">
+            <li class="d-flex justify-content-between mb-2">
+              <span class="text-muted">Cumulative Registered (TRCR)</span>
+              <strong>
+                {% if cg_metrics and cg_metrics.TRCR is not None %}
+                  {{ cg_metrics.TRCR }}
                 {% else %}
-                    {{ r.outcome }}
+                  {% if cg_totals and cg_totals.TRCR %}{{ cg_totals.TRCR }}{% else %}—{% endif %}
                 {% endif %}
-            </td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="6" class="text-center">No results found.</td></tr>
-        {% endfor %}
-    </tbody>
-</table>
+              </strong>
+            </li>
 
-<h4>Semester Metrics</h4>
-<ul>
-    <li>Registered Credits (RCR): {{ metrics.RCR }}</li>
-    <li>Earned Credits (ECR): {{ metrics.ECR }}</li>
-    <li>Total Grade Points (STCR): {{ metrics.STCR }}</li>
-    <li><strong>SGPA:</strong> {{ metrics.SGPA|floatformat:2 }}</li>
-</ul>
+            <li class="d-flex justify-content-between mb-2">
+              <span class="text-muted">Cumulative Earned (TECR)</span>
+              <strong>
+                {% if cg_metrics and cg_metrics.TECR is not None %}
+                  {{ cg_metrics.TECR }}
+                {% else %}
+                  {% if cg_totals and cg_totals.TECR %}{{ cg_totals.TECR }}{% else %}—{% endif %}
+                {% endif %}
+              </strong>
+            </li>
 
-<a href="{% url 'student_result_semester_list' student.roll_no %}" class="btn btn-secondary">Back to Semesters</a>
+            <li class="d-flex justify-content-between mb-2">
+              <span class="text-muted">Cumulative Grade Points (TSTCR)</span>
+              <strong>
+                {% if cg_metrics and cg_metrics.TSTCR is not None %}
+                  {{ cg_metrics.TSTCR }}
+                {% else %}
+                  {% if cg_totals and cg_totals.TSTCR %}{{ cg_totals.TSTCR }}{% else %}—{% endif %}
+                {% endif %}
+              </strong>
+            </li>
 
-</body>
-</html>
+            <li class="d-flex justify-content-between align-items-baseline mt-3">
+              <span class="text-muted">CGPA</span>
+              <h4 class="mb-0">
+                {% if cg_metrics and cg_metrics.CGPA %}
+                  {{ cg_metrics.CGPA|floatformat:2 }}
+                {% elif cumulative_gpa %}
+                  {{ cumulative_gpa|floatformat:2 }}
+                {% elif metrics.CGPA %}
+                  {{ metrics.CGPA|floatformat:2 }}
+                {% else %}
+                  —
+                {% endif %}
+              </h4>
+            </li>
+          </ul>
+
+          <div class="d-grid gap-2">
+            <a href="{% url 'student_result_semester_list' student.roll_no %}" class="btn btn-outline-secondary btn-sm">Back to Semesters</a>
+            <a href="{% url 'students_dashboard' %}" class="btn btn-success btn-sm">Home</a>
+          </div>
+
+          <p class="text-muted small mt-3 mb-0">
+            Grades shown are as recorded by the exam office. Contact the registrar for discrepancies.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Minimal JS for Print + PDF open -->
+<script>
+  (function () {
+    const printBtn = document.getElementById('printBtn');
+    if (printBtn) {
+      printBtn.addEventListener('click', () => {
+        document.activeElement?.blur();
+        window.print();
+      });
+    }
+  })();
+</script>
+{% endblock %}

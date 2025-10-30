@@ -3248,6 +3248,10 @@ def all_courses(request, faculty_id):
         'courses': courses,
     })
 
+
+
+
+
 def assign_grades_csv(request, course_code):
     """
     Instructor upload of scores (CSV/Excel) and assignment of grades.
@@ -3443,7 +3447,8 @@ def assign_grades_csv(request, course_code):
                     letter_grade = NUM_TO_LETTER_GRADE.get(int(cg), "F")
                     sc.grade = letter_grade
                     sc.outcome = "PAS" if cg >= 4 else "FAI"
-                    sc.save(update_fields=["grade", "outcome"])
+                    sc.status = "CMP"  # NEW
+                    sc.save(update_fields=["grade", "outcome", "status"])
         else:
             def cg_from_abs(pct: Decimal) -> int:
                 if pct >= abs_thresholds["A"]:  return 10
@@ -3463,7 +3468,8 @@ def assign_grades_csv(request, course_code):
                 letter_grade = NUM_TO_LETTER_GRADE.get(cg, "F")
                 sc.grade = letter_grade
                 sc.outcome = "PAS" if pct >= pass_min and cg >= 4 else "FAI"
-                sc.save(update_fields=["grade", "outcome"])
+                sc.status = "CMP"  # NEW
+                sc.save(update_fields=["grade", "outcome", "status"])
 
         if updated_scores:
             messages.success(request, f"Uploaded {updated_scores} scores and assigned grades.")
@@ -3483,6 +3489,7 @@ def assign_grades_csv(request, course_code):
         "sample_headers": ["roll_no"] + [c.name for c in components],
     })
 
+
 def grade_results(request, course_code):
     # Auth and course
     email = request.session.get("email_id")
@@ -3492,10 +3499,10 @@ def grade_results(request, course_code):
     # Components (shown as columns)
     components = list(AssessmentComponent.objects.filter(course=course))
 
-    # Only ENR enrollments, across all semesters
+    # ENR or CMP enrollments, across all semesters (shows completed too)
     enrollments = (
         StudentCourse.objects
-        .filter(course=course, status='ENR')
+        .filter(course=course, status__in=['ENR', 'CMP'])
         .select_related('student')
         .order_by('student__roll_no')
     )
@@ -3574,11 +3581,13 @@ def grade_results(request, course_code):
         'sort': sort,
     })
 
+
 def student_result_semester_list(request, roll_no):
     student = get_object_or_404(Student, roll_no=roll_no)
 
     semesters = (
         student.enrollments
+        .filter(status__in=['ENR', 'CMP'])
         .values_list('semester', flat=True)
         .distinct()
         .order_by('semester')
@@ -3588,9 +3597,14 @@ def student_result_semester_list(request, roll_no):
         "student": student,
         "semesters": semesters,
     })
+
 def student_view_results(request, student_id, semester):
     student = get_object_or_404(Student, id=student_id)
-    enrollments = StudentCourse.objects.filter(student=student, semester=semester).select_related('course')
+    enrollments = (
+        StudentCourse.objects
+        .filter(student=student, semester=semester, status__in=['ENR', 'CMP'])
+        .select_related('course')
+    )
 
     # Prepare detailed list of courses and grades
     results = []
@@ -3605,22 +3619,41 @@ def student_view_results(request, student_id, semester):
             "grade": grade,
             "points": points,
             "outcome": enr.outcome,
-            "is_pass_fail": enr.is_pass_fail,  # Add this flag
+            "is_pass_fail": enr.is_pass_fail,
         })
 
-    metrics = student.calculate_semester_metrics(semester)
+    # Compute registered and earned credits from approved enrollments only
+    registered_credits = sum((enr.course.credits or 0) for enr in enrollments)
+    earned_credits = sum((enr.course.credits or 0) for enr in enrollments if (enr.outcome or '').upper() == 'PAS')
 
+    # Keep existing metrics but override rcr/ecr to the approved-enrollment view
+    metrics = student.calculate_semester_metrics(semester)
+    try:
+        metrics['rcr'] = registered_credits
+    except Exception:
+        pass
+    try:
+        metrics['ecr'] = earned_credits
+    except Exception:
+        pass
+    cg_metrics = student.calculate_cumulative_metrics()
     return render(request, "student/result_semester_view.html", {
         "student": student,
         "semester": semester,
         "results": results,
         "metrics": metrics,
+        "cg_metrics": cg_metrics,
     })
+
 
 def student_result_pdf(request, student_id, semester):
     student = get_object_or_404(Student, id=student_id)
-    enrollments = StudentCourse.objects.filter(student=student, semester=semester).select_related('course')
-
+    enrollments = (
+        StudentCourse.objects
+        .filter(student=student, semester=semester, status__in=['ENR', 'CMP'])
+        .select_related('course')
+    )
+    
     results = []
     for enr in enrollments:
         course = enr.course
@@ -3633,10 +3666,24 @@ def student_result_pdf(request, student_id, semester):
             "grade": grade,
             "points": points,
             "outcome": enr.outcome,
-            "is_pass_fail": enr.is_pass_fail,  # Add this critical flag
+            "is_pass_fail": enr.is_pass_fail,
         })
 
+    # Compute registered and earned credits based on approved enrollments only
+    registered_credits = sum((enr.course.credits or 0) for enr in enrollments)
+    earned_credits = sum((enr.course.credits or 0) for enr in enrollments if (enr.outcome or '').upper() == 'PAS')
+
+    # Keep existing metrics but override rcr/ecr
     metrics = student.calculate_semester_metrics(semester)
+    try:
+        metrics['rcr'] = registered_credits
+    except Exception:
+        pass
+    try:
+        metrics['ecr'] = earned_credits
+    except Exception:
+        pass
+
     cg_metrics = student.calculate_cumulative_metrics()
 
     html_string = render_to_string(
@@ -3654,6 +3701,7 @@ def student_result_pdf(request, student_id, semester):
     response = HttpResponse(pdf, content_type="application/pdf")
     response["Content-Disposition"] = f"attachment; filename=Marksheet_{student.roll_no}_Sem_{semester}.pdf"
     return response
+
 
 def admin_grade_management(request):
     """
@@ -3684,13 +3732,14 @@ def admin_grade_management(request):
         'slots': slots,
     })
 
+
 def admin_assign_grades(request, course_code):
     """
     Display all enrolled students for a course to assign/edit grades
     """
     course = get_object_or_404(Course, code=course_code)
     
-    # Get all enrolled students for this course
+    # Get all enrolled students for this course (only ENR here is intentional)
     enrollments = StudentCourse.objects.filter(
         course=course,
         status='ENR'
@@ -3700,6 +3749,7 @@ def admin_assign_grades(request, course_code):
         'course': course,
         'enrollments': enrollments,
     })
+
 
 def admin_save_grades(request, course_code):
     """
@@ -3725,7 +3775,8 @@ def admin_save_grades(request, course_code):
         if grade and grade in GRADE_POINTS:
             enrollment.grade = grade
             enrollment.outcome = outcome
-            enrollment.save()
+            enrollment.status = 'CMP'  # NEW: mark complete when grade set
+            enrollment.save(update_fields=['grade', 'outcome', 'status'])
             updated_count += 1
 
     messages.success(request, f'Successfully updated grades for {updated_count} student(s) in {course.code}.')
