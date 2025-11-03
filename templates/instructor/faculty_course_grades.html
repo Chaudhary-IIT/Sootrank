@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Grades - {{ course.code }} - {{ course.name }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+  <style>
+    body {
+      background-color: #ecf0f1;
+      font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      padding: 20px;
+    }
+    h1 {
+      color: #34495e;
+      font-weight: 700;
+      margin-bottom: 30px;
+      text-align: center;
+    }
+    .card {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    table {
+      width: 100%;
+    }
+    th {
+      background-color: #3498db;
+      color: white;
+      font-weight: 600;
+      padding: 10px;
+      text-align: left;
+    }
+    td {
+      padding: 10px;
+      vertical-align: middle;
+    }
+    .badge-warning {
+      background-color: #f1c40f;
+      color: #2c3e50;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 5px;
+    }
+    .badge-success {
+      background-color: #27ae60;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 5px;
+    }
+    .badge-danger {
+      background-color: #c0392b;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 5px;
+    }
+    .text-muted {
+      color: #7f8c8d !important;
+    }
+    .btn-secondary, .btn-back {
+      background-color: #95a5a6;
+      color: white;
+      font-weight: 600;
+      padding: 8px 18px;
+      border-radius: 5px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: .5rem;
+      transition: all 0.2s ease-in-out;
+    }
+    .btn-secondary:hover, .btn-back:hover {
+      background-color: #7f8c8d;
+      color: white;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+
+  <a href="{% url 'faculty_dashboard' %}" class="btn-secondary mb-3"><i class="fa fa-home"></i> Home</a>
+
+  <h1>Grades for {{ course.code }} - {{ course.name }}</h1>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Roll No</th>
+          <th>Student Name</th>
+          <th>Grade</th>
+          <th>Outcome</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for res in results %}
+        <tr>
+          <td>{{ res.student.roll_no }}</td>
+          <td>{{ res.student.first_name }} {{ res.student.last_name }}</td>
+          <td>
+            {% if res.grade == "Pass/Fail Mode" %}
+              <span class="badge-warning">Pass/Fail Mode</span>
+            {% else %}
+              <strong>{{ res.grade }}</strong>
+            {% endif %}
+          </td>
+          <td>
+            {% if res.outcome == "Pass" %}
+              <span class="badge-success">Pass</span>
+            {% elif res.outcome == "Fail" %}
+              <span class="badge-danger">Fail</span>
+            {% else %}
+              <span class="text-muted">{{ res.outcome }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="4" class="text-center text-muted">No grades found.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <a href="{% url 'faculty_view_courses_for_grades' faculty.id %}" class="btn-back"><i class="fa fa-arrow-left"></i> Back to Courses</a>
+
+</body>
+</html>

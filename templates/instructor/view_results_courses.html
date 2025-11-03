@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Courses taught by {{ faculty.first_name }} {{ faculty.last_name }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+  <style>
+    body {
+      background-color: #ecf0f1;
+      font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      padding: 20px;
+    }
+    h1 {
+      color: #34495e;
+      font-weight: 700;
+      margin-bottom: 30px;
+      text-align: center;
+    }
+    .course-card {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgb(0 0 0 / 0.08);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      cursor: pointer;
+      margin-bottom: 20px;
+    }
+    .course-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 20px rgba(52, 152, 219, 0.2);
+    }
+    .course-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #34495e;
+    }
+    .course-subtitle {
+      font-size: 0.9rem;
+      color: #7f8c8d;
+      margin-bottom: 10px;
+    }
+    .badge-enrolled {
+      background-color: #dcfce7;
+      color: #166534;
+      padding: 5px 10px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+    }
+    .btn-view {
+      background-color: #3498db;
+      color: white;
+      font-weight: 600;
+      padding: 5px 15px;
+      border-radius: 5px;
+      transition: background-color 0.3s ease;
+    }
+    .btn-view:hover {
+      background-color: #2980b9;
+      color: white;
+      text-decoration: none;
+    }
+    .home-btn {
+      margin-bottom: 20px;
+      display: inline-block;
+      font-weight: 600;
+      color: #34495e;
+      border: 1px solid #34495e;
+      padding: 8px 15px;
+      border-radius: 5px;
+      text-decoration: none;
+      transition: background-color 0.3s ease,color 0.3s ease;
+    }
+    .home-btn:hover {
+      background-color: #34495e;
+      color: white;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+
+  <a href="{% url 'faculty_dashboard' %}" class="home-btn"><i class="fa fa-home me-2"></i>Home</a>
+
+  <h1>Courses taught by {{ faculty.first_name }} {{ faculty.last_name }}</h1>
+
+  <div class="row">
+    {% for c in courses %}
+    <div class="col-md-4">
+      <div class="course-card">
+        <div class="course-title">{{ c.code }}: {{ c.name }}</div>
+        <div class="course-subtitle">Slot: {{ c.slot }}</div>
+        <div>
+          <span class="badge-enrolled">{{ c.enrolled_count }} Enrolled</span>
+        </div>
+        <div class="mt-3">
+          <a href="{% url 'view_results_courses' faculty.id c.code %}" class="btn-view">
+            <i class="fa fa-eye me-1"></i> View Grades
+          </a>
+        </div>
+      </div>
+    </div>
+    {% empty %}
+    <p class="text-center text-muted">No courses found.</p>
+    {% endfor %}
+  </div>
+
+</body>
+</html>
