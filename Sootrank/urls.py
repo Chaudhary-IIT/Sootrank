@@ -107,7 +107,9 @@ urlpatterns = [
     path('custom-admin/database/delete/<str:record_type>/<int:record_id>/', views.delete_database_record, name='delete_database_record'),
     path('custom-admin/database/export/', views.export_page_view, name='export_page'),
     path('custom-admin/database/export-filtered/', views.export_filtered_data, name='export_filtered_data'),
-
+    #-------------(View Results - Instructor)
+    path('instructor/<int:faculty_id>/courses/', views.faculty_view_courses_for_grades, name='faculty_view_courses_for_grades'),
+    path('instructor/<int:faculty_id>/courses/<str:course_code>/results/', views.faculty_view_course_grades, name='view_results_courses'),
 ]
 
 

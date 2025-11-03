@@ -84,7 +84,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'sootrank_db',
         'USER': 'sootrank_user',
-        'PASSWORD': 'yourpassword',
+        'PASSWORD': 'YO123#yo',
         'HOST': 'localhost',
         'PORT': '5432',
     }

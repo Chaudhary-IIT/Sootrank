@@ -160,17 +160,24 @@ class Student(models.Model):
 
     def calculate_semester_metrics(self, semester):
         """
-        Calculate semester metrics (SGPA, RCR, ECR, STCR) from approved enrollments only.
+        - RCR: All attempted (registered) credits including pass/fail
+        - ECR: Pass/fail courses count only if passed, regular require passing grade
+        - STCR: Only regular, Pass/Fail counted as 0
+        - SGPA: STCR / (RCR - pass/fail credits)
         """
         enrollments = self.enrollments.filter(semester=semester, status__in=['ENR', 'CMP'])
-        rcr, ecr, stcr = 0, 0, 0
+
+        rcr = ecr = stcr = 0
+        pf_credits = 0  # Total Pass/Fail credits for the semester
 
         for enr in enrollments:
             credits = enr.course.credits or 0
-
             if enr.is_pass_fail:
+                rcr += credits
+                pf_credits += credits
                 if (enr.outcome or '').upper() == "PAS":
                     ecr += credits
+                # No addition to stcr for PF
             else:
                 rcr += credits
                 points = GRADE_POINTS.get(enr.grade, 0)
@@ -178,22 +185,32 @@ class Student(models.Model):
                 if (enr.outcome or '').upper() == "PAS" and points > 0:
                     ecr += credits
 
-        sgpa = round(stcr / rcr, 2) if rcr else 0
+        # SGPA denominator is only regular credits
+        regular_rcr = rcr - pf_credits
+        sgpa = round(stcr / regular_rcr, 2) if regular_rcr else 0
         return {"RCR": rcr, "ECR": ecr, "STCR": stcr, "SGPA": sgpa}
+
 
     def calculate_cumulative_metrics(self):
         """
-        Calculate cumulative metrics (CGPA, TRCR, TECR, TSTCR) from approved enrollments only.
+        - TRCR: All attempted credits including pass/fail
+        - TECR: Passed courses (including passed P/F)
+        - TSTCR: Only regular, Pass/Fail counted as 0
+        - CGPA: TSTCR / (TRCR - pass/fail credits)
+        Handles latest attempt logic as before.
         """
         enrollments = self.enrollments.filter(status__in=['ENR', 'CMP']).order_by('semester', 'id')
-        trcr, tecr, tstcr = 0, 0, 0
+        trcr = tecr = tstcr = 0
         latest_course = {}
+        pf_credits = 0
 
         for enr in enrollments:
             course_code = enr.course.code
             credits = enr.course.credits or 0
 
             if enr.is_pass_fail:
+                trcr += credits
+                pf_credits += credits
                 if (enr.outcome or '').upper() == "PAS":
                     tecr += credits
                 continue
@@ -224,7 +241,8 @@ class Student(models.Model):
                         tecr += credits
                     tstcr += grade_points * credits
 
-        cgpa = round(tstcr / trcr, 2) if trcr else 0
+        regular_trcr = trcr - pf_credits
+        cgpa = round(tstcr / regular_trcr, 2) if regular_trcr else 0
         return {"TRCR": trcr, "TECR": tecr, "TSTCR": tstcr, "CGPA": cgpa}
 
 
@@ -242,7 +260,6 @@ class Admins(models.Model):
         if not self.password.startswith('pbkdf2_sha256$'):
             self.password = make_password(self.password)
         super().save(*args, **kwargs)
-from django.db import models
 
 CORE_ELECTIVE_CHOICES = [
         ("DC", "Disciplinary Core (DC)"),
