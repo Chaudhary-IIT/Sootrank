@@ -14,7 +14,7 @@ from Registration.models import Branch, Category, Course, CourseBranch, Departme
 from django.contrib.auth import authenticate , login as auth_login
 from django.contrib.auth.hashers import make_password,check_password
 from django.db.models import Count, Q, OuterRef, Exists 
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST,require_http_methods
 from django.template.loader import render_to_string
 from weasyprint import HTML, CSS
 from django.contrib.auth.decorators import login_required
@@ -28,6 +28,7 @@ import csv
 from django.http import JsonResponse
 import pandas as pd
 from dataclasses import dataclass
+from datetime import datetime
 
 
 EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+-]+@iitmandi\.ac\.in$')
@@ -3781,3 +3782,738 @@ def admin_save_grades(request, course_code):
 
     messages.success(request, f'Successfully updated grades for {updated_count} student(s) in {course.code}.')
     return redirect('admin_assign_grades', course_code=course_code)
+
+# For Excel export
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
+
+# For PDF generation
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter, A4, landscape
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.lib.enums import TA_CENTER
+
+from Registration.models import (
+    Student, Faculty, Course, Branch, Department, 
+    StudentCourse, Category, ProgramRequirement, 
+    CourseBranch, AssessmentComponent, AssessmentScore
+)
+
+
+def database_management_view(request):
+    """
+    Main view for database management dashboard
+    Loads all data with pagination support
+    """
+    
+    # Fetch all data from database
+    students = Student.objects.select_related('branch', 'department').all()
+    faculty = Faculty.objects.select_related('department').all()
+    courses = Course.objects.all()
+    branches = Branch.objects.select_related('department').all()
+    departments = Department.objects.all()
+    enrollments = StudentCourse.objects.select_related('student', 'course').all()
+    categories = Category.objects.all()
+    requirements = ProgramRequirement.objects.select_related('branch').all()
+    
+    # Prepare students data
+    students_data = []
+    for student in students:
+        students_data.append({
+            'id': student.id,
+            'roll_no': student.roll_no,
+            'first_name': student.first_name,
+            'last_name': student.last_name or '',
+            'email': student.email_id,
+            'branch': student.branch.name if student.branch else 'N/A',
+            'department': student.department.code if student.department else 'N/A',
+            'semester': student.calculate_current_semester(),  # Use calculated semester
+            'mobile': str(student.mobile_no) if student.mobile_no else 'N/A'
+        })
+    
+    # Prepare faculty data
+    faculty_data = []
+    for fac in faculty:
+        course_count = fac.courses.count()
+        faculty_data.append({
+            'id': fac.id,
+            'first_name': fac.first_name,
+            'last_name': fac.last_name or '',
+            'email': fac.email_id,
+            'department': fac.department.code if fac.department else 'N/A',
+            'mobile': str(fac.mobile_no) if fac.mobile_no else 'N/A',
+            'courses': course_count
+        })
+    
+    # Prepare courses data
+    courses_data = []
+    for course in courses:
+        enrolled_count = course.enrollments.filter(status__in=['ENR', 'CMP']).count()
+        courses_data.append({
+            'id': course.id,
+            'code': course.code,
+            'name': course.name,
+            'credits': course.credits,
+            'ltpc': course.LTPC,
+            'slot': course.slot,
+            'status': course.status,
+            'enrolled': enrolled_count
+        })
+    
+    # Prepare branches data
+    branches_data = []
+    for branch in branches:
+        student_count = branch.student_set.count()
+        course_count = branch.courses.count()
+        branches_data.append({
+            'id': branch.id,
+            'name': branch.name,
+            'full_name': dict(Branch.BRANCHES).get(branch.name, branch.name),
+            'department': branch.department.code if branch.department else 'N/A',
+            'students': student_count,
+            'courses': course_count
+        })
+    
+    # Prepare departments data
+    departments_data = []
+    for dept in departments:
+        branch_count = dept.branches.count()
+        faculty_count = dept.faculty_set.count()
+        student_count = dept.student_set.count()
+        departments_data.append({
+            'id': dept.id,
+            'code': dept.code,
+            'name': dept.name,
+            'branches': branch_count,
+            'faculty': faculty_count,
+            'students': student_count
+        })
+    
+    # Prepare enrollments data
+    enrollments_data = []
+    for enr in enrollments:
+        enrollments_data.append({
+            'id': enr.id,
+            'student': f"{enr.student.first_name} {enr.student.last_name or ''}".strip(),
+            'roll_no': enr.student.roll_no,
+            'course': enr.course.code,
+            'semester': enr.semester or 'N/A',
+            'status': enr.status,
+            'grade': enr.grade or '-',
+            'outcome': enr.outcome,
+            'is_pass_fail': enr.is_pass_fail
+        })
+    
+    # Prepare categories data
+    categories_data = []
+    for cat in categories:
+        course_count = cat.course_branches.count()
+        categories_data.append({
+            'id': cat.id,
+            'code': cat.code,
+            'label': cat.label,
+            'courses': course_count
+        })
+    
+    # Prepare requirements data
+    requirements_data = []
+    for req in requirements:
+        requirements_data.append({
+            'id': req.id,
+            'branch': req.branch.name,
+            'category': req.category,
+            'required_credits': req.required_credits
+        })
+    
+    # Convert to JSON for template
+    import json
+    context = {
+        'students_json': json.dumps(students_data),
+        'faculty_json': json.dumps(faculty_data),
+        'courses_json': json.dumps(courses_data),
+        'branches_json': json.dumps(branches_data),
+        'departments_json': json.dumps(departments_data),
+        'enrollments_json': json.dumps(enrollments_data),
+        'categories_json': json.dumps(categories_data),
+        'requirements_json': json.dumps(requirements_data),
+    }
+    
+    return render(request, 'admin/database_management.html', context)
+
+
+def edit_database_record(request, record_type, record_id):
+    """
+    View for editing a specific record
+    """
+    
+    if request.method == 'POST':
+        try:
+            if record_type == 'student':
+                student = get_object_or_404(Student, id=record_id)
+                student.first_name = request.POST.get('first_name', student.first_name)
+                student.last_name = request.POST.get('last_name', student.last_name)
+                student.email_id = request.POST.get('email', student.email_id)
+                student.mobile_no = request.POST.get('mobile', student.mobile_no)
+                
+                branch_id = request.POST.get('branch')
+                if branch_id:
+                    student.branch = Branch.objects.get(id=branch_id)
+                
+                student.save()
+                return JsonResponse({'success': True, 'message': 'Student updated successfully'})
+            
+            elif record_type == 'faculty':
+                faculty = get_object_or_404(Faculty, id=record_id)
+                faculty.first_name = request.POST.get('first_name', faculty.first_name)
+                faculty.last_name = request.POST.get('last_name', faculty.last_name)
+                faculty.email_id = request.POST.get('email', faculty.email_id)
+                faculty.mobile_no = request.POST.get('mobile', faculty.mobile_no)
+                
+                dept_id = request.POST.get('department')
+                if dept_id:
+                    faculty.department = Department.objects.get(id=dept_id)
+                
+                faculty.save()
+                return JsonResponse({'success': True, 'message': 'Faculty updated successfully'})
+            
+            elif record_type == 'course':
+                course = get_object_or_404(Course, id=record_id)
+                course.code = request.POST.get('code', course.code)
+                course.name = request.POST.get('name', course.name)
+                course.credits = request.POST.get('credits', course.credits)
+                course.LTPC = request.POST.get('ltpc', course.LTPC)
+                course.slot = request.POST.get('slot', course.slot)
+                course.status = request.POST.get('status', course.status)
+                course.save()
+                return JsonResponse({'success': True, 'message': 'Course updated successfully'})
+            
+            elif record_type == 'enrollment':
+                enrollment = get_object_or_404(StudentCourse, id=record_id)
+                enrollment.status = request.POST.get('status', enrollment.status)
+                enrollment.grade = request.POST.get('grade', enrollment.grade)
+                enrollment.outcome = request.POST.get('outcome', enrollment.outcome)
+                enrollment.is_pass_fail = request.POST.get('is_pass_fail', 'false') == 'true'
+                enrollment.save()
+                return JsonResponse({'success': True, 'message': 'Enrollment updated successfully'})
+            
+            elif record_type == 'requirement':
+                requirement = get_object_or_404(ProgramRequirement, id=record_id)
+                requirement.required_credits = request.POST.get('required_credits', requirement.required_credits)
+                requirement.save()
+                return JsonResponse({'success': True, 'message': 'Requirement updated successfully'})
+            
+            else:
+                return JsonResponse({'success': False, 'error': 'Invalid record type'})
+        
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)})
+    
+    # GET request - show edit form
+    context = {}
+    
+    if record_type == 'student':
+        student = get_object_or_404(Student, id=record_id)
+        branches = Branch.objects.all()
+        context = {
+            'record_type': 'Student',
+            'record': student,
+            'branches': branches
+        }
+    
+    elif record_type == 'faculty':
+        faculty = get_object_or_404(Faculty, id=record_id)
+        departments = Department.objects.all()
+        context = {
+            'record_type': 'Faculty',
+            'record': faculty,
+            'departments': departments
+        }
+    
+    elif record_type == 'course':
+        course = get_object_or_404(Course, id=record_id)
+        context = {
+            'record_type': 'Course',
+            'record': course,
+            'slots': Course.SLOT_CHOICES
+        }
+    
+    elif record_type == 'enrollment':
+        enrollment = get_object_or_404(StudentCourse, id=record_id)
+        context = {
+            'record_type': 'Enrollment',
+            'record': enrollment,
+            'statuses': StudentCourse.STATUS,
+            'outcomes': StudentCourse.OUTCOME,
+            'grades': StudentCourse.GRADES
+        }
+    
+    elif record_type == 'requirement':
+        requirement = get_object_or_404(ProgramRequirement, id=record_id)
+        context = {
+            'record_type': 'Requirement',
+            'record': requirement
+        }
+    
+    return render(request, 'edit_record.html', context)
+
+
+@require_http_methods(["POST"])
+def delete_database_record(request, record_type, record_id):
+    """
+    Delete a specific record
+    """
+    try:
+        if record_type == 'student':
+            record = get_object_or_404(Student, id=record_id)
+        elif record_type == 'faculty':
+            record = get_object_or_404(Faculty, id=record_id)
+        elif record_type == 'course':
+            record = get_object_or_404(Course, id=record_id)
+        elif record_type == 'enrollment':
+            record = get_object_or_404(StudentCourse, id=record_id)
+        elif record_type == 'requirement':
+            record = get_object_or_404(ProgramRequirement, id=record_id)
+        elif record_type == 'branch':
+            record = get_object_or_404(Branch, id=record_id)
+        elif record_type == 'department':
+            record = get_object_or_404(Department, id=record_id)
+        elif record_type == 'category':
+            record = get_object_or_404(Category, id=record_id)
+        else:
+            return JsonResponse({'success': False, 'error': 'Invalid record type'})
+        
+        record.delete()
+        return JsonResponse({'success': True, 'message': f'{record_type.capitalize()} deleted successfully'})
+    
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+
+def export_page_view(request):
+    """
+    Display the export configuration page
+    """
+    context = {
+        'students_count': Student.objects.count(),
+        'faculty_count': Faculty.objects.count(),
+        'courses_count': Course.objects.count(),
+        'enrollments_count': StudentCourse.objects.count(),
+        'branches_count': Branch.objects.count(),
+        'departments_count': Department.objects.count(),
+        'categories_count': Category.objects.count(),
+        'requirements_count': ProgramRequirement.objects.count(),
+        'branches': Branch.objects.all(),
+        'departments': Department.objects.all(),
+    }
+    return render(request, 'admin/database_export.html', context)
+
+
+def export_filtered_data(request):
+    """
+    Export filtered data based on user selections
+    """
+    data_type = request.GET.get('data_type', '')
+    export_format = request.GET.get('format', 'csv')
+    
+    # Get filtered data based on type
+    if data_type == 'students':
+        data = filter_students(request)
+        headers = ['ID', 'Roll No', 'First Name', 'Last Name', 'Email', 'Branch', 'Department', 'Semester', 'Mobile']
+        title = 'Students Data'
+        
+    elif data_type == 'faculty':
+        data = filter_faculty(request)
+        headers = ['ID', 'First Name', 'Last Name', 'Email', 'Department', 'Mobile', 'Courses Count']
+        title = 'Faculty Data'
+        
+    elif data_type == 'courses':
+        data = filter_courses(request)
+        headers = ['ID', 'Code', 'Name', 'Credits', 'LTPC', 'Slot', 'Status', 'Enrolled']
+        title = 'Courses Data'
+        
+    elif data_type == 'enrollments':
+        data = filter_enrollments(request)
+        headers = ['ID', 'Student', 'Roll No', 'Course', 'Semester', 'Status', 'Grade', 'Outcome']
+        title = 'Enrollments Data'
+        
+    elif data_type == 'branches':
+        data = filter_branches(request)
+        headers = ['ID', 'Code', 'Full Name', 'Department', 'Students', 'Courses']
+        title = 'Branches Data'
+        
+    elif data_type == 'departments':
+        data = filter_departments(request)
+        headers = ['ID', 'Code', 'Name', 'Branches', 'Faculty', 'Students']
+        title = 'Departments Data'
+        
+    elif data_type == 'categories':
+        data = filter_categories(request)
+        headers = ['ID', 'Code', 'Label', 'Courses Count']
+        title = 'Categories Data'
+        
+    elif data_type == 'requirements':
+        data = filter_requirements(request)
+        headers = ['ID', 'Branch', 'Category', 'Required Credits']
+        title = 'Program Requirements Data'
+        
+    else:
+        return HttpResponse('Invalid data type', status=400)
+    
+    # Export based on format
+    if export_format == 'excel':
+        return export_to_excel(data, headers, title)
+    elif export_format == 'pdf':
+        return export_to_pdf(data, headers, title)
+    else:  # csv
+        return export_to_csv(data, headers, title)
+
+def filter_students(request):
+    """Filter students based on query parameters"""
+    students = Student.objects.select_related('branch', 'department').all()
+    
+    # Filter by year (from roll number) - FIXED
+    years = request.GET.getlist('year')  # Get multiple years
+    if years:
+        # Extract year patterns: 2024 -> "24", 2023 -> "23", etc.
+        year_patterns = [year[2:] for year in years]  # ["24", "23"]
+        # Filter students whose roll_no contains any of these patterns
+        from django.db.models import Q
+        year_query = Q()
+        for pattern in year_patterns:
+            # Match roll numbers like "B24001", "b24002", etc.
+            year_query |= Q(roll_no__iregex=r'^[a-zA-Z]' + pattern + r'\d+$')
+        students = students.filter(year_query)
+    
+    # Filter by branch - UPDATED for multiple values
+    branches = request.GET.getlist('branch')
+    if branches:
+        students = students.filter(branch__name__in=branches)
+    
+    # Filter by semester - UPDATED for multiple values
+    semesters = request.GET.getlist('semester')
+    if semesters:
+        # Convert to integers for comparison
+        semester_ints = [int(s) for s in semesters]
+        # Filter by calculated semester
+        filtered_students = []
+        for student in students:
+            if student.calculate_current_semester() in semester_ints:
+                filtered_students.append(student)
+        students = filtered_students
+    
+    # Filter by department - UPDATED for multiple values
+    departments = request.GET.getlist('department')
+    if departments:
+        if isinstance(students, list):
+            # If already filtered by semester (list)
+            students = [s for s in students if s.department and s.department.code in departments]
+        else:
+            students = students.filter(department__code__in=departments)
+    
+    # Prepare data rows
+    data = []
+    student_list = students if isinstance(students, list) else students
+    for student in student_list:
+        data.append([
+            student.id,
+            student.roll_no,
+            student.first_name,
+            student.last_name or '',
+            student.email_id,
+            student.branch.name if student.branch else 'N/A',
+            student.department.code if student.department else 'N/A',
+            student.calculate_current_semester(),
+            str(student.mobile_no) if student.mobile_no else 'N/A'
+        ])
+    
+    return data
+
+
+def filter_faculty(request):
+    """Filter faculty based on query parameters"""
+    faculty = Faculty.objects.select_related('department').all()
+    
+    # Filter by department - UPDATED for multiple values
+    departments = request.GET.getlist('department')
+    if departments:
+        faculty = faculty.filter(department__code__in=departments)
+    
+    # Filter by minimum courses
+    min_courses = request.GET.get('min_courses')
+    if min_courses:
+        faculty = faculty.annotate(course_count=Count('courses')).filter(course_count__gte=int(min_courses))
+    
+    # Prepare data rows
+    data = []
+    for fac in faculty:
+        data.append([
+            fac.id,
+            fac.first_name,
+            fac.last_name or '',
+            fac.email_id,
+            fac.department.code if fac.department else 'N/A',
+            str(fac.mobile_no) if fac.mobile_no else 'N/A',
+            fac.courses.count()
+        ])
+    
+    return data
+
+
+def filter_courses(request):
+    """Filter courses based on query parameters"""
+    courses = Course.objects.all()
+    
+    # Filter by slot - UPDATED for multiple values
+    slots = request.GET.getlist('slot')
+    if slots:
+        courses = courses.filter(slot__in=slots)
+    
+    # Filter by credits - UPDATED for multiple values
+    credits_list = request.GET.getlist('credits')
+    if credits_list:
+        credits_ints = [int(c) for c in credits_list]
+        courses = courses.filter(credits__in=credits_ints)
+    
+    # Filter by status - UPDATED for multiple values
+    statuses = request.GET.getlist('status')
+    if statuses:
+        courses = courses.filter(status__in=statuses)
+    
+    # Prepare data rows
+    data = []
+    for course in courses:
+        enrolled_count = course.enrollments.filter(status__in=['ENR', 'CMP']).count()
+        data.append([
+            course.id,
+            course.code,
+            course.name,
+            course.credits,
+            course.LTPC,
+            course.slot,
+            course.status,
+            enrolled_count
+        ])
+    
+    return data
+
+
+def filter_enrollments(request):
+    """Filter enrollments based on query parameters"""
+    enrollments = StudentCourse.objects.select_related('student', 'course').all()
+    
+    # Filter by semester - UPDATED for multiple values
+    semesters = request.GET.getlist('semester')
+    if semesters:
+        semester_ints = [int(s) for s in semesters]
+        enrollments = enrollments.filter(semester__in=semester_ints)
+    
+    # Filter by status - UPDATED for multiple values
+    statuses = request.GET.getlist('status')
+    if statuses:
+        enrollments = enrollments.filter(status__in=statuses)
+    
+    # Filter by outcome - UPDATED for multiple values
+    outcomes = request.GET.getlist('outcome')
+    if outcomes:
+        enrollments = enrollments.filter(outcome__in=outcomes)
+    
+    # Filter by grade - UPDATED for multiple values
+    grades = request.GET.getlist('grade')
+    if grades:
+        enrollments = enrollments.filter(grade__in=grades)
+    
+    # Prepare data rows
+    data = []
+    for enr in enrollments:
+        data.append([
+            enr.id,
+            f"{enr.student.first_name} {enr.student.last_name or ''}".strip(),
+            enr.student.roll_no,
+            enr.course.code,
+            enr.semester or 'N/A',
+            enr.status,
+            enr.grade or '-',
+            enr.outcome
+        ])
+    
+    return data
+
+
+def filter_requirements(request):
+    """Filter requirements based on query parameters"""
+    requirements = ProgramRequirement.objects.select_related('branch').all()
+    
+    # Filter by branch - UPDATED for multiple values
+    branches = request.GET.getlist('branch')
+    if branches:
+        requirements = requirements.filter(branch__name__in=branches)
+    
+    # Filter by category - UPDATED for multiple values
+    categories = request.GET.getlist('category')
+    if categories:
+        requirements = requirements.filter(category__in=categories)
+    
+    data = []
+    for req in requirements:
+        data.append([
+            req.id,
+            req.branch.name,
+            req.category,
+            req.required_credits
+        ])
+    
+    return data
+
+
+def export_to_csv(data, headers, title):
+    """Export data to CSV format"""
+    response = HttpResponse(content_type='text/csv')
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    filename = f"{title.replace(' ', '_')}_{timestamp}.csv"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    
+    writer = csv.writer(response)
+    writer.writerow(headers)
+    writer.writerows(data)
+    
+    return response
+
+
+def export_to_excel(data, headers, title):
+    """Export data to Excel format with styling"""
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    filename = f"{title.replace(' ', '_')}_{timestamp}.xlsx"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    
+    # Create workbook
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = title[:31]  # Excel sheet name limit
+    
+    # Styling
+    header_fill = PatternFill(start_color="0D6EFD", end_color="0D6EFD", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True, size=12)
+    border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    # Write headers
+    for col_num, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_num)
+        cell.value = header
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.border = border
+    
+    # Write data
+    for row_num, row_data in enumerate(data, 2):
+        for col_num, cell_value in enumerate(row_data, 1):
+            cell = ws.cell(row=row_num, column=col_num)
+            cell.value = cell_value
+            cell.border = border
+            cell.alignment = Alignment(horizontal='left', vertical='center')
+            
+            # Alternate row colors
+            if row_num % 2 == 0:
+                cell.fill = PatternFill(start_color="F8F9FA", end_color="F8F9FA", fill_type="solid")
+    
+    # Auto-adjust column widths
+    for col_num, header in enumerate(headers, 1):
+        column_letter = get_column_letter(col_num)
+        max_length = len(str(header))
+        for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=col_num, max_col=col_num):
+            for cell in row:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+        adjusted_width = min(max_length + 2, 50)
+        ws.column_dimensions[column_letter].width = adjusted_width
+    
+    # Freeze header row
+    ws.freeze_panes = 'A2'
+    
+    wb.save(response)
+    return response
+
+
+def export_to_pdf(data, headers, title):
+    """Export data to PDF format"""
+    response = HttpResponse(content_type='application/pdf')
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    filename = f"{title.replace(' ', '_')}_{timestamp}.pdf"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    
+    # Create PDF
+    doc = SimpleDocTemplate(response, pagesize=landscape(A4),
+                           rightMargin=30, leftMargin=30,
+                           topMargin=30, bottomMargin=30)
+    
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # Title
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=20,
+        textColor=colors.HexColor('#0d6efd'),
+        spaceAfter=20,
+        alignment=TA_CENTER
+    )
+    
+    title_para = Paragraph(f"{title}<br/>{datetime.now().strftime('%B %d, %Y %H:%M')}", title_style)
+    elements.append(title_para)
+    elements.append(Spacer(1, 0.3*inch))
+    
+    # Prepare table data
+    table_data = [headers] + data[:100]  # Limit to 100 rows for PDF
+    
+    # Calculate column widths
+    available_width = landscape(A4)[0] - 60  # Total width minus margins
+    col_width = available_width / len(headers)
+    col_widths = [col_width] * len(headers)
+    
+    # Create table
+    table = Table(table_data, colWidths=col_widths, repeatRows=1)
+    
+    # Style table
+    table_style = TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0d6efd')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
+    ])
+    
+    table.setStyle(table_style)
+    elements.append(table)
+    
+    # Add note if data was truncated
+    if len(data) > 100:
+        elements.append(Spacer(1, 0.3*inch))
+        note = Paragraph(
+            f"<i>Note: Showing first 100 of {len(data)} records. For complete data, please use Excel or CSV format.</i>",
+            styles['Normal']
+        )
+        elements.append(note)
+    
+    doc.build(elements)
+    return response

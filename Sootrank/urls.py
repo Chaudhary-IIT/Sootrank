@@ -101,6 +101,12 @@ urlpatterns = [
     path('custom-admin/grades/', views.admin_grade_management, name='admin_grade_management'),
     path('custom-admin/grades/assign/<str:course_code>/', views.admin_assign_grades, name='admin_assign_grades'),
     path('custom-admin/grades/save/<str:course_code>/', views.admin_save_grades, name='admin_save_grades'),
+    #-----------(Database Management- Admin)
+    path('custom-admin/database/', views.database_management_view, name='database_management'),
+    path('custom-admin/database/edit/<str:record_type>/<int:record_id>/', views.edit_database_record, name='edit_database_record'),
+    path('custom-admin/database/delete/<str:record_type>/<int:record_id>/', views.delete_database_record, name='delete_database_record'),
+    path('custom-admin/database/export/', views.export_page_view, name='export_page'),
+    path('custom-admin/database/export-filtered/', views.export_filtered_data, name='export_filtered_data'),
 
 ]
 

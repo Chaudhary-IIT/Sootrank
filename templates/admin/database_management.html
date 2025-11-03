@@ -1,0 +1,1394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Database Management - Sootrank Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        /* Premium, Minimal Aesthetic Overrides */
+        :root {
+            --color-primary: #34495e; /* Deep Charcoal/Indigo */
+            --color-accent: #3498db; /* Soft Blue for contrast/active states */
+            --color-success: #2ecc71; /* Emerald Green */
+            --color-danger: #e74c3c; /* Alizarin Red */
+            --color-warning: #f39c12; /* Orange/Gold */
+            --color-info: #1abc9c; /* Turquoise/Teal */
+            --color-secondary: #95a5a6; /* Silver/Grey */
+            --color-background: #ecf0f1; /* Light Grey Background */
+            --color-surface: #ffffff; /* Pure White Surface */
+        }
+
+        body {
+            background-color: var(--color-background);
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-size: 14px;
+            color: #2c3e50; /* Darker text */
+        }
+
+        .navbar-brand {
+            font-weight: 700;
+            font-size: 1.6rem;
+        }
+
+        /* Page Structure & Containers */
+        .page-header, .tab-content, .search-filter-bar {
+            background: var(--color-surface);
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e0e6ed;
+        }
+        
+        /* Tabs Styling */
+        .nav-tabs {
+            border-bottom: none;
+        }
+
+        .nav-tabs .nav-link {
+            color: var(--color-secondary);
+            font-weight: 600;
+            padding: 0.8rem 1.5rem;
+            border: none;
+            border-radius: 8px 8px 0 0;
+            margin-right: 0.5rem;
+            background-color: #f7f9fb;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .nav-tabs .nav-link:hover {
+            color: var(--color-primary);
+            border-bottom: 3px solid var(--color-accent);
+            background-color: #e8ecef;
+        }
+
+        .nav-tabs .nav-link.active {
+            color: var(--color-primary);
+            background-color: var(--color-surface);
+            border-color: transparent transparent var(--color-accent) transparent;
+            border-bottom-width: 3px;
+        }
+        
+        /* Table Styling */
+        .table-container {
+            overflow-x: auto;
+            max-height: 600px;
+            border: 1px solid #e0e6ed;
+            border-radius: 6px;
+        }
+
+        .table {
+            font-size: 13px;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-bottom: 0;
+        }
+
+        .table thead th {
+            position: sticky;
+            top: 0;
+            background-color: var(--color-primary);
+            color: var(--color-surface);
+            font-weight: 600;
+            border: none;
+            padding: 12px 10px;
+            white-space: nowrap;
+        }
+
+        .table tbody tr:hover {
+            background-color: rgba(52, 152, 219, 0.05);
+        }
+
+        .table td {
+            padding: 10px 10px;
+            vertical-align: middle;
+            border-top: 1px solid #e0e6ed;
+        }
+        
+        /* Button & Badge Styling */
+        .btn-action {
+            padding: 0.3rem 0.6rem;
+            font-size: 0.8rem;
+            margin: 0 0.1rem;
+            border-radius: 4px;
+        }
+
+        .badge {
+            font-weight: 600;
+            padding: 0.4em 0.8em;
+            border-radius: 4px;
+        }
+        
+        .badge-status {
+            min-width: 65px;
+            text-align: center;
+        }
+
+        /* Stats Cards */
+        .stats-card {
+            background: var(--color-surface);
+            color: var(--color-primary);
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            border-left: 5px solid var(--color-accent);
+            transition: transform 0.2s ease;
+        }
+
+        .stats-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        }
+
+        .stats-card h3 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--color-primary);
+        }
+
+        .stats-card p {
+            font-size: 0.9rem;
+            color: var(--color-secondary);
+        }
+        
+        /* Custom Stats Card Colors */
+        .stats-card-primary { border-left-color: var(--color-accent) !important; }
+        .stats-card-success { border-left-color: var(--color-success) !important; }
+        .stats-card-warning { border-left-color: var(--color-warning) !important; }
+        .stats-card-danger { border-left-color: var(--color-danger) !important; }
+        
+        /* Utility */
+        .truncate {
+            max-width: 150px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark shadow-sm mb-4" style="background-color: var(--color-primary);">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{% url 'custom_admin_home' %}">
+                <i class="fas fa-arrow-left me-2"></i>Sootrank Admin
+            </a>
+            <span class="navbar-text text-white opacity-75">
+                <i class="fas fa-database me-2"></i>Database Management System
+            </span>
+        </div>
+    </nav>
+
+    <div class="container-fluid px-4">
+        <div class="page-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="mb-1 fw-bold" style="color: var(--color-primary);">
+                        <i class="fas fa-database me-2"></i>Database Management
+                    </h2>
+                    <p class="text-muted mb-0">Comprehensive view and management of all database tables</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="{% url 'export_page' %}" class="btn btn-sm btn-primary" style="background-color: var(--color-accent); border-color: var(--color-accent);">
+                        <i class="fas fa-file-export me-2"></i>Export Data
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="stats-card stats-card-primary">
+                    <p class="mb-1">Total Students</p>
+                    <h3 id="totalStudents">0</h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card stats-card-success">
+                    <p class="mb-1">Total Faculty</p>
+                    <h3 id="totalFaculty">0</h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card stats-card-warning">
+                    <p class="mb-1">Total Courses</p>
+                    <h3 id="totalCourses">0</h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card stats-card-danger">
+                    <p class="mb-1">Total Enrollments</p>
+                    <h3 id="totalEnrollments">0</h3>
+                </div>
+            </div>
+        </div>
+
+        <ul class="nav nav-tabs" id="databaseTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="students-tab" data-bs-toggle="tab" data-bs-target="#students" type="button">
+                    <i class="fas fa-user-graduate me-2"></i>Students
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="faculty-tab" data-bs-toggle="tab" data-bs-target="#faculty" type="button">
+                    <i class="fas fa-chalkboard-teacher me-2"></i>Faculty
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="courses-tab" data-bs-toggle="tab" data-bs-target="#courses" type="button">
+                    <i class="fas fa-book-open me-2"></i>Courses
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="branches-tab" data-bs-toggle="tab" data-bs-target="#branches" type="button">
+                    <i class="fas fa-code-branch me-2"></i>Branches
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="departments-tab" data-bs-toggle="tab" data-bs-target="#departments" type="button">
+                    <i class="fas fa-building me-2"></i>Departments
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="enrollments-tab" data-bs-toggle="tab" data-bs-target="#enrollments" type="button">
+                    <i class="fas fa-clipboard-list me-2"></i>Enrollments
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="categories-tab" data-bs-toggle="tab" data-bs-target="#categories" type="button">
+                    <i class="fas fa-tags me-2"></i>Categories
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="requirements-tab" data-bs-toggle="tab" data-bs-target="#requirements" type="button">
+                    <i class="fas fa-tasks me-2"></i>Requirements
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="databaseTabsContent">
+            <div class="tab-pane fade show active" id="students" role="tabpanel">
+                <div class="search-filter-bar">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <input type="text" class="form-control" id="searchStudents" placeholder="Search students...">
+                        </div>
+                        <div class="col-md-2">
+                            <select class="form-select" id="filterBranch">
+                                <option value="">All Branches</option>
+                                <option value="CSE">CSE</option>
+                                <option value="DSE">DSE</option>
+                                <option value="ME">ME</option>
+                                <option value="CE">CE</option>
+                                <option value="EE">EE</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <select class="form-select" id="filterSemester">
+                                <option value="">All Semesters</option>
+                                <option value="1">Semester 1</option>
+                                <option value="2">Semester 2</option>
+                                <option value="3">Semester 3</option>
+                                <option value="4">Semester 4</option>
+                                <option value="5">Semester 5</option>
+                                <option value="6">Semester 6</option>
+                                <option value="7">Semester 7</option>
+                                <option value="8">Semester 8</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <select class="form-select" id="studentsPerPage">
+                                <option value="25">25 per page</option>
+                                <option value="50" selected>50 per page</option>
+                                <option value="100">100 per page</option>
+                                <option value="200">200 per page</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn btn-primary w-100" style="background-color: var(--color-accent); border-color: var(--color-accent);" onclick="filterStudents()">
+                                <i class="fas fa-filter me-2"></i>Apply Filters
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <small class="text-muted" id="studentsInfo">Showing 0 of 0 students</small>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button class="btn btn-outline-primary" style="border-color: var(--color-accent); color: var(--color-accent);" id="studentsPrevBtn" onclick="previousPage('students')">
+                            <i class="fas fa-chevron-left"></i> Previous
+                        </button>
+                        <button class="btn btn-outline-secondary disabled" id="studentsPageNum">Page 1</button>
+                        <button class="btn btn-outline-primary" style="border-color: var(--color-accent); color: var(--color-accent);" id="studentsNextBtn" onclick="nextPage('students')">
+                            Next <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Roll No</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Branch</th>
+                                <th>Department</th>
+                                <th>Semester</th>
+                                <th>Mobile</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="studentsTableBody">
+                            <tr>
+                                <td colspan="9" class="text-center py-4">Loading data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="faculty" role="tabpanel">
+                <div class="search-filter-bar">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <input type="text" class="form-control" id="searchFaculty" placeholder="Search faculty...">
+                        </div>
+                        <div class="col-md-4">
+                            <select class="form-select" id="filterFacultyDept">
+                                <option value="">All Departments</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-primary w-100" style="background-color: var(--color-accent); border-color: var(--color-accent);" onclick="filterFaculty()">
+                                <i class="fas fa-filter me-2"></i>Filter
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Department</th>
+                                <th>Mobile</th>
+                                <th>Courses</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="facultyTableBody">
+                            <tr>
+                                <td colspan="7" class="text-center py-4">Loading data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="courses" role="tabpanel">
+                <div class="search-filter-bar">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <input type="text" class="form-control" id="searchCourses" placeholder="Search courses...">
+                        </div>
+                        <div class="col-md-2">
+                            <select class="form-select" id="filterSlot">
+                                <option value="">All Slots</option>
+                                <option value="A">Slot A</option>
+                                <option value="B">Slot B</option>
+                                <option value="C">Slot C</option>
+                                <option value="D">Slot D</option>
+                                <option value="E">Slot E</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <select class="form-select" id="coursesPerPage">
+                                <option value="25">25 per page</option>
+                                <option value="50" selected>50 per page</option>
+                                <option value="100">100 per page</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-primary w-100" style="background-color: var(--color-accent); border-color: var(--color-accent);" onclick="filterCourses()">
+                                <i class="fas fa-filter me-2"></i>Apply Filters
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <small class="text-muted" id="coursesInfo">Showing 0 of 0 courses</small>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button class="btn btn-outline-primary" style="border-color: var(--color-accent); color: var(--color-accent);" id="coursesPrevBtn" onclick="previousPage('courses')">
+                            <i class="fas fa-chevron-left"></i> Previous
+                        </button>
+                        <button class="btn btn-outline-secondary disabled" id="coursesPageNum">Page 1</button>
+                        <button class="btn btn-outline-primary" style="border-color: var(--color-accent); color: var(--color-accent);" id="coursesNextBtn" onclick="nextPage('courses')">
+                            Next <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Code</th>
+                                <th>Name</th>
+                                <th>Credits</th>
+                                <th>LTPC</th>
+                                <th>Slot</th>
+                                <th>Status</th>
+                                <th>Enrolled</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="coursesTableBody">
+                            <tr>
+                                <td colspan="9" class="text-center py-4">Loading data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="branches" role="tabpanel">
+                <div class="table-container">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Branch Code</th>
+                                <th>Branch Name</th>
+                                <th>Department</th>
+                                <th>Total Students</th>
+                                <th>Total Courses</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="branchesTableBody">
+                            <tr>
+                                <td colspan="7" class="text-center py-4">Loading data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="departments" role="tabpanel">
+                <div class="table-container">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>School Code</th>
+                                <th>School Name</th>
+                                <th>Total Branches</th>
+                                <th>Total Faculty</th>
+                                <th>Total Students</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="departmentsTableBody">
+                            <tr>
+                                <td colspan="7" class="text-center py-4">Loading data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="enrollments" role="tabpanel">
+                <div class="search-filter-bar">
+                    <div class="row g-3">
+                        <div class="col-md-2">
+                            <input type="text" class="form-control" id="searchEnrollments" placeholder="Search...">
+                        </div>
+                        <div class="col-md-2">
+                            <select class="form-select" id="filterStatus">
+                                <option value="">All Status</option>
+                                <option value="PND">Pending</option>
+                                <option value="ENR">Enrolled</option>
+                                <option value="CMP">Completed</option>
+                                <option value="DRP">Dropped</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <select class="form-select" id="filterOutcome">
+                                <option value="">All Outcomes</option>
+                                <option value="PAS">Pass</option>
+                                <option value="FAI">Fail</option>
+                                <option value="UNK">Unknown</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <select class="form-select" id="filterEnrollmentSemester">
+                                <option value="">All Semesters</option>
+                                <option value="1">Sem 1</option>
+                                <option value="2">Sem 2</option>
+                                <option value="3">Sem 3</option>
+                                <option value="4">Sem 4</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <select class="form-select" id="enrollmentsPerPage">
+                                <option value="50" selected>50 per page</option>
+                                <option value="100">100 per page</option>
+                                <option value="200">200 per page</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-primary w-100" style="background-color: var(--color-accent); border-color: var(--color-accent);" onclick="filterEnrollments()">
+                                <i class="fas fa-filter me-2"></i>Apply
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <small class="text-muted" id="enrollmentsInfo">Showing 0 of 0 enrollments</small>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button class="btn btn-outline-primary" style="border-color: var(--color-accent); color: var(--color-accent);" id="enrollmentsPrevBtn" onclick="previousPage('enrollments')">
+                            <i class="fas fa-chevron-left"></i> Previous
+                        </button>
+                        <button class="btn btn-outline-secondary disabled" id="enrollmentsPageNum">Page 1</button>
+                        <button class="btn btn-outline-primary" style="border-color: var(--color-accent); color: var(--color-accent);" id="enrollmentsNextBtn" onclick="nextPage('enrollments')">
+                            Next <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Student</th>
+                                <th>Roll No</th>
+                                <th>Course</th>
+                                <th>Semester</th>
+                                <th>Status</th>
+                                <th>Grade</th>
+                                <th>Outcome</th>
+                                <th>Pass/Fail</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="enrollmentsTableBody">
+                            <tr>
+                                <td colspan="10" class="text-center py-4">Loading data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="categories" role="tabpanel">
+                <div class="table-container">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Code</th>
+                                <th>Label</th>
+                                <th>Courses Count</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="categoriesTableBody">
+                            <tr>
+                                <td colspan="5" class="text-center py-4">Loading data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="requirements" role="tabpanel">
+                <div class="table-container">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Branch</th>
+                                <th>Category</th>
+                                <th>Required Credits</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="requirementsTableBody">
+                            <tr>
+                                <td colspan="5" class="text-center py-4">Loading data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="detailsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header" style="background-color: var(--color-primary);">
+                    <h5 class="modal-title text-white">
+                        <i class="fas fa-info-circle me-2"></i>Details
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" style="filter: brightness(0) invert(1);"></button>
+                </div>
+                <div class="modal-body" id="detailsModalBody">
+                    </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="editModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header" style="background-color: var(--color-primary);">
+                    <h5 class="modal-title text-white">
+                        <i class="fas fa-edit me-2"></i>Edit Record
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" style="filter: brightness(0) invert(1);"></button>
+                </div>
+                <div class="modal-body" id="editModalBody">
+                    </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" style="background-color: var(--color-accent); border-color: var(--color-accent);" onclick="saveEdit()">
+                        <i class="fas fa-save me-2"></i>Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Pagination state
+        const paginationState = {
+            students: { currentPage: 1, perPage: 50, totalRecords: 0, filteredData: [] },
+            courses: { currentPage: 1, perPage: 50, totalRecords: 0, filteredData: [] },
+            enrollments: { currentPage: 1, perPage: 50, totalRecords: 0, filteredData: [] },
+            faculty: { currentPage: 1, perPage: 50, totalRecords: 0, filteredData: [] }
+        };
+
+        // Django data injected via template - **These lines must remain exactly as they were to receive context from the Django view.**
+        let studentsData = {{ students_json|safe }};
+        let facultyData = {{ faculty_json|safe }};
+        let coursesData = {{ courses_json|safe }};
+        let branchesData = {{ branches_json|safe }};
+        let departmentsData = {{ departments_json|safe }};
+        let enrollmentsData = {{ enrollments_json|safe }};
+        let categoriesData = {{ categories_json|safe }};
+        let requirementsData = {{ requirements_json|safe }};
+
+        // Calculate semester based on roll number and current date (Original function)
+        function calculateCurrentSemester(rollNo) {
+            if (!rollNo || rollNo.length < 3) return 1;
+            
+            const yearStr = rollNo.substring(1, 3);
+            const admissionYear = 2000 + parseInt(yearStr);
+            
+            const currentDate = new Date();
+            const currentYear = currentDate.getFullYear();
+            const currentMonth = currentDate.getMonth() + 1;
+            
+            let yearsDiff = currentYear - admissionYear;
+            
+            let semesterInYear;
+            if (currentMonth >= 7 && currentMonth <= 12) {
+                // Odd semester (July-December)
+                semesterInYear = 1;
+            } else {
+                // Even semester (January-June)
+                semesterInYear = 2;
+            }
+            
+            let totalSemester = (yearsDiff * 2) + semesterInYear;
+            
+            return Math.min(Math.max(totalSemester, 1), 8);
+        }
+
+        // Update student semester data with calculated values (Original function)
+        studentsData = studentsData.map(student => {
+            const calculatedSem = calculateCurrentSemester(student.roll_no);
+            return {
+                ...student,
+                semester: calculatedSem,
+                original_semester: student.semester // Keep original for reference
+            };
+        });
+
+        // Initialize page (Original function)
+        document.addEventListener('DOMContentLoaded', function() {
+            updateStatistics();
+            loadAllTables();
+            
+            // Add per-page change listeners
+            document.getElementById('studentsPerPage').addEventListener('change', () => {
+                paginationState.students.perPage = parseInt(document.getElementById('studentsPerPage').value);
+                paginationState.students.currentPage = 1;
+                filterStudents();
+            });
+            document.getElementById('coursesPerPage').addEventListener('change', () => {
+                paginationState.courses.perPage = parseInt(document.getElementById('coursesPerPage').value);
+                paginationState.courses.currentPage = 1;
+                filterCourses();
+            });
+            document.getElementById('enrollmentsPerPage').addEventListener('change', () => {
+                paginationState.enrollments.perPage = parseInt(document.getElementById('enrollmentsPerPage').value);
+                paginationState.enrollments.currentPage = 1;
+                filterEnrollments();
+            });
+             // Populate Department filter for Faculty
+            const facultyDeptFilter = document.getElementById('filterFacultyDept');
+            const uniqueDepartments = [...new Set(departmentsData.map(d => d.code))].sort(); // Use department codes
+            uniqueDepartments.forEach(dept => {
+                const option = document.createElement('option');
+                option.value = dept;
+                option.textContent = dept;
+                facultyDeptFilter.appendChild(option);
+            });
+        });
+
+        function updateStatistics() {
+            document.getElementById('totalStudents').textContent = studentsData.length;
+            document.getElementById('totalFaculty').textContent = facultyData.length;
+            document.getElementById('totalCourses').textContent = coursesData.length;
+            document.getElementById('totalEnrollments').textContent = enrollmentsData.length;
+        }
+
+        function loadAllTables() {
+            loadStudentsTable();
+            loadFacultyTable();
+            loadCoursesTable();
+            loadBranchesTable();
+            loadDepartmentsTable();
+            loadEnrollmentsTable();
+            loadCategoriesTable();
+            loadRequirementsTable();
+        }
+
+        function loadStudentsTable(filteredData = studentsData) {
+            const tbody = document.getElementById('studentsTableBody');
+            const state = paginationState.students;
+            
+            state.filteredData = filteredData;
+            state.totalRecords = filteredData.length;
+            
+            if (filteredData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><i class="fas fa-inbox"></i><p>No students found</p></div></td></tr>';
+                updatePaginationInfo('students', 0, 0, 0);
+                return;
+            }
+            
+            const startIndex = (state.currentPage - 1) * state.perPage;
+            const endIndex = Math.min(startIndex + state.perPage, filteredData.length);
+            const paginatedData = filteredData.slice(startIndex, endIndex);
+            
+            tbody.innerHTML = paginatedData.map(student => `
+                <tr>
+                    <td>${student.id}</td>
+                    <td><strong>${student.roll_no}</strong></td>
+                    <td>${student.first_name} ${student.last_name}</td>
+                    <td class="truncate">${student.email}</td>
+                    <td><span class="badge" style="background-color: var(--color-accent);">${student.branch}</span></td>
+                    <td>${student.department}</td>
+                    <td>${student.semester}</td>
+                    <td>${student.mobile}</td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="btn btn-sm btn-info btn-action" style="background-color: var(--color-info); color: white;" onclick="viewDetails('student', ${student.id})" title="View">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="btn btn-sm btn-warning btn-action" style="background-color: var(--color-warning); color: white;" onclick="editRecord('student', ${student.id})" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger btn-action" style="background-color: var(--color-danger); color: white;" onclick="deleteRecord('student', ${student.id})" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+            
+            updatePaginationInfo('students', startIndex + 1, endIndex, filteredData.length);
+            updatePaginationButtons('students');
+        }
+
+        function loadFacultyTable(filteredData = facultyData) {
+            const tbody = document.getElementById('facultyTableBody');
+            // Pagination logic (optional for this table but good practice to include it if facultyData is large)
+            
+            if (filteredData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><i class="fas fa-inbox"></i><p>No faculty found</p></div></td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = filteredData.map(faculty => `
+                <tr>
+                    <td>${faculty.id}</td>
+                    <td>${faculty.first_name} ${faculty.last_name}</td>
+                    <td class="truncate">${faculty.email}</td>
+                    <td>${faculty.department}</td>
+                    <td>${faculty.mobile}</td>
+                    <td><span class="badge bg-success">${faculty.courses} courses</span></td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="btn btn-sm btn-info btn-action" style="background-color: var(--color-info); color: white;" onclick="viewDetails('faculty', ${faculty.id})" title="View">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="btn btn-sm btn-warning btn-action" style="background-color: var(--color-warning); color: white;" onclick="editRecord('faculty', ${faculty.id})" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger btn-action" style="background-color: var(--color-danger); color: white;" onclick="deleteRecord('faculty', ${faculty.id})" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function loadCoursesTable(filteredData = coursesData) {
+            const tbody = document.getElementById('coursesTableBody');
+            const state = paginationState.courses;
+            
+            state.filteredData = filteredData;
+            state.totalRecords = filteredData.length;
+            
+            if (filteredData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><i class="fas fa-inbox"></i><p>No courses found</p></div></td></tr>';
+                updatePaginationInfo('courses', 0, 0, 0);
+                return;
+            }
+            
+            const startIndex = (state.currentPage - 1) * state.perPage;
+            const endIndex = Math.min(startIndex + state.perPage, filteredData.length);
+            const paginatedData = filteredData.slice(startIndex, endIndex);
+            
+            tbody.innerHTML = paginatedData.map(course => `
+                <tr>
+                    <td>${course.id}</td>
+                    <td><strong>${course.code}</strong></td>
+                    <td class="truncate">${course.name}</td>
+                    <td>${course.credits}</td>
+                    <td>${course.ltpc}</td>
+                    <td><span class="badge" style="background-color: var(--color-info);">${course.slot}</span></td>
+                    <td><span class="badge ${course.status === 'Yes' ? 'bg-success' : 'bg-danger'}">${course.status}</span></td>
+                    <td>${course.enrolled}</td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="btn btn-sm btn-info btn-action" style="background-color: var(--color-info); color: white;" onclick="viewDetails('course', ${course.id})" title="View">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="btn btn-sm btn-warning btn-action" style="background-color: var(--color-warning); color: white;" onclick="editRecord('course', ${course.id})" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger btn-action" style="background-color: var(--color-danger); color: white;" onclick="deleteRecord('course', ${course.id})" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+            
+            updatePaginationInfo('courses', startIndex + 1, endIndex, filteredData.length);
+            updatePaginationButtons('courses');
+        }
+        
+        function loadBranchesTable() {
+            const tbody = document.getElementById('branchesTableBody');
+            if (branchesData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><i class="fas fa-inbox"></i><p>No branches found</p></div></td></tr>';
+                return;
+            }
+            tbody.innerHTML = branchesData.map(branch => `
+                <tr>
+                    <td>${branch.id}</td>
+                    <td><strong>${branch.name}</strong></td>
+                    <td>${branch.full_name}</td>
+                    <td>${branch.department}</td>
+                    <td>${branch.students}</td>
+                    <td>${branch.courses}</td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="btn btn-sm btn-info btn-action" style="background-color: var(--color-info); color: white;" onclick="viewDetails('branch', ${branch.id})" title="View">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="btn btn-sm btn-warning btn-action" style="background-color: var(--color-warning); color: white;" onclick="editRecord('branch', ${branch.id})" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function loadDepartmentsTable() {
+            const tbody = document.getElementById('departmentsTableBody');
+             if (departmentsData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><i class="fas fa-inbox"></i><p>No departments found</p></div></td></tr>';
+                return;
+            }
+            tbody.innerHTML = departmentsData.map(dept => `
+                <tr>
+                    <td>${dept.id}</td>
+                    <td><strong>${dept.code}</strong></td>
+                    <td class="truncate">${dept.name}</td>
+                    <td>${dept.branches}</td>
+                    <td>${dept.faculty}</td>
+                    <td>${dept.students}</td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="btn btn-sm btn-info btn-action" style="background-color: var(--color-info); color: white;" onclick="viewDetails('department', ${dept.id})" title="View">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="btn btn-sm btn-warning btn-action" style="background-color: var(--color-warning); color: white;" onclick="editRecord('department', ${dept.id})" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function loadEnrollmentsTable(filteredData = enrollmentsData) {
+            const tbody = document.getElementById('enrollmentsTableBody');
+            const state = paginationState.enrollments;
+            
+            state.filteredData = filteredData;
+            state.totalRecords = filteredData.length;
+            
+            if (filteredData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><i class="fas fa-inbox"></i><p>No enrollments found</p></div></td></tr>';
+                updatePaginationInfo('enrollments', 0, 0, 0);
+                return;
+            }
+
+            const startIndex = (state.currentPage - 1) * state.perPage;
+            const endIndex = Math.min(startIndex + state.perPage, filteredData.length);
+            const paginatedData = filteredData.slice(startIndex, endIndex);
+
+            const statusColors = {
+                'PND': 'bg-warning',
+                'ENR': 'bg-primary',
+                'CMP': 'bg-success',
+                'DRP': 'bg-danger'
+            };
+
+            const outcomeColors = {
+                'PAS': 'bg-success',
+                'FAI': 'bg-danger',
+                'UNK': 'bg-secondary'
+            };
+            
+            tbody.innerHTML = paginatedData.map(enr => `
+                <tr>
+                    <td>${enr.id}</td>
+                    <td>${enr.student}</td>
+                    <td><strong>${enr.roll_no}</strong></td>
+                    <td>${enr.course}</td>
+                    <td>${enr.semester}</td>
+                    <td><span class="badge ${statusColors[enr.status]} badge-status">${enr.status}</span></td>
+                    <td><strong>${enr.grade || '-'}</strong></td>
+                    <td><span class="badge ${outcomeColors[enr.outcome]} badge-status">${enr.outcome}</span></td>
+                    <td>${enr.is_pass_fail ? '<i class="fas fa-check text-success"></i>' : '<i class="fas fa-times text-danger"></i>'}</td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="btn btn-sm btn-info btn-action" style="background-color: var(--color-info); color: white;" onclick="viewDetails('enrollment', ${enr.id})" title="View">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="btn btn-sm btn-warning btn-action" style="background-color: var(--color-warning); color: white;" onclick="editRecord('enrollment', ${enr.id})" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger btn-action" style="background-color: var(--color-danger); color: white;" onclick="deleteRecord('enrollment', ${enr.id})" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+            
+            updatePaginationInfo('enrollments', startIndex + 1, endIndex, filteredData.length);
+            updatePaginationButtons('enrollments');
+        }
+
+        function loadCategoriesTable() {
+            const tbody = document.getElementById('categoriesTableBody');
+             if (categoriesData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state"><i class="fas fa-inbox"></i><p>No categories found</p></div></td></tr>';
+                return;
+            }
+            tbody.innerHTML = categoriesData.map(cat => `
+                <tr>
+                    <td>${cat.id}</td>
+                    <td><strong>${cat.code}</strong></td>
+                    <td>${cat.label}</td>
+                    <td>${cat.courses}</td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="btn btn-sm btn-info btn-action" style="background-color: var(--color-info); color: white;" onclick="viewDetails('category', ${cat.id})" title="View">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="btn btn-sm btn-warning btn-action" style="background-color: var(--color-warning); color: white;" onclick="editRecord('category', ${cat.id})" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function loadRequirementsTable() {
+            const tbody = document.getElementById('requirementsTableBody');
+             if (requirementsData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state"><i class="fas fa-inbox"></i><p>No requirements found</p></div></td></tr>';
+                return;
+            }
+            tbody.innerHTML = requirementsData.map(req => `
+                <tr>
+                    <td>${req.id}</td>
+                    <td><span class="badge" style="background-color: var(--color-accent);">${req.branch}</span></td>
+                    <td>${req.category}</td>
+                    <td><strong>${req.required_credits} credits</strong></td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="btn btn-sm btn-info btn-action" style="background-color: var(--color-info); color: white;" onclick="viewDetails('requirement', ${req.id})" title="View">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="btn btn-sm btn-warning btn-action" style="background-color: var(--color-warning); color: white;" onclick="editRecord('requirement', ${req.id})" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger btn-action" style="background-color: var(--color-danger); color: white;" onclick="deleteRecord('requirement', ${req.id})" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+        
+        // --- Filter Functions (Original Logic) ---
+        function filterStudents() {
+            paginationState.students.currentPage = 1; 
+            const search = document.getElementById('searchStudents').value.toLowerCase();
+            const branch = document.getElementById('filterBranch').value;
+            const semester = document.getElementById('filterSemester').value;
+
+            const filtered = studentsData.filter(student => {
+                const matchSearch = !search || 
+                    student.first_name.toLowerCase().includes(search) ||
+                    student.last_name.toLowerCase().includes(search) ||
+                    student.roll_no.toLowerCase().includes(search) ||
+                    student.email.toLowerCase().includes(search);
+                
+                const matchBranch = !branch || student.branch === branch;
+                const matchSemester = !semester || student.semester.toString() === semester;
+
+                return matchSearch && matchBranch && matchSemester;
+            });
+
+            loadStudentsTable(filtered);
+        }
+
+        function filterFaculty() {
+            const search = document.getElementById('searchFaculty').value.toLowerCase();
+            const dept = document.getElementById('filterFacultyDept').value;
+
+            const filtered = facultyData.filter(faculty => {
+                const matchSearch = !search || 
+                    faculty.first_name.toLowerCase().includes(search) ||
+                    faculty.last_name.toLowerCase().includes(search) ||
+                    faculty.email.toLowerCase().includes(search);
+                
+                const matchDept = !dept || faculty.department === dept;
+
+                return matchSearch && matchDept;
+            });
+
+            loadFacultyTable(filtered);
+        }
+
+        function filterCourses() {
+            paginationState.courses.currentPage = 1;
+            const search = document.getElementById('searchCourses').value.toLowerCase();
+            const slot = document.getElementById('filterSlot').value;
+
+            const filtered = coursesData.filter(course => {
+                const matchSearch = !search || 
+                    course.code.toLowerCase().includes(search) ||
+                    course.name.toLowerCase().includes(search);
+                
+                const matchSlot = !slot || course.slot === slot;
+
+                return matchSearch && matchSlot;
+            });
+
+            loadCoursesTable(filtered);
+        }
+
+        function filterEnrollments() {
+            paginationState.enrollments.currentPage = 1;
+            const search = document.getElementById('searchEnrollments').value.toLowerCase();
+            const status = document.getElementById('filterStatus').value;
+            const outcome = document.getElementById('filterOutcome').value;
+            const semester = document.getElementById('filterEnrollmentSemester').value;
+
+            const filtered = enrollmentsData.filter(enr => {
+                const matchSearch = !search || 
+                    enr.roll_no.toLowerCase().includes(search) ||
+                    enr.course.toLowerCase().includes(search) ||
+                    enr.student.toLowerCase().includes(search);
+                
+                const matchStatus = !status || enr.status === status;
+                const matchOutcome = !outcome || enr.outcome === outcome;
+                const matchSemester = !semester || enr.semester.toString() === semester;
+
+                return matchSearch && matchStatus && matchOutcome && matchSemester;
+            });
+
+            loadEnrollmentsTable(filtered);
+        }
+        
+        // --- Pagination Helpers (Original Logic) ---
+        function updatePaginationInfo(type, start, end, total) {
+            const info = document.getElementById(`${type}Info`);
+            if (info) {
+                info.textContent = `Showing ${start}-${end} of ${total} ${type}`;
+            }
+        }
+
+        function updatePaginationButtons(type) {
+            const state = paginationState[type];
+            const totalPages = Math.ceil(state.totalRecords / state.perPage);
+            
+            const prevBtn = document.getElementById(`${type}PrevBtn`);
+            const nextBtn = document.getElementById(`${type}NextBtn`);
+            const pageNum = document.getElementById(`${type}PageNum`);
+            
+            if (prevBtn) prevBtn.disabled = state.currentPage === 1;
+            if (nextBtn) nextBtn.disabled = state.currentPage >= totalPages;
+            if (pageNum) pageNum.textContent = `Page ${state.currentPage} of ${totalPages}`;
+        }
+
+        function previousPage(type) {
+            const state = paginationState[type];
+            if (state.currentPage > 1) {
+                state.currentPage--;
+                if (type === 'students') loadStudentsTable(state.filteredData);
+                else if (type === 'courses') loadCoursesTable(state.filteredData);
+                else if (type === 'enrollments') loadEnrollmentsTable(state.filteredData);
+                else if (type === 'faculty') loadFacultyTable(state.filteredData);
+            }
+        }
+
+        function nextPage(type) {
+            const state = paginationState[type];
+            const totalPages = Math.ceil(state.totalRecords / state.perPage);
+            if (state.currentPage < totalPages) {
+                state.currentPage++;
+                if (type === 'students') loadStudentsTable(state.filteredData);
+                else if (type === 'courses') loadCoursesTable(state.filteredData);
+                else if (type === 'enrollments') loadEnrollmentsTable(state.filteredData);
+                else if (type === 'faculty') loadFacultyTable(state.filteredData);
+            }
+        }
+
+        // --- CRUD operations (Original Logic with Django Integration) ---
+        function viewDetails(type, id) {
+            let data;
+            
+            switch(type) {
+                case 'student':
+                    data = studentsData.find(s => s.id === id);
+                    content = `
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <strong>Roll No:</strong> ${data.roll_no}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Name:</strong> ${data.first_name} ${data.last_name}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Email:</strong> ${data.email}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Mobile:</strong> ${data.mobile}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Branch:</strong> ${data.branch}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Department:</strong> ${data.department}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Current Semester:</strong> ${data.semester}
+                            </div>
+                            </div>
+                    `;
+                    break;
+                case 'faculty':
+                    data = facultyData.find(f => f.id === id);
+                    content = `
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <strong>Name:</strong> ${data.first_name} ${data.last_name}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Email:</strong> ${data.email}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Mobile:</strong> ${data.mobile}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Department:</strong> ${data.department}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Total Courses:</strong> ${data.courses}
+                            </div>
+                        </div>
+                    `;
+                    break;
+                 case 'course':
+                    data = coursesData.find(c => c.id === id);
+                    content = `
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <strong>Code:</strong> ${data.code}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Name:</strong> ${data.name}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Credits:</strong> ${data.credits}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>LTPC:</strong> ${data.ltpc}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Slot:</strong> ${data.slot}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Status:</strong> ${data.status}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Enrolled Students:</strong> ${data.enrolled}
+                            </div>
+                        </div>
+                    `;
+                    break;
+                case 'enrollment':
+                    data = enrollmentsData.find(e => e.id === id);
+                    content = `
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <strong>Student:</strong> ${data.student} (${data.roll_no})
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Course:</strong> ${data.course}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Semester:</strong> ${data.semester}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Status:</strong> <span class="badge ${data.status === 'CMP' ? 'bg-success' : 'bg-primary'}">${data.status}</span>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Grade:</strong> <strong>${data.grade || '-'}</strong>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Outcome:</strong> <span class="badge ${data.outcome === 'PAS' ? 'bg-success' : 'bg-danger'}">${data.outcome}</span>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Is Pass/Fail:</strong> ${data.is_pass_fail ? 'Yes' : 'No'}
+                            </div>
+                        </div>
+                    `;
+                    break;
+                default:
+                    content = '<p>Details not available</p>';
+            }
+
+            document.getElementById('detailsModalBody').innerHTML = content;
+            new bootstrap.Modal(document.getElementById('detailsModal')).show();
+        }
+
+
+        function editRecord(type, id) {
+            // Original Django redirect logic
+            window.location.href = `/custom-admin/database/edit/${type}/${id}/`;
+        }
+
+        function deleteRecord(type, id) {
+            if (confirm(`Are you sure you want to delete this ${type}?`)) {
+                // Original Django fetch logic using POST
+                fetch(`/custom-admin/database/delete/${type}/${id}/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Record deleted successfully!');
+                        location.reload();
+                    } else {
+                        alert('Error deleting record: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    alert('Error: ' + error);
+                });
+            }
+        }
+
+        // Helper function to get CSRF token (Required for Django POST requests)
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        function saveEdit() {
+            alert('Save functionality would be implemented with Django backend.');
+            bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
+        }
+
+        function exportData(format) {
+            window.location.href = `/custom-admin/database/export/?format=${format}`;
+        }
+
+        // Search input listeners (Original)
+        document.getElementById('searchStudents').addEventListener('input', filterStudents);
+        document.getElementById('searchFaculty').addEventListener('input', filterFaculty);
+        document.getElementById('searchCourses').addEventListener('input', filterCourses);
+        document.getElementById('searchEnrollments').addEventListener('input', filterEnrollments);
+    </script>
+</body>
+</html>

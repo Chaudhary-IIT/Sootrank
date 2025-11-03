@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.hashers import make_password
+from datetime import datetime
 
 GRADE_POINTS = {
     "A": 10,
@@ -83,40 +84,84 @@ class Course(models.Model):
     branches = models.ManyToManyField(Branch, through="CourseBranch", related_name="courses")
     faculties = models.ManyToManyField(Faculty, related_name="courses")
 
-    
-
 
 class Student(models.Model):
-    first_name=models.CharField(max_length=255)
-    last_name=models.CharField(max_length=255,null=True)
+    first_name = models.CharField(max_length=255)
+    last_name = models.CharField(max_length=255, null=True)
     profile_image = models.ImageField(upload_to='profile_images/', blank=True, null=True)
-    email_id=models.EmailField(max_length=255,unique=True)
-    password=models.CharField(max_length=255)
+    email_id = models.EmailField(max_length=255, unique=True)
+    password = models.CharField(max_length=255)
     roll_no = models.CharField(max_length=10, unique=True)
-    department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True)  # Student linked to department
-    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True)  # Student linked to branch
-    semester = models.IntegerField(null=True,default=1)
+    department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True)
+    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True)
+    semester = models.IntegerField(null=True, default=1)
     mobile_no = models.BigIntegerField(null=True)
     courses = models.ManyToManyField(Course, through="StudentCourse", related_name="students")
 
+    def calculate_current_semester(self):
+        """
+        Calculate current semester based on roll number and current date.
+        Roll number format: b24001 where 24 = admission year (2024)
+        July-December = Odd semesters (1, 3, 5, 7)
+        January-June = Even semesters (2, 4, 6, 8)
+        """
+        if not self.roll_no or len(self.roll_no) < 3:
+            return 1
+        
+        try:
+            # Extract year from roll number (e.g., "b24001" -> "24" -> 2024)
+            year_str = self.roll_no[1:3]
+            admission_year = 2000 + int(year_str)
+            
+            # Get current date info
+            current_date = datetime.now()
+            current_year = current_date.year
+            current_month = current_date.month
+            
+            # Calculate years since admission
+            years_diff = current_year - admission_year
+            
+            # Determine semester within the academic year
+            if current_month >= 7:  # July-December (Odd semester)
+                semester_in_year = 1
+            else:  # January-June (Even semester)
+                semester_in_year = 2
+            
+            # Calculate total semester
+            total_semester = (years_diff * 2) + semester_in_year
+            
+            # Cap between 1 and 8
+            return max(1, min(total_semester, 8))
+        
+        except (ValueError, IndexError):
+            return 1
+
+    def update_semester(self):
+        """
+        Update the semester field with calculated current semester.
+        Call this method to auto-update semester based on current date.
+        """
+        self.semester = self.calculate_current_semester()
+        self.save(update_fields=['semester'])
+
     def save(self, *args, **kwargs):
-    # Hash password only if it’s not already hashed
+        # Auto-calculate semester if not set or if you want it always updated
+        if not self.semester:
+            self.semester = self.calculate_current_semester()
+        
+        # Hash password only if it's not already hashed
         if not self.password.startswith('pbkdf2_sha256$'):
             self.password = make_password(self.password)
+        
         super().save(*args, **kwargs)
     
     def get_semester_courses(self, semester):
-        # Only approved (enrolled or completed) courses are considered
         return self.enrollments.filter(semester=semester, status__in=['ENR', 'CMP'])
 
     def calculate_semester_metrics(self, semester):
         """
         Calculate semester metrics (SGPA, RCR, ECR, STCR) from approved enrollments only.
-        Pass/Fail courses:
-        - Count in ECR if passed
-        - Do NOT count in RCR or STCR (no impact on SGPA)
         """
-        # Only approved (ENR/CMP) enrollments are included
         enrollments = self.enrollments.filter(semester=semester, status__in=['ENR', 'CMP'])
         rcr, ecr, stcr = 0, 0, 0
 
@@ -124,11 +169,9 @@ class Student(models.Model):
             credits = enr.course.credits or 0
 
             if enr.is_pass_fail:
-                # Pass/Fail: earned if passed, never counted in RCR/STCR
                 if (enr.outcome or '').upper() == "PAS":
                     ecr += credits
             else:
-                # Graded: registered credits include approved enrollments
                 rcr += credits
                 points = GRADE_POINTS.get(enr.grade, 0)
                 stcr += points * credits
@@ -141,32 +184,24 @@ class Student(models.Model):
     def calculate_cumulative_metrics(self):
         """
         Calculate cumulative metrics (CGPA, TRCR, TECR, TSTCR) from approved enrollments only.
-        Pass/Fail courses:
-        - Count in TECR if passed
-        - Do NOT count in TRCR or TSTCR (no impact on CGPA)
-        Handles retakes: only the latest passing attempt counts if an earlier attempt was failed.
         """
-        # Only approved (ENR/CMP) enrollments across all semesters
         enrollments = self.enrollments.filter(status__in=['ENR', 'CMP']).order_by('semester', 'id')
         trcr, tecr, tstcr = 0, 0, 0
-        latest_course = {}  # course_code -> dict(grade_points, credits, outcome)
+        latest_course = {}
 
         for enr in enrollments:
             course_code = enr.course.code
             credits = enr.course.credits or 0
 
-            # Pass/Fail handling
             if enr.is_pass_fail:
                 if (enr.outcome or '').upper() == "PAS":
                     tecr += credits
                 continue
 
-            # Graded handling with retakes
             grade_points = GRADE_POINTS.get(enr.grade, 0)
             prev = latest_course.get(course_code)
 
             if prev is None:
-                # First seen attempt (by semester order)
                 latest_course[course_code] = {
                     'grade_points': grade_points,
                     'credits': credits,
@@ -177,11 +212,8 @@ class Student(models.Model):
                     tecr += credits
                 tstcr += grade_points * credits
             else:
-                # Only upgrade if previously failed (0 pts) and now earned points (>0)
                 if prev['grade_points'] == 0 and grade_points > 0:
-                    # Remove previous failed attempt contribution (TRCR counted credits, TSTCR was zero)
                     trcr -= prev['credits']
-                    # Add new (passing) attempt
                     latest_course[course_code] = {
                         'grade_points': grade_points,
                         'credits': credits,
@@ -191,14 +223,9 @@ class Student(models.Model):
                     if (enr.outcome or '').upper() == "PAS":
                         tecr += credits
                     tstcr += grade_points * credits
-                else:
-                    # Keep earlier attempt if it was already passing or new attempt not better
-                    continue
 
         cgpa = round(tstcr / trcr, 2) if trcr else 0
         return {"TRCR": trcr, "TECR": tecr, "TSTCR": tstcr, "CGPA": cgpa}
-
-
 
 
 class Admins(models.Model):
