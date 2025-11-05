@@ -1,0 +1,126 @@
+{% load static %}
+{% load dict_extras %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sootrank | Bulk Pre-Registration</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        :root {
+            --color-primary: #34495e;
+            --color-accent: #3498db;
+            --color-background: #ecf0f1;
+            --color-surface: #ffffff;
+            --color-text-dark: #2c3e50;
+            --color-text-muted: #7f8c8d;
+        }
+        body { background-color: var(--color-background); font-family: 'Segoe UI', Roboto, Arial, sans-serif; }
+        .navbar-dark { background-color: var(--color-primary) !important; }
+        .card { background-color: var(--color-surface); border: none; box-shadow: 0 2px 10px rgba(0,0,0,0.08); border-radius: 12px; }
+        textarea { font-family: monospace; }
+        .btn-primary { background-color: var(--color-accent); border: none; }
+        .btn-primary:hover { background-color: #2980b9; }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark shadow-sm">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="{% url 'custom_admin_home' %}">
+                <i class="fa-solid fa-graduation-cap me-2"></i> Sootrank Admin
+            </a>
+        </div>
+    </nav>
+
+    <div class="container my-5">
+        <div class="card p-4 p-md-5">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h3 class="text-primary fw-bold">📘 Bulk Pre-Registration</h3>
+                <a href="{% url 'custom_admin_home' %}" class="btn btn-outline-secondary">
+                    <i class="fa-solid fa-arrow-left"></i> Back
+                </a>
+            </div>
+
+            {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show mt-2" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            {% endfor %}
+
+            <form method="post" enctype="multipart/form-data" class="mt-4">
+                {% csrf_token %}
+                <div class="row g-4 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Upload CSV/Excel File</label>
+                        <input type="file" name="file" accept=".csv,.xlsx,.xls" class="form-control border-primary">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Enrollment Type</label>
+                        <select name="enroll_mode" class="form-select border-success">
+                            <option value="PND">Pre-Registration (PND)</option>
+                            <option value="ENR">Direct Enrollment (ENR)</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <button type="submit" name="preview" class="btn btn-outline-primary w-100 btn-lg">
+                            <i class="fa-solid fa-eye me-1"></i> Preview
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <label class="form-label fw-semibold">Or Paste CSV Data Here</label>
+                    <textarea name="csv_text" rows="8" class="form-control border-secondary-subtle rounded-3"
+                        placeholder="roll_no,slot_A,slot_B,slot_C,slot_D,slot_E,slot_F,slot_G,slot_H,slot_FS
+b24001,EE101,,MA102,,,PH101,,,
+b24002,CS101,MA102,,,,,,"></textarea>
+                </div>
+
+                <div class="text-center mt-4">
+                    <button type="submit" class="btn btn-success btn-lg px-5 shadow-sm">
+                        <i class="fa-solid fa-upload me-2"></i> Submit Bulk Pre-Registration
+                    </button>
+                </div>
+            </form>
+
+            {% if preview_data %}
+            <hr class="my-5">
+            <h5 class="fw-semibold mb-3"><i class="fa-solid fa-table-list me-2"></i>Preview</h5>
+            <div class="table-responsive">
+                <table class="table table-bordered table-striped align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            {% for col in columns %}
+                            <th>{{ col }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in preview_data %}
+                        <tr>
+                            {% for col in columns %}
+                            <td>{{ row|get_item:col }}</td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="alert alert-info mt-3">
+                Review and click <b>Submit Bulk Pre-Registration</b> to finalize in
+                <b>{{ enroll_mode|default:"PND" }}</b> mode.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

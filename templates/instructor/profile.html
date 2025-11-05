@@ -1,186 +1,134 @@
 {% load static %}
-
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8" />
-    <title>Faculty Profile | Sootrank</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
-    <style>
-        body {
-            background: #f4f6fb;
-            min-height: 100vh;
-        }
-
-        .brand-text {
-            color: #2469f0;
-            font-weight: 700;
-            letter-spacing: .5px;
-        }
-
-        .profile-card {
-            border: 0;
-            border-radius: 16px;
-        }
-
-        .profile-hero {
-            background: linear-gradient(135deg, rgba(36, 105, 240, .08), rgba(36, 105, 240, .02));
-            border-top-left-radius: 16px;
-            border-top-right-radius: 16px;
-            padding: 24px 24px 64px;
-        }
-
-        .avatar-wrap {
-            margin-top: -48px;
-        }
-
-        .avatar {
-            width: 112px;
-            height: 112px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 4px solid #fff;
-            box-shadow: 0 6px 18px rgba(0, 0, 0, .08);
-            background: #fff;
-        }
-
-        .avatar-fallback {
-            width: 112px;
-            height: 112px;
-            border-radius: 50%;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 40px;
-            font-weight: 700;
-            color: #2469f0;
-            background: #e9f0ff;
-            border: 4px solid #fff;
-            box-shadow: 0 6px 18px rgba(0, 0, 0, .08);
-        }
-
-        .info-label {
-            color: #6c757d;
-            font-size: 0.875rem;
-        }
-
-        .info-value {
-            font-weight: 600;
-            color: #1f2a37;
-        }
-
-        .list-icon {
-            color: #2469f0;
-        }
-
-        .card-section {
-            padding: 24px;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>{{ faculty.first_name }} {{ faculty.last_name }} | Faculty Profile - Sootrank</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    body { background:#f4f6fb; font-family: Inter,system-ui,sans-serif; }
+    .brand-text { color:#2469f0; font-weight:700; }
+    .profile-card { border:0; border-radius:16px; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,.05); }
+    .profile-header { background:linear-gradient(135deg,#2469f0,#1a52d1); color:#fff; padding:2rem; }
+    .profile-avatar { width:120px; height:120px; border-radius:50%; border:5px solid rgba(255,255,255,0.3); object-fit:cover; }
+    .avatar-fallback { width:120px;height:120px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:2rem;background:#fff;color:#2469f0; }
+    .btn-edit { background:rgba(255,255,255,.2); border:1px solid rgba(255,255,255,.3); color:white; border-radius:12px; padding:.5rem 1rem; font-weight:600; }
+    .btn-edit:hover { background:rgba(255,255,255,.3); }
+    .stat-card { background:white; border:1px solid #e2e8f0; border-radius:12px; text-align:center; padding:1.25rem; box-shadow:0 2px 6px rgba(0,0,0,.03); }
+    .stat-value { font-size:1.8rem; font-weight:700; color:#2469f0; }
+    .stat-label { color:#64748b; font-size:.9rem; }
+    .section-title { font-weight:700; font-size:1.2rem; color:#1f2937; margin-bottom:1rem; display:flex; align-items:center; gap:.5rem; }
+    .course-table th { background:#f1f5fb; }
+    .card-section { padding:1.75rem; }
+    .meta-small { opacity:.85; font-size:.95rem; }
+  </style>
 </head>
 
 <body>
-    <!-- Navbar -->
-    <nav class="navbar navbar-light bg-white shadow-sm">
-        <div class="container d-flex justify-content-start">
-            <a class="navbar-brand d-flex align-items-center" href="{% url 'faculty_dashboard' %}">
-                <img src="{% static 'images/sootrank_logo.jpg' %}" alt="Sootrank" width="36" height="36" class="me-2">
-                <span class="fs-4 brand-text">Sootrank</span>
+  <!-- Navbar -->
+  <nav class="navbar navbar-light bg-white shadow-sm">
+    <div class="container">
+      <a class="navbar-brand d-flex align-items-center" href="{% url 'faculty_dashboard' %}">
+        <img src="{% static 'images/sootrank_logo.jpg' %}" width="36" height="36" class="me-2">
+        <span class="brand-text fs-4">Sootrank</span>
+      </a>
+    </div>
+  </nav>
+
+  <main class="container py-5">
+    <div class="card profile-card mb-4">
+      <!-- Profile Header -->
+      <div class="profile-header d-flex flex-column flex-md-row align-items-center">
+        {% if faculty.profile_image %}
+          <img src="{{ faculty.profile_image.url }}" class="profile-avatar me-md-4 mb-3 mb-md-0" alt="Profile">
+        {% else %}
+          <div class="avatar-fallback me-md-4 mb-3 mb-md-0">
+            {{ faculty.first_name|slice:":1" }}{{ faculty.last_name|default_if_none:""|slice:":1" }}
+          </div>
+        {% endif %}
+        <div class="flex-grow-1">
+          <h2 class="fw-bold mb-1">{{ faculty.first_name }} {{ faculty.last_name|default_if_none:"" }}</h2>
+          <div class="meta-small">{{ faculty.designation }} | {{ faculty.department }}</div>
+          <div class="meta-small">Email: {{ faculty.email_id }}</div>
+          {% if faculty.mobile_no %}
+          <div class="meta-small">Mobile: {{ faculty.mobile_no }}</div>
+          {% endif %}
+          <div class="mt-3">
+            <a href="{% url 'faculty_edit_profile' %}" class="btn btn-edit me-2">
+              <i class="bi bi-pencil-square"></i> Edit Profile
             </a>
+            <a href="{% url 'faculty_dashboard' %}" class="btn btn-light text-primary border">
+              <i class="bi bi-speedometer2"></i> Dashboard
+            </a>
+          </div>
         </div>
-    </nav>
+      </div>
 
-    <main class="container py-4 py-md-5">
-        <div class="row justify-content-center">
-            <div class="col-12 col-lg-10">
-                <div class="card profile-card shadow-sm">
-
-                    <!-- Header / Hero -->
-                    <div class="profile-hero">
-                        <div class="d-flex align-items-center justify-content-between">
-                            <div>
-                                <div class="badge text-bg-primary-subtle text-primary">Faculty Profile</div>
-                                <h1 class="h4 mt-2 mb-0 text-primary fw-semibold">
-                                    {{ faculty.first_name }}  {{ faculty.last_name|default_if_none:"" }}
-                                </h1>
-                                <div class="text-secondary">
-                                    {{ faculty.department }}
-                                </div>
-                            </div>
-                            <div class="d-flex gap-2">
-                                <a href="{%url 'faculty_edit_profile' %}" class="btn btn-primary">Edit Profile</a>
-                                <a href="{% url 'faculty_dashboard' %}" class="btn btn-outline-secondary">Dashboard</a>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Avatar + meta -->
-                    <div class="card-section">
-                        <div class="d-flex align-items-center avatar-wrap">
-                            {% if faculty.profile_image %}
-                            <img class="avatar me-3" src="{{ faculty.profile_image.url }}" alt="Profile image">
-                            {% else %}
-                            <div class="avatar-fallback me-3">
-                                {{ faculty.first_name|slice:":1" }} {{ faculty.last_name|default_if_none:"" |slice:":1" }}
-                            </div>
-                            {% endif %}
-                            <div>
-                                <div class="info-value">{{ faculty.first_name }}  {{ faculty.last_name|default_if_none:"" }}</div>
-                                <div class="text-secondary">Department: {{ faculty.department }}</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <hr class="m-0">
-
-                    <!-- Details grid -->
-                    <div class="card-section">
-                        <div class="row g-4">
-                            <div class="col-12 col-md-6">
-                                <div class="d-flex align-items-start">
-                                    <span class="list-icon me-3 fs-5">📧</span>
-                                    <div>
-                                        <div class="info-label">Email</div>
-                                        <div class="info-value">{{ faculty.email_id }}</div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="col-12 col-md-6">
-                                <div class="d-flex align-items-start">
-                                    <span class="list-icon me-3 fs-5">📱</span>
-                                    <div>
-                                        <div class="info-label">Mobile</div>
-                                        <div class="info-value">
-                                            {% if faculty.mobile_no %}
-                                            {{ faculty.mobile_no }}
-                                            {% else %}
-                                            <span class="text-muted">Not provided</span>
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <!-- More faculty-specific fields can go here -->
-                        </div>
-                    </div>
-
-                    <hr class="m-0">
-
-                    <!-- Quick actions -->
-                    <div class="card-section d-flex flex-wrap gap-2">
-                        <a class="btn btn-outline-primary" href="mailto:{{ faculty.email_id }}">Email</a>
-                        <a class="btn btn-outline-dark" href="#">Security</a>
-                    </div>
-                </div>
-
+      <!-- Stats Section -->
+      <div class="card-section">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="stat-card">
+              <div class="stat-value">{{ total_courses }}</div>
+              <div class="stat-label">Courses Teaching</div>
             </div>
+          </div>
+          <div class="col-md-6">
+            <div class="stat-card">
+              <div class="stat-value">{{ students_enrolled }}</div>
+              <div class="stat-label">Students Enrolled</div>
+            </div>
+          </div>
         </div>
-    </main>
+      </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+      <!-- Courses List -->
+      <div class="card-section border-top">
+        <div class="section-title">
+          <i class="bi bi-journal-bookmark-fill text-primary"></i> Courses Teaching
+        </div>
+        {% if teaching_courses %}
+        <div class="table-responsive">
+          <table class="table table-bordered table-sm align-middle course-table">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Course Name</th>
+                <th>Credits</th>
+                <th>Slot</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for course in teaching_courses %}
+              <tr>
+                <td class="fw-semibold">{{ course.code }}</td>
+                <td>{{ course.name }}</td>
+                <td>{{ course.credits }}</td>
+                <td>{{ course.slot }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="alert alert-light border">No courses assigned yet.</div>
+        {% endif %}
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="card-section border-top d-flex flex-wrap gap-2">
+        <a href="mailto:{{ faculty.email_id }}" class="btn btn-outline-primary">
+          <i class="bi bi-envelope-fill me-1"></i> Email
+        </a>
+        <a href="#" class="btn btn-outline-secondary">
+          <i class="bi bi-shield-lock me-1"></i> Security Settings
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
-
 </html>

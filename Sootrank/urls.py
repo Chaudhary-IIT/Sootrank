@@ -110,6 +110,27 @@ urlpatterns = [
     #-------------(View Results - Instructor)
     path('instructor/<int:faculty_id>/courses/', views.faculty_view_courses_for_grades, name='faculty_view_courses_for_grades'),
     path('instructor/<int:faculty_id>/courses/<str:course_code>/results/', views.faculty_view_course_grades, name='view_results_courses'),
+    path('custom-admin/bulk-preregistration/', views.bulk_preregistration, name='bulk_preregistration'),
+    #optional things
+    path('students_dashboard/timetable/', views.student_timetable, name='timetable'),
+    path("students_dashboard/attendance/", views.student_attendance, name="student_attendance"),
+    path("faculty_dashboard/courses-list/", views.faculty_course_list, name="faculty_course_list"),
+    path("faculty_dashboard/timetable/manage/<int:course_id>/", views.faculty_timetable_manage, name="faculty_timetable_manage"),
+    path("faculty_dashboard/attendance/manage/<int:course_id>/", views.faculty_attendance, name="faculty_attendance"),
+    path("student/fees/", views.student_fees, name="student_fees"),
+    #---demo----
+    path("fees/pay/<int:fee_id>/", views.mock_payment, name="mock_payment"),
+    path("fees/receipt/<int:fee_id>/", views.download_fee_receipt, name="download_fee_receipt"),
+    #---demo----    
+    path("fees/pay/<int:fee_id>/", views.initiate_fee_payment, name="initiate_fee_payment"),
+    path("fees/payment/success/", views.payment_success, name="payment_success"),  # frontend POST verification
+    path("razorpay/webhook/", views.razorpay_webhook, name="razorpay_webhook"),    # optional webhook
+    path("fees/receipt/<int:fee_id>/pdf/", views.fee_receipt_pdf, name="fee_receipt_pdf"),
+    path("custom-admin/fees/", views.admin_fee_dashboard, name="admin_fee_dashboard"),
+    path("custom-admin/fees/add/", views.admin_fee_add, name="admin_fee_add"),
+    path("custom-admin/fees/update/<int:fee_id>/", views.admin_fee_update, name="admin_fee_update"),
+    path("custom-admin/fees/upload_csv/", views.admin_fee_upload_csv, name="admin_fee_upload_csv"),
+
 ]
 
 

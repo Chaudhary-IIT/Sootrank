@@ -1,6 +1,8 @@
 from django.db import models
 from django.contrib.auth.hashers import make_password
 from datetime import datetime
+from django.utils import timezone
+
 
 GRADE_POINTS = {
     "A": 10,
@@ -368,3 +370,77 @@ class AssessmentScore(models.Model):
 
     class Meta:
         unique_together = ("student", "course", "component")
+
+
+class Attendance(models.Model):
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="attendance_records")
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="attendance_records")
+    total_classes = models.PositiveIntegerField(default=0)
+    attended_classes = models.PositiveIntegerField(default=0)
+
+    @property
+    def attendance_percent(self):
+        if self.total_classes == 0:
+            return 0
+        return round((self.attended_classes / self.total_classes) * 100, 1)
+
+    class Meta:
+        unique_together = ("student", "course")
+
+    def __str__(self):
+        return f"{self.student.roll_no} - {self.course.code}: {self.attendance_percent}%"
+
+
+class Timetable(models.Model):
+    DAYS = [
+        ("Monday", "Monday"),
+        ("Tuesday", "Tuesday"),
+        ("Wednesday", "Wednesday"),
+        ("Thursday", "Thursday"),
+        ("Friday", "Friday"),
+        ("Saturday", "Saturday"),
+        ("Sunday", "Sunday"),
+    ]
+
+    course = models.ForeignKey("Course", on_delete=models.CASCADE, related_name="timetables")
+    faculty = models.ForeignKey("Faculty", on_delete=models.SET_NULL, null=True, blank=True, related_name="timetables")
+    day = models.CharField(max_length=10, choices=DAYS)
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    location = models.CharField(max_length=100, blank=True, null=True)
+    remarks = models.CharField(max_length=100, blank=True, null=True)
+
+    class Meta:
+        ordering = ["day", "start_time"]
+        unique_together = ("course", "day", "start_time", "end_time")
+
+    def __str__(self):
+        return f"{self.course.code} | {self.day} {self.start_time.strftime('%H:%M')}-{self.end_time.strftime('%H:%M')}"
+
+
+class FeeRecord(models.Model):
+    STATUS_CHOICES = [
+        ("Pending", "Pending"),
+        ("Paid", "Paid"),
+        ("Failed", "Failed"),
+    ]
+
+    student = models.ForeignKey("Student", on_delete=models.CASCADE, related_name="fees")
+    semester = models.IntegerField()
+    amount_due = models.DecimalField(max_digits=10, decimal_places=2)
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="Pending")
+
+    razorpay_order_id = models.CharField(max_length=255, blank=True, null=True)
+    razorpay_payment_id = models.CharField(max_length=255, blank=True, null=True)
+    razorpay_signature = models.CharField(max_length=255, blank=True, null=True)
+
+    payment_time = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.student.roll_no} | Sem {self.semester} | {self.status}"
+
+    def receipt_number(self):
+        # Simple receipt id — you can change format
+        return f"SR-{self.pk:06d}"

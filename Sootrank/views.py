@@ -1,25 +1,31 @@
 from collections import defaultdict
-from io import TextIOWrapper
+from io import BytesIO, TextIOWrapper
 import json
+import io
+import os
+import razorpay
 from django.conf import settings
+from django.core.files.storage import FileSystemStorage
 from django.contrib import messages
+from django.views.decorators.csrf import csrf_exempt
 from django.db import IntegrityError, transaction
 from django.db.models import Prefetch, Sum
 from django.utils.text import slugify
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, HttpResponseForbidden,JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from openpyxl import Workbook
-from Registration.models import Branch, Category, Course, CourseBranch, Department, ProgramRequirement, Student, Faculty, Admins, StudentCourse, AssessmentComponent,AssessmentScore
+from Registration.models import Branch, Category, Course, CourseBranch, Department, ProgramRequirement, Student, Faculty, Admins, StudentCourse, AssessmentComponent,AssessmentScore, Attendance, Timetable,FeeRecord
 from django.contrib.auth import authenticate , login as auth_login
 from django.contrib.auth.hashers import make_password,check_password
-from django.db.models import Count, Q, OuterRef, Exists 
+from django.db.models import Count, Q, OuterRef, Exists ,Max
 from django.views.decorators.http import require_POST,require_http_methods
 from django.template.loader import render_to_string
 from weasyprint import HTML, CSS
 from django.contrib.auth.decorators import login_required
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
+from django.conf import settings
 from urllib.parse import urlencode
 from django.core.files.storage import default_storage
 import re
@@ -93,6 +99,27 @@ def _compute_semester_from_roll_and_today(roll_no: str, today=None) -> int:
     sem = years_delta * 2 + term_index
     return max(1, sem)
 
+CATEGORY_PRIORITY = {
+    "IC": 1,
+    "DC": 2,
+    "DE": 3,
+    "HSS": 4,
+    "IKS": 5,
+    "FE": 6,
+}
+
+# Slot mapping for timetable
+SLOT_SCHEDULE = {
+    "A": [("Monday", "8–8:50 AM"), ("Tuesday", "11–11:50 AM"), ("Thursday", "9–9:50 AM")],
+    "B": [("Monday", "9–9:50 AM"), ("Tuesday", "12–12:50 PM"), ("Thursday", "10–10:50 AM")],
+    "C": [("Monday", "10–10:50 AM"), ("Thursday", "11–11:50 AM"), ("Wednesday", "8–8:50 AM")],
+    "D": [("Monday", "11–11:50 AM"), ("Wednesday", "9–9:50 AM"), ("Thursday", "12–12:50 PM")],
+    "E": [("Monday", "12–12:50 PM"), ("Wednesday", "11–11:50 AM"), ("Friday", "9–9:50 AM")],
+    "F": [("Tuesday", "8–8:50 AM"), ("Wednesday", "10–10:50 AM"), ("Friday", "11–11:50 AM")],
+    "G": [("Tuesday", "9–9:50 AM"), ("Thursday", "8–8:50 AM"), ("Friday", "10–10:50 AM")],
+    "H": [("Tuesday", "10–10:50 AM"), ("Wednesday", "12–12:50 PM"), ("Friday", "8–8:50 AM")],
+    "FS": [("Friday", "2–5 PM")],
+}
 
 # settings flag name
 TEMP_PREREG_OPEN_FLAG = "PREREG_TEMP_OPEN"
@@ -244,17 +271,29 @@ def students_dashboard(request):
     if not roll_no:
         # not logged in or session expired
         return redirect("/")
+
     student = get_object_or_404(Student, roll_no=roll_no)
 
+    # ✅ Always calculate the current semester dynamically
+    computed_semester = student.calculate_current_semester()
+
     flash = request.session.pop("flash_ctx", {})  # optional, disappears after first load
-    semesters = StudentCourse.objects.filter(student=student).order_by('semester').values_list('semester', flat=True).distinct()
+    semesters = (
+        StudentCourse.objects.filter(student=student)
+        .order_by('semester')
+        .values_list('semester', flat=True)
+        .distinct()
+    )
+
     context = {
         "student": student,
+        "computed_semester": computed_semester,  # ✅ pass live semester
         "full_name": flash.get("full_name"),
         "role_label": flash.get("role_label", "Student"),
         "semesters": semesters,
     }
     return render(request, "students_dashboard.html", context)
+
 
 def faculty_dashboard(request):
     email_id = request.session.get("email_id")
@@ -279,7 +318,7 @@ def pre_registration(request):
 
     student = get_object_or_404(Student, roll_no=roll_no)
     branch = student.branch
-    current_sem = _compute_semester_from_roll_and_today(student.roll_no)
+    current_sem = student.calculate_current_semester()
     window_open = _deadline_open()
 
     if request.method == "POST":
@@ -451,7 +490,7 @@ def check_status(request):
         return redirect(f"{login_url}?next={request.path}")
 
     student = get_object_or_404(Student, roll_no=roll_no)
-    current_sem = _compute_semester_from_roll_and_today(student.roll_no)
+    current_sem = student.calculate_current_semester()
 
     enrollments = (
         StudentCourse.objects
@@ -546,21 +585,128 @@ def registered_courses(request):
 # def course_request(request):
 #     return render(request, 'instructor/course_request.html')
 
+
 def student_profile(request):
     roll_no = request.session.get("roll_no")
     if not roll_no:
         login_url = getattr(settings, "LOGIN_URL", "/login/")
         return redirect(f"{login_url}?next={request.path}")
+
     student = get_object_or_404(Student, roll_no=roll_no)
-    return render(request, "student_profile.html", {"student": student})
+    computed_semester = student.calculate_current_semester()
+
+    cumulative = student.calculate_cumulative_metrics()
+    cgpa = cumulative.get("CGPA", 0)
+    total_earned = cumulative.get("TECR", 0)
+
+    requirements = ProgramRequirement.objects.filter(branch=student.branch)
+    total_required = sum(req.required_credits or 0 for req in requirements)
+
+    # Base queryset: only CMP & PAS
+    completed_qs = (
+        StudentCourse.objects.filter(student=student, status="CMP", outcome="PAS")
+        .select_related("course")
+        .prefetch_related(
+            Prefetch(
+                "course__coursebranch_set",
+                queryset=CourseBranch.objects.filter(branch=student.branch).prefetch_related("categories"),
+                to_attr="cb_for_branch"
+            )
+        )
+    )
+
+    # Step 1: Determine each course’s primary (highest priority) category
+    course_to_category = {}
+    for sc in completed_qs:
+        highest_cat = None
+        highest_rank = float('inf')
+        for cb in getattr(sc.course, "cb_for_branch", []):
+            for cat in cb.categories.all():
+                rank = CATEGORY_PRIORITY.get(cat.code.upper(), 999)
+                if rank < highest_rank:
+                    highest_rank = rank
+                    highest_cat = cat.code.upper()
+        if highest_cat:
+            course_to_category[sc.course.code] = {
+                "category": highest_cat,
+                "course": sc.course,
+                "semester": sc.semester,
+            }
+
+    # Step 2: Group courses by their final assigned category
+    completed_by_category = {}
+    for data in course_to_category.values():
+        cat = data["category"]
+        course = data["course"]
+        if cat not in completed_by_category:
+            completed_by_category[cat] = []
+        completed_by_category[cat].append({
+            "code": course.code,
+            "name": course.name,
+            "credits": course.credits,
+            "slot": course.slot,
+            "semester": data["semester"],
+        })
+
+    # Step 3: Compute category-wise credit progress
+    categories_progress = []
+    for req in requirements:
+        cat_code = req.category
+        cat_courses = completed_by_category.get(cat_code, [])
+        completed_sum = sum(c["credits"] for c in cat_courses)
+        remaining = max(req.required_credits - completed_sum, 0)
+        percent = (completed_sum / req.required_credits * 100) if req.required_credits else 0
+        categories_progress.append({
+            "category": cat_code,
+            "required": req.required_credits,
+            "completed": completed_sum,
+            "remaining": remaining,
+            "percent": round(min(percent, 100), 1),
+        })
+
+    # Step 4: Totals
+    remaining_total = max(total_required - total_earned, 0)
+    overall_percent = round((total_earned / total_required) * 100, 1) if total_required else 0
+    overall_percent = min(overall_percent, 100.0)
+
+    context = {
+        "student": student,
+        "computed_semester": computed_semester,
+        "cgpa": cgpa,
+        "total_earned": total_earned,
+        "total_required": total_required,
+        "remaining": remaining_total,
+        "overall_percent": overall_percent,
+        "categories_progress": categories_progress,
+        "completed_by_category": completed_by_category,
+    }
+    return render(request, "student_profile.html", context)
+
 
 def faculty_profile(request):
     email_id = request.session.get("email_id")
     if not email_id:
         login_url = getattr(settings, "LOGIN_URL", "/login/")
         return redirect(f"{login_url}?next={request.path}")
+
     faculty = get_object_or_404(Faculty, email_id=email_id)
-    return render(request, "instructor/profile.html", {"faculty": faculty})
+
+    # All courses the faculty is teaching (linked via M2M)
+    teaching_courses = Course.objects.filter(faculties=faculty).distinct()
+    total_courses = teaching_courses.count()
+
+    # Total unique students enrolled in these courses
+    students_enrolled = StudentCourse.objects.filter(
+        course__in=teaching_courses, status='ENR'
+    ).values('student').distinct().count()
+
+    context = {
+        "faculty": faculty,
+        "total_courses": total_courses,
+        "students_enrolled": students_enrolled,
+        "teaching_courses": teaching_courses,
+    }
+    return render(request, "instructor/profile.html", context)
 
 
 def student_edit_profile(request):
@@ -568,18 +714,35 @@ def student_edit_profile(request):
     if not roll_no:
         login_url = getattr(settings, "LOGIN_URL", "/login/")
         return redirect(f"{login_url}?next={request.path}")
+
     student = get_object_or_404(Student, roll_no=roll_no)
+
     if request.method == "POST":
-        form = StudentEditForm(request.POST, request.FILES, instance=student)
-        if form.is_valid():
-            form.save()
-            return redirect(reverse("student_profile"))
-    else:
-        form = StudentEditForm(instance=student)
-    context = {
-        "form": form,
-        "student": student,
-    }
+        # Handle mobile number safely
+        mobile_no = request.POST.get("mobile_no", "").strip()
+        if mobile_no:
+            try:
+                student.mobile_no = int(mobile_no)
+            except ValueError:
+                # Ignore if not numeric (user error)
+                pass
+        else:
+            student.mobile_no = None  # Allow clearing mobile number
+
+        # Handle image upload
+        if "profile_image" in request.FILES:
+            student.profile_image = request.FILES["profile_image"]
+
+        # Handle image removal
+        elif "remove_image" in request.POST:
+            if student.profile_image:
+                student.profile_image.delete(save=False)
+            student.profile_image = None
+
+        student.save()
+        return redirect(reverse("student_profile"))
+
+    context = {"student": student}
     return render(request, "student_edit_profile.html", context)
 
 
@@ -3762,12 +3925,12 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+from reportlab.pdfgen import canvas
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
-from Registration.models import (
-    Student, Faculty, Course, Branch, Department, 
-    StudentCourse, Category, ProgramRequirement, 
-    CourseBranch, AssessmentComponent, AssessmentScore
-)
 
 
 def database_management_view(request):
@@ -4525,3 +4688,754 @@ def faculty_view_course_grades(request, faculty_id, course_code):
         'course': course,
         'results': results,
     })
+
+
+
+def bulk_preregistration(request):
+    context = {
+        "columns": ["roll_no"] + [f"slot_{s}" for s in SLOTS],
+        "preview_data": None,
+    }
+
+    if request.method == "POST":
+        try:
+            file = request.FILES.get("file")
+            text_data = request.POST.get("csv_text", "").strip()
+            enroll_mode = request.POST.get("enroll_mode", "PND")  # Default: PND
+            parsed_data = []
+
+            # --- STEP 1: Read CSV or Excel ---
+            if file:
+                if file.name.endswith(".csv"):
+                    df = pd.read_csv(file)
+                elif file.name.endswith((".xls", ".xlsx")):
+                    df = pd.read_excel(file)
+                else:
+                    messages.error(request, "Please upload only CSV or Excel files.")
+                    return redirect("bulk_preregistration")
+            elif text_data:
+                df = pd.read_csv(io.StringIO(text_data))
+            else:
+                messages.error(request, "Please provide a CSV/Excel file or paste data.")
+                return redirect("bulk_preregistration")
+
+            # --- STEP 2: Validate required columns ---
+            expected_cols = ["roll_no"] + [f"slot_{s}" for s in SLOTS]
+            missing_cols = [c for c in expected_cols if c not in df.columns]
+            if missing_cols:
+                messages.error(request, f"Missing columns: {', '.join(missing_cols)}")
+                return redirect("bulk_preregistration")
+
+            df = df.fillna("")  # Replace NaN with blank
+            parsed_data = df.to_dict(orient="records")
+
+            # --- STEP 3: If Preview Button Clicked ---
+            if "preview" in request.POST:
+                context["preview_data"] = parsed_data
+                context["enroll_mode"] = enroll_mode
+                messages.info(request, f"Preview loaded in {enroll_mode} mode. Review before submitting.")
+                return render(request, "admin/prereg_bulk.html", context)
+
+            # --- STEP 4: Process Data ---
+            created, skipped = 0, 0
+            current_year = datetime.now().year
+            current_month = datetime.now().month
+            semester_in_year = 1 if current_month >= 7 else 2
+
+            def compute_sem(roll):
+                try:
+                    admission_year = 2000 + int(roll[1:3])
+                    return (current_year - admission_year) * 2 + semester_in_year
+                except:
+                    return 1
+
+            with transaction.atomic():
+                for row in parsed_data:
+                    roll_no = str(row.get("roll_no")).strip().lower()
+                    student = Student.objects.filter(roll_no=roll_no).first()
+                    if not student:
+                        skipped += 1
+                        continue
+
+                    semester = compute_sem(roll_no)
+
+                    for slot in SLOTS:
+                        code = str(row.get(f"slot_{slot}", "")).strip().upper()
+                        if not code:
+                            continue
+
+                        course = Course.objects.filter(code__iexact=code, slot=slot).first()
+                        if not course:
+                            skipped += 1
+                            continue
+
+                        obj, created_now = StudentCourse.objects.get_or_create(
+                            student=student,
+                            course=course,
+                            semester=semester,
+                            defaults={"status": enroll_mode, "is_pass_fail": False},
+                        )
+                        if created_now:
+                            created += 1
+
+            messages.success(
+                request,
+                f"✅ Bulk preregistration complete ({enroll_mode} mode): {created} added, {skipped} skipped."
+            )
+            return redirect("bulk_preregistration")
+
+        except Exception as e:
+            messages.error(request, f"Error: {e}")
+            return redirect("bulk_preregistration")
+
+    return render(request, "admin/prereg_bulk.html", context)
+
+
+# optional things
+
+def parse_time_range(time_str):
+    """
+    Convert strings like '8–8:50 AM' or '2–5 PM' to (start_time, end_time) objects.
+    """
+    try:
+        start_str, end_str = time_str.replace("–", "-").split("-")
+        period = "AM" if "AM" in end_str else "PM"
+        start_str = start_str.strip() + " " + period
+        end_str = end_str.strip()
+        if "AM" not in end_str and "PM" not in end_str:
+            end_str += " " + period
+        start_time = datetime.strptime(start_str.strip(), "%I:%M %p" if ":" in start_str else "%I %p").time()
+        end_time = datetime.strptime(end_str.strip(), "%I:%M %p" if ":" in end_str else "%I %p").time()
+        return start_time, end_time
+    except Exception as e:
+        print("❌ Time parsing error:", e, "for string:", time_str)
+        return None, None
+
+
+def student_timetable(request):
+    roll_no = request.session.get("roll_no")
+    if not roll_no:
+        return redirect("login")
+
+    student = get_object_or_404(Student, roll_no=roll_no)
+
+    # 🔹 Get student's enrolled courses
+    enrolled_courses = (
+        StudentCourse.objects
+        .filter(student=student, status="ENR")
+        .select_related("course")
+    )
+
+    enrolled_course_ids = [sc.course.id for sc in enrolled_courses if sc.course]
+    if not enrolled_course_ids:
+        return render(request, "timetable.html", {
+            "timetable": {},
+            "role": "student",
+            "message": "No enrolled courses found.",
+        })
+
+    # 🔹 Auto-generate timetable entries if missing
+    with transaction.atomic():
+        for sc in enrolled_courses:
+            course = sc.course
+            slot = (course.slot or "").strip().upper()
+            if not slot or slot not in SLOT_SCHEDULE:
+                continue
+
+            existing = Timetable.objects.filter(course=course)
+            if not existing.exists():
+                for day, time_range in SLOT_SCHEDULE[slot]:
+                    start_time, end_time = parse_time_range(time_range)
+                    if start_time and end_time:
+                        Timetable.objects.create(
+                            course=course,
+                            faculty=course.faculties.first() if hasattr(course, "faculties") and course.faculties.exists() else None,
+                            day=day,
+                            start_time=start_time,
+                            end_time=end_time,
+                            location="TBD",
+                            remarks="Auto-generated by slot system"
+                        )
+
+    # 🔹 Fetch timetable after generation
+    timetable_data = (
+        Timetable.objects
+        .filter(course_id__in=enrolled_course_ids)
+        .select_related("course", "faculty")
+        .order_by("day", "start_time")
+    )
+
+    # 🔹 Organize by day for UI
+    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+    timetable_by_day = {day: [] for day in days}
+
+    for entry in timetable_data:
+        timetable_by_day[entry.day].append({
+            "course": f"{entry.course.code} – {entry.course.name}",
+            "slot": entry.course.slot or "—",
+            "faculty": f"{entry.faculty.first_name} {entry.faculty.last_name}" if entry.faculty else "N/A",
+            "time": f"{entry.start_time.strftime('%I:%M %p')} – {entry.end_time.strftime('%I:%M %p')}",
+            "location": entry.location or "—",
+            "remarks": entry.remarks or "",
+        })
+
+    # 🔹 Remove empty days to avoid blank cards
+    timetable_by_day = {k: v for k, v in timetable_by_day.items() if v}
+
+    return render(request, "timetable.html", {
+        "timetable": timetable_by_day,
+        "role": "student",
+    })
+
+
+def faculty_course_list(request):
+    email_id = request.session.get("email_id")
+    if not email_id:
+        return redirect("login")
+
+    faculty = get_object_or_404(Faculty, email_id=email_id)
+    courses = faculty.courses.all().distinct()
+
+    return render(request, "instructor/course_list.html", {"faculty": faculty, "courses": courses})
+
+
+def faculty_timetable_manage(request, course_id):
+    email_id = request.session.get("email_id")
+    if not email_id:
+        return redirect("login")
+
+    faculty = get_object_or_404(Faculty, email_id=email_id)
+    course = get_object_or_404(Course, id=course_id, faculties=faculty)
+
+    # Handle ADD / EDIT / DELETE
+    if request.method == "POST":
+        action = request.POST.get("action")
+
+        if action == "add":
+            day = request.POST.get("day")
+            start_time = request.POST.get("start_time")
+            end_time = request.POST.get("end_time")
+            location = request.POST.get("location")
+            remarks = request.POST.get("remarks")
+
+            Timetable.objects.create(
+                course=course,
+                faculty=faculty,
+                day=day,
+                start_time=start_time,
+                end_time=end_time,
+                location=location or None,
+                remarks=remarks or None,
+            )
+            messages.success(request, f"✅ Added class on {day} at {start_time}.")
+            return redirect("faculty_timetable_manage", course_id=course.id)
+
+        elif action == "edit":
+            entry_id = request.POST.get("entry_id")
+            timetable_entry = get_object_or_404(Timetable, id=entry_id, course=course)
+
+            timetable_entry.day = request.POST.get("day")
+            timetable_entry.start_time = request.POST.get("start_time")
+            timetable_entry.end_time = request.POST.get("end_time")
+            timetable_entry.location = request.POST.get("location")
+            timetable_entry.remarks = request.POST.get("remarks")
+            timetable_entry.save()
+
+            messages.success(request, f"✏️ Updated timetable entry successfully.")
+            return redirect("faculty_timetable_manage", course_id=course.id)
+
+        elif action == "delete":
+            entry_id = request.POST.get("entry_id")
+            Timetable.objects.filter(id=entry_id, course=course).delete()
+            messages.success(request, "🗑️ Timetable entry deleted.")
+            return redirect("faculty_timetable_manage", course_id=course.id)
+
+    # GET — show timetable
+    timetable = Timetable.objects.filter(course=course).order_by("day", "start_time")
+    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+    return render(
+        request,
+        "instructor/timetable_manage.html",
+        {"course": course, "timetable": timetable, "days": days},
+    )
+
+
+def student_attendance(request):
+    roll_no = request.session.get("roll_no")
+    if not roll_no:
+        return redirect("login")
+
+    student = get_object_or_404(Student, roll_no=roll_no)
+    enrolled_courses = StudentCourse.objects.filter(student=student, status="ENR").select_related("course")
+    attendance_data = []
+
+    for enr in enrolled_courses:
+        att = Attendance.objects.filter(student=student, course=enr.course).first()
+        attendance_data.append({
+            "course": enr.course.name,
+            "code": enr.course.code,
+            "attended": att.attended_classes if att else 0,
+            "total": att.total_classes if att else 0,
+            "percent": att.attendance_percent if att else 0,
+        })
+
+    return render(request, "attendance.html", {"attendance_data": attendance_data, "student": student})
+
+
+def faculty_attendance(request, course_id):
+    email_id = request.session.get("email_id")
+    if not email_id:
+        return redirect("login")
+
+    faculty = get_object_or_404(Faculty, email_id=email_id)
+    course = get_object_or_404(Course, id=course_id, faculties=faculty)
+    enrollments = StudentCourse.objects.filter(course=course, status="ENR").select_related("student")
+
+    if request.method == "POST":
+        for enr in enrollments:
+            total = request.POST.get(f"total_{enr.student.id}", 0)
+            attended = request.POST.get(f"attended_{enr.student.id}", 0)
+            total = int(total) if total else 0
+            attended = int(attended) if attended else 0
+            obj, _ = Attendance.objects.get_or_create(student=enr.student, course=course)
+            obj.total_classes = total
+            obj.attended_classes = attended
+            obj.save()
+        messages.success(request, "Attendance updated successfully!")
+        return redirect("faculty_attendance", course_id=course.id)
+
+    data = []
+    for enr in enrollments:
+        att = Attendance.objects.filter(student=enr.student, course=course).first()
+        data.append({
+            "student": enr.student,
+            "attended": att.attended_classes if att else 0,
+            "total": att.total_classes if att else 0,
+            "percent": att.attendance_percent if att else 0,
+        })
+
+    return render(request, "instructor/attendance_manage.html", {"course": course, "data": data})
+
+razorpay_client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+
+
+
+from decimal import Decimal, ROUND_HALF_UP
+
+
+
+def student_fees(request):
+    roll_no = request.session.get("roll_no")
+    if not roll_no:
+        return redirect("login")
+
+    student = get_object_or_404(Student, roll_no=roll_no)
+    pending_fees = FeeRecord.objects.filter(student=student, status="Pending").order_by("semester")
+    paid_fees = FeeRecord.objects.filter(student=student, status="Paid").order_by("-semester")
+
+    total_due = sum([(f.amount_due - f.amount_paid) for f in pending_fees if (f.amount_due - f.amount_paid) > 0])
+    total_paid = sum([f.amount_paid for f in paid_fees])
+
+    return render(request, "student_fees.html", {
+        "student": student,
+        "due_fees": pending_fees,
+        "paid_fees": paid_fees,
+        "total_due": total_due,
+        "total_paid": total_paid,
+    })
+
+
+def mock_payment(request, fee_id):
+    """Simulate payment gateway and mark as paid."""
+    roll_no = request.session.get("roll_no")
+    if not roll_no:
+        return redirect("login")
+
+    fee = get_object_or_404(FeeRecord, id=fee_id, student__roll_no=roll_no)
+
+    # Simulate payment success
+    fee.status = "Paid"
+    fee.amount_paid = fee.amount_due
+    fee.payment_time = timezone.now()
+    fee.save()
+
+    return JsonResponse({"message": "Payment successful!", "redirect": "/fees/receipt/" + str(fee.id)})
+
+
+def download_fee_receipt(request, fee_id):
+    roll_no = request.session.get("roll_no")
+    if not roll_no:
+        return redirect("login")
+
+    student = get_object_or_404(Student, roll_no=roll_no)
+    fee = get_object_or_404(FeeRecord, id=fee_id, student=student)
+
+    # Prepare PDF
+    response = HttpResponse(content_type="application/pdf")
+    filename = f"Fee_Receipt_Sem{fee.semester}_{student.roll_no}.pdf"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    # Register Hindi-compatible font
+    font_path = os.path.join(settings.BASE_DIR, "static", "fonts", "NotoSansDevanagari-Regular.ttf")
+    if os.path.exists(font_path):
+        pdfmetrics.registerFont(TTFont("NotoSans", font_path))
+        font_name = "NotoSans"
+    else:
+        font_name = "Helvetica"
+
+    p = canvas.Canvas(response, pagesize=A4)
+    width, height = A4
+
+    # Header
+    p.setFont(font_name, 16)
+    p.drawCentredString(width / 2, height - 80, "भारतीय प्रौद्योगिकी संस्थान मंडी")
+    p.drawCentredString(width / 2, height - 100, "Indian Institute of Technology Mandi")
+    p.setFont(font_name, 13)
+    p.drawCentredString(width / 2, height - 120, "Kamand, Himachal Pradesh (175075)")
+    p.setFont(font_name, 15)
+    p.drawCentredString(width / 2, height - 150, "FEE PAYMENT RECEIPT")
+
+    # Details
+    y = height - 200
+    p.setFont("Helvetica", 12)
+    p.drawString(60, y, f"Name: {student.first_name} {student.last_name or ''}")
+    y -= 18
+    p.drawString(60, y, f"Roll No: {student.roll_no}")
+    y -= 18
+    p.drawString(60, y, f"Semester: {fee.semester}")
+    y -= 18
+    p.drawString(60, y, f"Amount Paid: ₹{fee.amount_paid}")
+    y -= 18
+    p.drawString(60, y, f"Payment Date: {fee.payment_time.strftime('%d %B %Y, %I:%M %p')}")
+
+    y -= 30
+    p.setFont("Helvetica-Oblique", 11)
+    p.drawString(60, y, "This is a system-generated receipt. No signature required.")
+
+    p.showPage()
+    p.save()
+    return response
+
+#---------------------------
+
+
+def initiate_fee_payment(request, fee_id):
+    roll_no = request.session.get("roll_no")
+    if not roll_no:
+        return redirect("login")
+    student = get_object_or_404(Student, roll_no=roll_no)
+    fee = get_object_or_404(FeeRecord, id=fee_id, student=student)
+
+    # amount to be paid (remaining)
+    remaining = (fee.amount_due - fee.amount_paid)
+    if remaining <= 0 or fee.status == "Paid":
+        return redirect("student_fees")
+
+    amount_paise = int(remaining * 100)  # Razorpay expects paise
+
+    order = razorpay_client.order.create({
+        "amount": amount_paise,
+        "currency": "INR",
+        "payment_capture": "1"
+    })
+
+    fee.razorpay_order_id = order["id"]
+    fee.save(update_fields=["razorpay_order_id"])
+
+    context = {
+        "fee": fee,
+        "student": student,
+        "razorpay_key": settings.RAZORPAY_KEY_ID,
+        "order_id": order["id"],
+        "amount": amount_paise,
+        "currency": "INR",
+    }
+    return render(request, "pay_fee.html", context)
+
+
+def payment_success(request):
+    """
+    Frontend sends razorpay_payment_id, razorpay_order_id, razorpay_signature.
+    We will verify signature and update FeeRecord.
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid method"}, status=405)
+
+    try:
+        data = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    payment_id = data.get("razorpay_payment_id")
+    order_id = data.get("razorpay_order_id")
+    signature = data.get("razorpay_signature")
+
+    if not (payment_id and order_id and signature):
+        return JsonResponse({"error": "Missing payment parameters"}, status=400)
+
+    fee = FeeRecord.objects.filter(razorpay_order_id=order_id).first()
+    if not fee:
+        return JsonResponse({"error": "Fee record not found"}, status=404)
+
+    # Verify signature
+    params = {
+        "razorpay_order_id": order_id,
+        "razorpay_payment_id": payment_id,
+        "razorpay_signature": signature,
+    }
+
+    try:
+        razorpay_client.utility.verify_payment_signature(params)
+    except razorpay.errors.SignatureVerificationError:
+        fee.status = "Failed"
+        fee.save(update_fields=["status"])
+        return JsonResponse({"error": "Signature verification failed"}, status=400)
+
+    # If verified, update record (mark fully paid for simplicity)
+    fee.razorpay_payment_id = payment_id
+    fee.razorpay_signature = signature
+    fee.status = "Paid"
+    fee.amount_paid = fee.amount_due
+    fee.payment_time = timezone.now()
+    fee.save()
+
+    return JsonResponse({"message": "Payment verified and recorded"})
+
+
+def razorpay_webhook(request):
+    """
+    Webhook endpoint (recommended to configure on Razorpay Dashboard).
+    Validate signature (Razorpay sends signature in header 'X-Razorpay-Signature').
+    This is optional because we verify on payment_success, but webhook is more robust.
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "invalid method"}, status=405)
+
+    payload = request.body
+    signature = request.META.get("HTTP_X_RAZORPAY_SIGNATURE", "")
+
+    # If you set an endpoint secret in Razorpay, verify it here:
+    try:
+        event = json.loads(payload.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"error": "invalid payload"}, status=400)
+
+    # Get payment entity if present (payment.captured event)
+    try:
+        payment_entity = event.get("payload", {}).get("payment", {}).get("entity", {})
+        order_id = payment_entity.get("order_id")
+        payment_id = payment_entity.get("id")
+    except Exception:
+        return JsonResponse({"error": "no payment entity"}, status=400)
+
+    # Find fee record and mark paid after verifying signature using SDK
+    fee = FeeRecord.objects.filter(razorpay_order_id=order_id).first()
+    if not fee:
+        return JsonResponse({"error": "fee not found"}, status=404)
+
+    try:
+        razorpay_client.utility.verify_payment_signature({
+            "razorpay_order_id": order_id,
+            "razorpay_payment_id": payment_id,
+            "razorpay_signature": signature,
+        })
+    except razorpay.errors.SignatureVerificationError:
+        fee.status = "Failed"
+        fee.save(update_fields=["status"])
+        return JsonResponse({"error": "signature failed"}, status=400)
+
+    # Mark paid
+    fee.razorpay_payment_id = payment_id
+    fee.razorpay_signature = signature
+    fee.status = "Paid"
+    fee.amount_paid = fee.amount_due
+    fee.payment_time = timezone.now()
+    fee.save()
+
+    return JsonResponse({"status": "ok"})
+
+
+
+def fee_receipt_pdf(request, fee_id):
+    """
+    Generates a simple PDF receipt for a paid FeeRecord.
+    Only student who owns the fee (or staff) can download.
+    """
+    roll_no = request.session.get("roll_no")
+    fee = get_object_or_404(FeeRecord, id=fee_id)
+
+    # Permission: either the student (session) or admin/staff (you can expand)
+    if roll_no:
+        if fee.student.roll_no != roll_no:
+            return HttpResponseForbidden("Not authorized to download this receipt.")
+    # else: you might allow staff to download by other checks (not implemented here)
+
+    if fee.status != "Paid":
+        return HttpResponse("Receipt only available for paid fees.", status=400)
+
+    # Create PDF
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+
+    margin = 20 * mm
+    x = margin
+    y = height - margin
+
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(x, y, "Sootrank — Fee Receipt")
+    c.setFont("Helvetica", 10)
+    c.drawString(x, y - 18, f"Receipt No: {fee.receipt_number()}")
+    c.drawString(x, y - 32, f"Date: {fee.payment_time.strftime('%Y-%m-%d %H:%M') if fee.payment_time else fee.created_at.strftime('%Y-%m-%d')}")
+
+    y -= 60
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(x, y, "Student Details")
+    c.setFont("Helvetica", 10)
+    c.drawString(x, y - 16, f"Name: {fee.student.first_name} {fee.student.last_name or ''}")
+    c.drawString(x, y - 32, f"Roll No: {fee.student.roll_no}")
+    c.drawString(x, y - 48, f"Branch: {fee.student.branch.name if fee.student.branch else ''}")
+
+    y -= 80
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(x, y, "Payment Details")
+    c.setFont("Helvetica", 10)
+    c.drawString(x, y - 16, f"Semester: {fee.semester}")
+    c.drawString(x, y - 32, f"Amount Paid: ₹{fee.amount_paid}")
+    c.drawString(x, y - 48, f"Payment ID: {fee.razorpay_payment_id or '—'}")
+    c.drawString(x, y - 64, f"Order ID: {fee.razorpay_order_id or '—'}")
+
+    y -= 100
+    c.setFont("Helvetica", 9)
+    c.drawString(x, y, "This is a computer-generated receipt from Sootrank. No signature required.")
+
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+
+    filename = f"receipt_{fee.receipt_number()}.pdf"
+    return HttpResponse(buffer, content_type="application/pdf", headers={
+        "Content-Disposition": f'attachment; filename="{filename}"'
+    })
+
+
+def admin_fee_dashboard(request):
+    """
+    Main page — list of all students and their fee records.
+    """
+    students = Student.objects.all().order_by("roll_no").prefetch_related("fees")
+
+    # Filter by semester if needed
+    sem_filter = request.GET.get("semester")
+    if sem_filter:
+        students = students.filter(fees__semester=sem_filter).distinct()
+
+    total_records = FeeRecord.objects.count()
+    paid_count = FeeRecord.objects.filter(status="Paid").count()
+    pending_count = FeeRecord.objects.filter(status="Pending").count()
+
+    context = {
+        "students": students,
+        "total_records": total_records,
+        "paid_count": paid_count,
+        "pending_count": pending_count,
+    }
+    return render(request, "admin/fees_manage.html", context)
+
+
+def admin_fee_add(request):
+    """
+    Add a new fee record manually.
+    """
+    if request.method == "POST":
+        roll_no = request.POST.get("roll_no")
+        semester = request.POST.get("semester")
+        amount_due = request.POST.get("amount_due")
+
+        student = Student.objects.filter(roll_no=roll_no).first()
+        if not student:
+            messages.error(request, f"Student with Roll No {roll_no} not found.")
+            return redirect("admin_fee_add")
+
+        FeeRecord.objects.create(
+            student=student,
+            semester=semester,
+            amount_due=amount_due,
+            status="Pending"
+        )
+        messages.success(request, f"Fee record added for {roll_no} (Sem {semester}).")
+        return redirect("admin_fee_dashboard")
+
+    return render(request, "admin/add_fee.html")
+
+
+def admin_fee_update(request, fee_id):
+    """
+    Edit an existing fee record — mark paid, update amount, etc.
+    """
+    fee = get_object_or_404(FeeRecord, id=fee_id)
+    if request.method == "POST":
+        fee.amount_due = request.POST.get("amount_due")
+        fee.amount_paid = request.POST.get("amount_paid")
+        fee.status = request.POST.get("status")
+        fee.semester = request.POST.get("semester")
+        fee.save()
+        messages.success(request, "Fee record updated successfully.")
+        return redirect("admin_fee_dashboard")
+
+    return render(request, "admin/update_fee.html", {"fee": fee})
+
+
+def admin_fee_upload_csv(request):
+    """
+    Upload a CSV file with columns:
+    roll_no, semester, amount_due, amount_paid, status
+    """
+    if request.method == "POST" and request.FILES.get("csv_file"):
+        csv_file = request.FILES["csv_file"]
+        if not csv_file.name.endswith(".csv"):
+            messages.error(request, "Please upload a valid CSV file.")
+            return redirect("admin_fee_upload_csv")
+
+        fs = FileSystemStorage()
+        filename = fs.save(csv_file.name, csv_file)
+        file_path = fs.path(filename)
+
+        created, updated, failed = 0, 0, 0
+        with open(file_path, mode="r", encoding="utf-8-sig") as file:
+            reader = csv.DictReader(file)
+            with transaction.atomic():
+                for row in reader:
+                    roll_no = row.get("roll_no")
+                    semester = row.get("semester")
+                    amount_due = row.get("amount_due")
+                    amount_paid = row.get("amount_paid", "0")
+                    status = row.get("status", "Pending")
+
+                    if not roll_no or not semester or not amount_due:
+                        failed += 1
+                        continue
+
+                    student = Student.objects.filter(roll_no=roll_no).first()
+                    if not student:
+                        failed += 1
+                        continue
+
+                    obj, created_now = FeeRecord.objects.update_or_create(
+                        student=student,
+                        semester=semester,
+                        defaults={
+                            "amount_due": amount_due,
+                            "amount_paid": amount_paid or 0,
+                            "status": status or "Pending",
+                        },
+                    )
+                    if created_now:
+                        created += 1
+                    else:
+                        updated += 1
+
+        messages.success(request, f"CSV processed — Added: {created}, Updated: {updated}, Skipped: {failed}")
+        return redirect("admin_fee_dashboard")
+
+    return render(request, "admin/fee_upload_csv.html")

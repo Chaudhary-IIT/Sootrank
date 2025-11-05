@@ -1,0 +1,38 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pay Now | Sootrank</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+body { background: #f8faff; font-family: 'Inter', sans-serif; text-align:center; }
+.modal-card { max-width:400px; margin:auto; margin-top:10%; padding:2rem; border-radius:18px; box-shadow:0 10px 25px rgba(0,0,0,0.1); background:white; }
+.amount { font-size:2rem; font-weight:700; color:#2469f0; }
+.btn-primary { background:#2469f0; border:none; border-radius:10px; padding:.7rem 1.3rem; font-weight:600; }
+.success { font-size:3rem; color:#10b981; display:none; }
+</style>
+</head>
+<body>
+
+<div class="modal-card">
+  <img src="{% static 'images/sootrank_logo.jpg' %}" width="50" class="rounded-circle mb-2">
+  <h4 class="mb-2">Sootrank Payments</h4>
+  <p class="text-muted mb-3">Semester {{ fee.semester }} Fee</p>
+  <div class="amount mb-3">₹{{ amount }}</div>
+  <button id="payNow" class="btn btn-primary w-100">Pay Now</button>
+  <div class="success mt-3" id="success">✔ Payment Successful</div>
+</div>
+
+<script>
+document.getElementById("payNow").addEventListener("click", function(){
+  this.disabled = true;
+  this.innerText = "Processing...";
+  setTimeout(()=>{
+    document.getElementById("success").style.display="block";
+    setTimeout(()=>{ window.location.href = "{% url 'simulate_fee_payment' fee.id %}"; },1500);
+  },2000);
+});
+</script>
+</body>
+</html>
