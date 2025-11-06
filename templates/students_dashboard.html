@@ -1,9 +1,10 @@
 {% extends "student_base.html" %}
+
 {% block title %}Student Dashboard | Sootrank{% endblock %}
 {% block nav_dashboard_active %} active{% endblock %}
 
 {% block content %}
-<h1 class="text-3xl fw-bold mb-5 text-center">🎓 {{ role_label }} Dashboard</h1>
+<div class="container py-4">
 
 <!-- Profile Section -->
 <div class="card mb-4 shadow">
@@ -25,34 +26,35 @@
             <a href="{% url 'student_edit_profile' %}" class="btn btn-warning">Edit Profile</a>
             <a href="{% url 'registered_courses' %}" class="btn btn-info">Registered Courses</a>
         </div>
+      </div>
     </div>
-</div>
+  </div>
 
-<!-- Registration Section -->
-<div class="card mb-4 shadow">
+  <!-- Registration Section -->
+  <div class="card mb-4 shadow-sm">
     <div class="card-body p-4">
-        <h2 class="fs-5 fw-semibold mb-3">📑 Registration</h2>
-        <div class="d-flex gap-3 flex-wrap">
-            <a href="{% url 'prereg_page' %}" class="btn btn-primary">Pre-Registration</a>
-            <a href="{% url 'check_status_page' %}" class="btn btn-secondary">Check Registration Status</a>
-        </div>
+      <h5 class="fw-semibold mb-3">📑 Registration</h5>
+      <div class="d-flex flex-wrap gap-3">
+        <a href="{% url 'prereg_page' %}" class="btn btn-primary"><i class="fa fa-edit me-1"></i> Pre-Registration</a>
+        <a href="{% url 'check_status_page' %}" class="btn btn-secondary"><i class="fa fa-check-circle me-1"></i> Check Registration Status</a>
+      </div>
     </div>
-</div>
+  </div>
 
-<!-- Results Section -->
+  <!-- Results Section -->
 <div class="card mb-4 shadow">
-    <div class="card-body p-4">
-        <h2 class="fs-5 fw-semibold mb-3">📊 Results</h2>
-        <div class="d-flex gap-3 flex-wrap">
-            <a href="{% url 'student_result_semester_list' student.roll_no %}" class="btn btn-primary">
-                <i class="fa-solid fa-file-lines me-1"></i> View Results
-            </a>
-        </div>
+  <div class="card-body p-4">
+    <h2 class="fs-5 fw-semibold mb-3">📊 Results</h2>
+    <div class="d-flex gap-3 flex-wrap">
+      <a href="{% url 'student_result_semester_list' student.roll_no %}" class="btn btn-primary">
+        <i class="fa-solid fa-file-lines me-1"></i> View Results
+      </a>
     </div>
+  </div>
 </div>
 
-<!-- Quick Links Section -->
-<div class="card shadow">
+  <!-- Quick Links Section -->
+  <div class="card shadow-sm">
     <div class="card-body p-4">
         <h2 class="fs-5 fw-semibold mb-3">📌 Quick Links</h2>
         <div class="row g-3">
@@ -77,6 +79,8 @@
                 </a>
             </div>
         </div>
+      </div>
     </div>
+  </div>
 </div>
 {% endblock %}

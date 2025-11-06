@@ -1,79 +1,80 @@
 {% extends "student_base.html" %}
 {% load dict_extras %}
-{% block title %}Semesters — {{ student.first_name }} {{ student.last_name }}{% endblock %}
+{% block title %}Results Overview — {{ student.first_name }} {{ student.last_name }}{% endblock %}
 {% block nav_results_active %} active{% endblock %}
 
 {% block content %}
-<div class="w-100">
-  {% if messages %}
-    <div class="mb-3">
-      {% for message in messages %}
-        <div class="alert alert-{{ message.tags }} mb-2" role="alert">{{ message }}</div>
-      {% endfor %}
-    </div>
-  {% endif %}
+<div class="container py-4">
 
   <!-- Header -->
-  <div class="mb-3 d-flex align-items-center justify-content-between">
+  <div class="d-flex align-items-center justify-content-between mb-4">
     <div>
-      <h1 class="h4 fw-bold mb-0">Results Overview</h1>
-      <p class="text-muted small mb-0">Select a semester to view official results or download the PDF.</p>
+      <h1 class="h4 fw-bold text-primary mb-1">📊 Results Overview</h1>
+      <p class="text-muted small mb-0">View or download your semester-wise results.</p>
     </div>
     <div class="text-end small text-muted">
       <div>{{ student.first_name }} {{ student.last_name }}</div>
-      <div class="fw-semibold">Roll: {{ student.roll_no }}</div>
+      <div class="fw-semibold">Roll No: {{ student.roll_no }}</div>
     </div>
   </div>
 
-  <!-- Card -->
+  <!-- Table -->
   <div class="bg-white rounded-3 shadow-sm border p-3">
     <div class="table-responsive">
-      <table class="table table-sm align-middle mb-0">
-        <thead class="table-light">
+      <table class="table table-striped align-middle">
+        <thead class="table-primary">
           <tr class="small text-muted">
             <th>Semester</th>
-            <th style="width: 140px;" class="text-center">View</th>
-            <th style="width: 140px;" class="text-center">Download</th>
+            <th class="text-center" style="width: 160px;">View</th>
+            <th class="text-center" style="width: 160px;">Download</th>
           </tr>
         </thead>
         <tbody>
           {% for sem in semesters %}
           <tr>
             <td class="fw-medium">Semester {{ sem }}</td>
-            <td class="text-center">
-              <a href="{% url 'student_view_results' student_id=student.id semester=sem %}"
-                 class="btn btn-outline-primary btn-sm" aria-label="View semester {{ sem }}">
-                <!-- Eye icon -->
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="me-1" viewBox="0 0 16 16" aria-hidden="true">
-                  <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8z"/>
-                  <path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/>
-                </svg>
-                View
-              </a>
-            </td>
-            <td class="text-center">
-              <a href="{% url 'student_result_pdf' student_id=student.id semester=sem %}"
-                 target="_blank" class="btn btn-outline-success btn-sm" aria-label="Download PDF for semester {{ sem }}">
-                <!-- PDF icon -->
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="me-1" viewBox="0 0 16 16" aria-hidden="true">
-                  <path d="M5.5 7.5a.5.5 0 0 1 .5-.5h1v4h-1a.5.5 0 0 1-.5-.5v-3z"/>
-                  <path d="M14 4.5V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h6.5L14 4.5zM10.5 3V1.5L13.5 4H11a.5.5 0 0 1-.5-.5z"/>
-                </svg>
-                PDF
-              </a>
-            </td>
+
+            {% if not results_visible and sem == current_sem %}
+              <!-- 🔒 Locked Current Semester -->
+              <td class="text-center">
+                <button class="btn btn-secondary btn-sm" disabled>
+                  <i class="fa-solid fa-lock me-1"></i> Locked
+                </button>
+              </td>
+              <td class="text-center">
+                <button class="btn btn-secondary btn-sm" disabled>
+                  <i class="fa-solid fa-lock me-1"></i> Locked
+                </button>
+              </td>
+            {% else %}
+              <!-- ✅ Visible -->
+              <td class="text-center">
+                <a href="{% url 'student_view_results' student_id=student.id semester=sem %}"
+                   class="btn btn-outline-primary btn-sm">
+                   <i class="fa-solid fa-eye me-1"></i> View
+                </a>
+              </td>
+              <td class="text-center">
+                <a href="{% url 'student_result_pdf' student_id=student.id semester=sem %}" 
+                   target="_blank" class="btn btn-outline-success btn-sm">
+                   <i class="fa-solid fa-file-pdf me-1"></i> PDF
+                </a>
+              </td>
+            {% endif %}
           </tr>
           {% empty %}
           <tr>
-            <td colspan="3" class="text-center fst-italic text-muted py-3">No semesters found.</td>
+            <td colspan="3" class="text-center text-muted py-3 fst-italic">No semesters found.</td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
 
-    <div class="d-flex justify-content-end mt-3">
-      <a href="{% url 'students_dashboard' %}" class="btn btn-success btn-sm">Back to Dashboard</a>
+    <div class="text-end mt-3">
+      <a href="{% url 'students_dashboard' %}" class="btn btn-success btn-sm">
+        <i class="fa fa-arrow-left me-1"></i> Back to Dashboard
+      </a>
     </div>
   </div>
 </div>
