@@ -4,14 +4,115 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Add/Remove Student | Sootrank Admin</title>
+
+  <!-- Bootstrap & Icons -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+
   <style>
-    body{ background:#f8f9fa; }
-    .card{ box-shadow:0 8px 20px rgba(0,0,0,.08); }
+    /* ===== Unified Sootrank Admin Theme (CSS only, no functionality changed) ===== */
+    :root{
+      --color-primary:#34495e;      /* navbar & headings */
+      --color-accent:#3498db;       /* primary actions */
+      --color-bg:#ecf0f1;           /* page background */
+      --color-surface:#ffffff;      /* cards */
+      --color-text:#2c3e50;
+      --color-muted:#7f8c8d;
+      --border:#e6ecf1;
+      --radius:12px;
+      --shadow-subtle:0 2px 8px rgba(0,0,0,.06);
+      --shadow-hover:0 12px 24px rgba(52,152,219,.12);
+    }
+
+    html,body{height:100%}
+    body{
+      background:var(--color-bg);
+      color:var(--color-text);
+      font-family:"Segoe UI", Inter, Roboto, Arial, sans-serif;
+      -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+      font-size:14px; margin:0;
+    }
+
+    /* Navbar -> standard Sootrank Admin */
+    .navbar-dark.bg-primary{
+      background:linear-gradient(180deg, var(--color-primary), #2f4252) !important;
+      border-bottom:1px solid rgba(255,255,255,.06);
+      min-height:64px;
+    }
+    .navbar-brand{font-weight:700}
+
+    /* Cards */
+    .card{
+      background:var(--color-surface);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow-subtle);
+    }
+    .card:hover{ box-shadow:var(--shadow-hover); }
+    .card .card-body{ padding:1.25rem 1.25rem; }
+
+    /* Headings */
+    h5,h6{ color:var(--color-primary); font-weight:700; }
+
+    /* Buttons */
+    .btn-primary{
+      background-color:var(--color-accent) !important;
+      border-color:var(--color-accent) !important;
+      box-shadow:var(--shadow-subtle);
+    }
+    .btn-primary:hover{ box-shadow:var(--shadow-hover); }
+    .btn-outline-light, .btn-outline-danger, .btn-success{
+      box-shadow:var(--shadow-subtle);
+    }
+    .btn-outline-light:hover, .btn-outline-danger:hover, .btn-success:hover{
+      box-shadow:var(--shadow-hover);
+    }
+
+    /* Forms */
+    .form-label{ font-weight:600; }
+    .form-control, .form-select{
+      border-color:#dfe7ee;
+    }
+    .form-control:focus, .form-select:focus{
+      border-color:var(--color-accent);
+      box-shadow:0 0 0 .2rem rgba(52,152,219,.15);
+    }
+
+    /* List group (courses) */
+    .list-group-item{
+      border-color:#eef2f6;
+      transition:background .15s ease, color .15s ease;
+    }
+    .list-group-item:hover{
+      background:#f7fbff;
+    }
+    .list-group-item.active{
+      background:var(--color-accent);
+      border-color:var(--color-accent);
+      color:#fff;
+    }
+
+    /* Badges */
+    .badge.bg-secondary{ background:#e9eef6 !important; color:#34495e; }
+
+    /* Tables */
+    .table thead th{
+      background:#f4f8fb !important;
+      border-bottom:1px solid #e8eef5 !important;
+      color:#475569;
+      font-weight:700;
+    }
+    .table tbody tr:hover{ background:#f9fcff; }
+
+    /* Utility */
     .course-list{ max-height: 420px; overflow:auto; }
     .roster{ max-height: 360px; overflow:auto; }
-    .code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .code{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    /* Alerts spacing consistency */
+    .alert{ border-radius:10px; }
   </style>
 </head>
 <body>
@@ -28,12 +129,15 @@
 
   <div class="container">
     {% if messages %}
-      <div class="mb-3">
-        {% for message in messages %}
-          <div class="alert alert-{{ message.tags }} mb-2" role="alert">{{ message }}</div>
-        {% endfor %}
+  <div class="container mt-3" style="max-width:700px;">
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
       </div>
-    {% endif %}
+    {% endfor %}
+  </div>
+{% endif %}
 
     <div class="row g-4">
       <!-- Left: course search and list -->
@@ -46,7 +150,9 @@
               {% if selected_course %}
                 <input type="hidden" name="course" value="{{ selected_course.code }}">
               {% endif %}
-              <button class="btn btn-primary"><i class="fa-solid fa-magnifying-glass me-1"></i>Search</button>
+              <button class="btn btn-primary">
+                <i class="fa-solid fa-magnifying-glass me-1"></i>Search
+              </button>
             </form>
             <div class="course-list list-group">
               {% for c in courses %}
@@ -74,39 +180,38 @@
               </div>
 
               <div class="mb-3">
-              <form method="post" class="row g-2 align-items-end">
-                {% csrf_token %}
-                <input type="hidden" name="course_code" value="{{ selected_course.code }}">
-                {% if current_sem %}<input type="hidden" name="semester" value="{{ current_sem }}">{% endif %}
-                
-                <div class="col-sm-7">
-                  <label class="form-label mb-1">Roll No</label>
-                  <input type="text" name="roll_no" class="form-control h-100" placeholder="e.g., B22CS123">
-                </div>
+                <form method="post" class="row g-2 align-items-end">
+                  {% csrf_token %}
+                  <input type="hidden" name="course_code" value="{{ selected_course.code }}">
+                  {% if current_sem %}<input type="hidden" name="semester" value="{{ current_sem }}">{% endif %}
 
-                <div class="col-sm-5 d-flex gap-2 align-items-stretch">
-                  <button name="action" value="add" type="submit" class="btn btn-success w-100">
-                    <i class="fa-solid fa-user-plus me-1"></i> Add
-                  </button>
-                  <button name="action" value="remove" type="submit" class="btn btn-outline-danger w-100">
-                    <i class="fa-solid fa-user-minus me-1"></i> Remove
-                  </button>
-                </div>
-              </form>
-            </div>
+                  <div class="col-sm-7">
+                    <label class="form-label mb-1">Roll No</label>
+                    <input type="text" name="roll_no" class="form-control h-100" placeholder="e.g., B22CS123">
+                  </div>
 
+                  <div class="col-sm-5 d-flex gap-2 align-items-stretch">
+                    <button name="action" value="add" type="submit" class="btn btn-success w-100">
+                      <i class="fa-solid fa-user-plus me-1"></i> Add
+                    </button>
+                    <button name="action" value="remove" type="submit" class="btn btn-outline-danger w-100">
+                      <i class="fa-solid fa-user-minus me-1"></i> Remove
+                    </button>
+                  </div>
+                </form>
+              </div>
 
               <h6 class="mb-2">Currently Enrolled</h6>
               <div class="roster">
                 <table class="table table-sm align-middle">
                   <thead>
-                  <tr>
-                    {% if current_sem is None %}<th scope="col">Sem</th>{% endif %}
-                    <th scope="col">Roll No</th>
-                    <th scope="col">Name</th>
-                    <th scope="col" class="text-end">Action</th>
-                  </tr>
-                </thead>
+                    <tr>
+                      {% if current_sem is None %}<th scope="col">Sem</th>{% endif %}
+                      <th scope="col">Roll No</th>
+                      <th scope="col">Name</th>
+                      <th scope="col" class="text-end">Action</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {% for sc in enrolled %}
                       <tr>
@@ -139,6 +244,15 @@
     </div>
   </div>
 
+  <!-- Bootstrap JS (no functionality changes) -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    setTimeout(function () {
+            document.querySelectorAll('.alert').forEach(function (alert) {
+                var bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close();
+            });
+        }, 4000);
+  </script>
 </body>
 </html>

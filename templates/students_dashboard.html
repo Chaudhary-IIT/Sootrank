@@ -6,28 +6,25 @@
 {% block content %}
 <div class="container py-4">
 
-  <!-- Title -->
-  <h1 class="text-center fw-bold mb-5 text-primary">🎓 {{ role_label }} Dashboard</h1>
-
-  <!-- Profile Section -->
-  <div class="card mb-4 shadow-sm">
-    <div class="card-body d-flex align-items-center gap-4 flex-wrap p-4">
-      <div class="text-center">
-        {% if student.profile_image %}
-          <img src="{{ student.profile_image.url }}" alt="Profile" class="rounded-circle border border-2" style="width: 80px; height: 80px; object-fit: cover;">
-        {% else %}
-          <i class="fa-solid fa-user fa-3x text-primary"></i>
-        {% endif %}
-      </div>
-      <div>
-        <h4 class="fw-bold mb-1">{{ student.first_name }} {{ student.last_name|default_if_none:"" }}</h4>
-        <p class="mb-1 text-muted">Enrollment No: <strong>{{ student.roll_no|upper }}</strong></p>
-        <p class="mb-1 text-muted">Branch: {{ student.branch }} ({{ student.department }})</p>
-        <p class="mb-3 text-muted">Semester: {{ student.semester }}</p>
-
-        <div class="d-flex flex-wrap gap-2">
-          <a href="{% url 'student_edit_profile' %}" class="btn btn-warning"><i class="fa fa-edit me-1"></i> Edit Profile</a>
-          <a href="{% url 'registered_courses' %}" class="btn btn-info text-white"><i class="fa fa-book me-1"></i> Registered Courses</a>
+<!-- Profile Section -->
+<div class="card mb-4 shadow">
+    <div class="card-body d-flex align-items-center gap-4 p-4">
+        <div>
+            {% if student.profile_image %}
+                <img src="{{ student.profile_image.url }}" alt="Profile" class="rounded-circle" style="width:70px;">
+            {% else %}
+                <i class="fa-solid fa-user fa-3x text-primary"></i>
+            {% endif %}
+        </div>
+        <div>
+            <h2 class="fs-4 fw-bold mb-1">
+                {{ student.first_name }} {{ student.last_name|default_if_none:"" }}
+            </h2>
+            <p class="mb-1">Enrollment No: {{ student.roll_no|upper }}</p>
+            <p class="mb-1">Course: {{ student.branch }} ({{ student.department }})</p>
+            <p class="mb-2">Semester: {{ computed_semester }}</p>
+            <a href="{% url 'student_edit_profile' %}" class="btn btn-warning">Edit Profile</a>
+            <a href="{% url 'registered_courses' %}" class="btn btn-info">Registered Courses</a>
         </div>
       </div>
     </div>
@@ -59,21 +56,28 @@
   <!-- Quick Links Section -->
   <div class="card shadow-sm">
     <div class="card-body p-4">
-      <h5 class="fw-semibold mb-3">📌 Quick Links</h5>
-      <div class="row g-3">
-        <div class="col-6 col-md-3">
-          <button class="btn btn-outline-secondary w-100">Attendance</button>
+        <h2 class="fs-5 fw-semibold mb-3">📌 Quick Links</h2>
+        <div class="row g-3">
+            <div class="col-6">
+            <a href="{% url 'student_attendance' %}" class="btn btn-secondary w-100">
+                <i class="fa-solid fa-file-lines me-1"></i> Attendance
+            </a>
         </div>
-        <div class="col-6 col-md-3">
-          <button class="btn btn-outline-secondary w-100">Fee Status</button>
+            <div class="col-6">
+            <a href="{% url 'timetable' %}" class="btn btn-secondary w-100">
+                <i class="fa-solid fa-file-lines me-1"></i> Timetable
+            </a>
         </div>
-        <div class="col-6 col-md-3">
-          <button class="btn btn-outline-secondary w-100">Time Table</button>
+            <div class="col-6">
+            <a href="{% url 'student_fees' %}" class="btn btn-secondary w-100">
+                <i class="fa-solid fa-file-lines me-1"></i> Fee Status
+            </a>
         </div>
-        <div class="col-6 col-md-3">
-          <a href="https://academics.iitmandi.ac.in/calendar" class="btn btn-outline-secondary w-100" target="_blank">
-            Academic Calendar
-          </a>
+            <div class="col-6">
+                <a href="https://academics.iitmandi.ac.in/calendar" class="btn btn-secondary w-100">
+                    Academic Calendar
+                </a>
+            </div>
         </div>
       </div>
     </div>

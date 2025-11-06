@@ -2,220 +2,289 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>All Courses</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f9f9f9;
-            margin: 0;
-            padding: 20px;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>All Courses</title>
+  <style>
+    /* ===== THEME VARIABLES (uniform across admin) ===== */
+    :root{
+      --color-primary: #34495e;   /* headings / accents */
+      --color-accent:  #3498db;   /* primary buttons / focus */
+      --color-bg:      #f4f6f8;   /* app background */
+      --color-surface: #ffffff;   /* cards/tables */
+      --color-text:    #2c3e50;   /* main text */
+      --color-muted:   #7f8c8d;   /* muted text */
+      --border:        #e6ecf1;   /* borders */
+      --radius:        10px;
+      --shadow-subtle: 0 2px 8px rgba(0,0,0,0.06);
+      --shadow-hover:  0 10px 20px rgba(52,152,219,0.12);
+    }
 
-        .toolbar {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            margin-bottom: 1rem;
-        }
+    /* ===== BASE ===== */
+    body {
+      font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--color-bg);
+      color: var(--color-text);
+      margin: 0;
+      padding: 20px;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
 
-        input {
-            padding: 8px;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-            min-width: 250px;
-        }
+    h2 { color: var(--color-primary); margin-top: 0; }
 
-        .dropdown {
-            position: relative;
-            display: inline-block;
-        }
+    /* ===== TOOLBAR ===== */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
 
-        .dropdown-content {
-            display: none;
-            position: absolute;
-            background: white;
-            border: 1px solid #ccc;
-            padding: 10px;
-            min-width: 200px;
-            z-index: 100;
-        }
+    .toolbar input {
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      min-width: 260px;
+      background: #fff;
+      transition: border-color .2s ease, box-shadow .2s ease;
+    }
+    .toolbar input:focus{
+      outline: none;
+      border-color: var(--color-accent);
+      box-shadow: 0 0 0 .2rem rgba(52,152,219,.15);
+    }
 
-        .dropdown:hover .dropdown-content {
-            display: block;
-        }
+    /* ===== DROPDOWN ===== */
+    .dropdown {
+      position: relative;
+      display: inline-block;
+    }
+    .dropdown > button{
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--color-surface);
+      box-shadow: var(--shadow-subtle);
+      cursor: pointer;
+    }
+    .dropdown > button:hover{ box-shadow: var(--shadow-hover); }
 
-        .table-container {
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            overflow-x: auto;
-            background: white;
-        }
+    .dropdown-content {
+      display: none;
+      position: absolute;
+      right: 0;
+      margin-top: 6px;
+      background: var(--color-surface);
+      border: 1px solid var(--border);
+      padding: 12px;
+      min-width: 220px;
+      z-index: 100;
+      box-shadow: var(--shadow-subtle);
+      border-radius: 10px;
+    }
+    .dropdown:hover .dropdown-content { display: block; }
+    .dropdown-content label{
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 0;
+      font-size: 14px; color: var(--color-text);
+    }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            min-width: 1000px;
-        }
+    /* ===== TABLE CONTAINER ===== */
+    .table-container {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow-x: auto;
+      background: var(--color-surface);
+      box-shadow: var(--shadow-subtle);
+    }
 
-        th,
-        td {
-            border: 1px solid #ddd;
-            padding: 10px;
-            text-align: center;
-        }
+    /* ===== TABLE ===== */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 1000px;
+    }
 
-        th {
-            background: #f0f0f0;
-        }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 10px;
+      text-align: center;
+      white-space: nowrap;
+    }
 
-        tr:nth-child(even) {
-            background: #fafafa;
-        }
+    th {
+      background: rgba(52,152,219,0.08);
+      color: var(--color-text);
+      font-weight: 600;
+    }
 
-        .actions button {
-            padding: 5px 10px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
+    tr:nth-child(even) td {
+      background: #fafbfc;
+    }
 
-        .btn-edit {
-            background: #facc15;
-        }
+    tr:hover td {
+      background: rgba(52,152,219,0.05);
+    }
 
-        .btn-delete {
-            background: #ef4444;
-            color: white;
-        }
+    /* ===== ACTION BUTTONS ===== */
+    .actions button {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow: var(--shadow-subtle);
+      transition: box-shadow .2s ease, filter .1s ease, transform .05s ease;
+    }
+    .actions button:active{ transform: translateY(1px); }
 
-        .btn-add {
-            margin-top: 20px;
-            padding: 10px 20px;
-            background: #2563eb;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-    </style>
+    .btn-edit {
+      background: #facc15;
+    }
+    .btn-edit:hover{ filter: brightness(.98); box-shadow: var(--shadow-hover); }
+
+    .btn-delete {
+      background: #ef4444;
+      color: white;
+    }
+    .btn-delete:hover{ filter: brightness(.98); box-shadow: var(--shadow-hover); }
+
+    /* ===== ADD BUTTON ===== */
+    .btn-add {
+      margin-top: 20px;
+      padding: 10px 20px;
+      background: var(--color-accent);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: var(--shadow-subtle);
+      transition: box-shadow .2s ease, filter .1s ease, transform .05s ease;
+    }
+    .btn-add:hover { filter: brightness(.98); box-shadow: var(--shadow-hover); }
+    .btn-add:active{ transform: translateY(1px); }
+
+    /* ===== SCROLLBAR (nice) ===== */
+    .table-container::-webkit-scrollbar { height: 10px; }
+    .table-container::-webkit-scrollbar-thumb { background: #d7e1ea; border-radius: 10px; }
+    .table-container::-webkit-scrollbar-track { background: transparent; }
+  </style>
 </head>
 
 <body>
 
-    <h2>All Courses</h2>
+  <h2>All Courses</h2>
 
-    <div class="toolbar">
-        <input type="text" id="search" placeholder="Search by course code or name...">
+  <div class="toolbar">
+    <input type="text" id="search" placeholder="Search by course code or name...">
 
-        <div class="dropdown">
-            <button>Visible ▼</button>
-            <div class="dropdown-content">
-                <label><input type="checkbox" checked data-col="course_code"> Course Code</label><br>
-                <label><input type="checkbox" checked data-col="course_name"> Course Name</label><br>
-                <label><input type="checkbox" checked data-col="instructor_name"> Instructor Name</label><br>
-                <label><input type="checkbox" checked data-col="instructor_id"> Instructor ID</label><br>
-                <label><input type="checkbox" checked data-col="avail"> Availability</label><br>
-                <label><input type="checkbox" checked data-col="dcfor"> DC For</label><br>
-                <label><input type="checkbox" checked data-col="defor"> DE For</label><br>
-                <label><input type="checkbox" checked data-col="icornot"> IC or Not</label><br>
-                <label><input type="checkbox" checked data-col="slot"> Slot</label><br>
-                <label><input type="checkbox" checked data-col="credit"> Credit</label><br>
-                <label><input type="checkbox" checked data-col="ltpc"> LTPC</label><br>
-            </div>
-        </div>
+    <div class="dropdown">
+      <button>Visible ▼</button>
+      <div class="dropdown-content">
+        <label><input type="checkbox" checked data-col="course_code"> Course Code</label>
+        <label><input type="checkbox" checked data-col="course_name"> Course Name</label>
+        <label><input type="checkbox" checked data-col="instructor_name"> Instructor Name</label>
+        <label><input type="checkbox" checked data-col="instructor_id"> Instructor ID</label>
+        <label><input type="checkbox" checked data-col="avail"> Availability</label>
+        <label><input type="checkbox" checked data-col="dcfor"> DC For</label>
+        <label><input type="checkbox" checked data-col="defor"> DE For</label>
+        <label><input type="checkbox" checked data-col="icornot"> IC or Not</label>
+        <label><input type="checkbox" checked data-col="slot"> Slot</label>
+        <label><input type="checkbox" checked data-col="credit"> Credit</label>
+        <label><input type="checkbox" checked data-col="ltpc"> LTPC</label>
+      </div>
     </div>
+  </div>
 
-    <div class="table-container">
-        <table id="courses-table">
-            <thead>
-                <tr>
-                    <th data-col="course_code">Course Code</th>
-                    <th data-col="course_name">Course Name</th>
-                    <th data-col="instructor_name">Instructor Name</th>
-                    <th data-col="instructor_id">Instructor ID</th>
-                    <th data-col="avail">Availability</th>
-                    <th data-col="dcfor">DC For</th>
-                    <th data-col="defor">DE For</th>
-                    <th data-col="icornot">IC or Not</th>
-                    <th data-col="slot">Slot</th>
-                    <th data-col="credit">Credit</th>
-                    <th data-col="ltpc">LTPC</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td data-col="course_code">CS101</td>
-                    <td data-col="course_name">Data Structures</td>
-                    <td data-col="instructor_name">Prof. Sharma</td>
-                    <td data-col="instructor_id">I123</td>
-                    <td data-col="avail">Yes</td>
-                    <td data-col="dcfor">CSE</td>
-                    <td data-col="defor">ECE</td>
-                    <td data-col="icornot">IC</td>
-                    <td data-col="slot">A1</td>
-                    <td data-col="credit">3</td>
-                    <td data-col="ltpc">3-0-0-3</td>
-                    <td class="actions">
-                        <button class="btn-edit">Edit</button>
-                        <button class="btn-delete" onclick="deleteCourse(this)">Delete</button>
-                    </td>
-                </tr>
-                <tr>
-                    <td data-col="course_code">EE202</td>
-                    <td data-col="course_name">Circuits</td>
-                    <td data-col="instructor_name">Prof. Gupta</td>
-                    <td data-col="instructor_id">I456</td>
-                    <td data-col="avail">No</td>
-                    <td data-col="dcfor">EEE</td>
-                    <td data-col="defor">CSE</td>
-                    <td data-col="icornot">Not IC</td>
-                    <td data-col="slot">B2</td>
-                    <td data-col="credit">4</td>
-                    <td data-col="ltpc">3-1-0-4</td>
-                    <td class="actions">
-                        <button class="btn-edit">Edit</button>
-                        <button class="btn-delete" onclick="deleteCourse(this)">Delete</button>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
+  <div class="table-container">
+    <table id="courses-table">
+      <thead>
+        <tr>
+          <th data-col="course_code">Course Code</th>
+          <th data-col="course_name">Course Name</th>
+          <th data-col="instructor_name">Instructor Name</th>
+          <th data-col="instructor_id">Instructor ID</th>
+          <th data-col="avail">Availability</th>
+          <th data-col="dcfor">DC For</th>
+          <th data-col="defor">DE For</th>
+          <th data-col="icornot">IC or Not</th>
+          <th data-col="slot">Slot</th>
+          <th data-col="credit">Credit</th>
+          <th data-col="ltpc">LTPC</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td data-col="course_code">CS101</td>
+          <td data-col="course_name">Data Structures</td>
+          <td data-col="instructor_name">Prof. Sharma</td>
+          <td data-col="instructor_id">I123</td>
+          <td data-col="avail">Yes</td>
+          <td data-col="dcfor">CSE</td>
+          <td data-col="defor">ECE</td>
+          <td data-col="icornot">IC</td>
+          <td data-col="slot">A1</td>
+          <td data-col="credit">3</td>
+          <td data-col="ltpc">3-0-0-3</td>
+          <td class="actions">
+            <button class="btn-edit">Edit</button>
+            <button class="btn-delete" onclick="deleteCourse(this)">Delete</button>
+          </td>
+        </tr>
+        <tr>
+          <td data-col="course_code">EE202</td>
+          <td data-col="course_name">Circuits</td>
+          <td data-col="instructor_name">Prof. Gupta</td>
+          <td data-col="instructor_id">I456</td>
+          <td data-col="avail">No</td>
+          <td data-col="dcfor">EEE</td>
+          <td data-col="defor">CSE</td>
+          <td data-col="icornot">Not IC</td>
+          <td data-col="slot">B2</td>
+          <td data-col="credit">4</td>
+          <td data-col="ltpc">3-1-0-4</td>
+          <td class="actions">
+            <button class="btn-edit">Edit</button>
+            <button class="btn-delete" onclick="deleteCourse(this)">Delete</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 
-    <button class="btn-add">Add Course</button>
+  <button class="btn-add">Add Course</button>
 
-    <script>
-        // Search filter
-        document.getElementById("search").addEventListener("input", function () {
-            let filter = this.value.toLowerCase();
-            let rows = document.querySelectorAll("#courses-table tbody tr");
-            rows.forEach(row => {
-                let text = row.innerText.toLowerCase();
-                row.style.display = text.includes(filter) ? "" : "none";
-            });
+  <script>
+    // Search filter
+    document.getElementById("search").addEventListener("input", function () {
+      let filter = this.value.toLowerCase();
+      let rows = document.querySelectorAll("#courses-table tbody tr");
+      rows.forEach(row => {
+        let text = row.innerText.toLowerCase();
+        row.style.display = text.includes(filter) ? "" : "none";
+      });
+    });
+
+    // Toggle column visibility
+    document.querySelectorAll(".dropdown-content input").forEach(checkbox => {
+      checkbox.addEventListener("change", function () {
+        let col = this.getAttribute("data-col");
+        document.querySelectorAll(`[data-col="${col}"]`).forEach(cell => {
+          cell.style.display = this.checked ? "" : "none";
         });
+      });
+    });
 
-        // Toggle column visibility
-        document.querySelectorAll(".dropdown-content input").forEach(checkbox => {
-            checkbox.addEventListener("change", function () {
-                let col = this.getAttribute("data-col");
-                document.querySelectorAll(`[data-col="${col}"]`).forEach(cell => {
-                    cell.style.display = this.checked ? "" : "none";
-                });
-            });
-        });
-
-        // Delete confirmation
-        function deleteCourse(btn) {
-            if (confirm("Are you sure you want to delete this course?")) {
-                btn.closest("tr").remove();
-                alert("Course deleted!");
-            }
-        }
-    </script>
+    // Delete confirmation
+    function deleteCourse(btn) {
+      if (confirm("Are you sure you want to delete this course?")) {
+        btn.closest("tr").remove();
+        alert("Course deleted!");
+      }
+    }
+  </script>
 
 </body>
-
 </html>

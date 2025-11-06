@@ -63,13 +63,19 @@
         <h2 class="fs-5 fw-semibold mb-3">📌 Quick Links</h2>
         <div class="row g-3">
             <div class="col-6">
-                <a class="btn btn-secondary w-100" href="#">Faculty Calendar</a>
+            <a href="https://academics.iitmandi.ac.in/calendar" class="btn btn-primary w-100">
+                <i class="fa-solid fa-file-lines me-1"></i> Academic Calendar
+            </a>
             </div>
             <div class="col-6">
-                <a class="btn btn-secondary w-100" href="#">My Class Schedule</a>
+                <a href="{% url 'faculty_course_list' %}" class="btn btn-primary w-100">
+                <i class="fa-solid fa-file-lines me-1"></i> Class Schedule
+            </a>
             </div>
             <div class="col-6">
-                <a class="btn btn-secondary w-100" href="#">Student Attendance</a>
+                <a href="{% url 'faculty_course_list' %}" class="btn btn-primary w-100">
+                <i class="fa-solid fa-file-lines me-1"></i> Attendance
+            </a>
             </div>
             <div class="col-6">
                 <a class="btn btn-secondary w-100" href="#">Reports & Analytics</a>

@@ -2,32 +2,136 @@
 <html lang="en">
 
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Grade Management - Sootrank Admin</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-  <style>
-    body {
-      background-color: #f9fafb;
-    }
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Grade Management - Sootrank Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 
-    .form-section {
-      background: white;
-      padding: 24px;
-      border-radius: 10px;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-      margin-bottom: 40px;
-    }
+    <style>
+        /* ==== THEME VARIABLES (uniform across admin) ==== */
+        :root{
+            --color-primary: #34495e;   /* navbar / headings */
+            --color-accent:  #3498db;   /* hovers / focus */
+            --color-bg:      #f4f6f8;   /* app background */
+            --color-surface: #ffffff;   /* cards/tables surface */
+            --color-text:    #2c3e50;   /* main text */
+            --color-muted:   #7f8c8d;   /* muted text */
+            --border:        #e6ecf1;   /* light borders */
+            --radius:        10px;
+            --shadow-subtle: 0 2px 8px rgba(0,0,0,0.06);
+            --shadow-hover:  0 10px 20px rgba(52,152,219,0.12);
+            --container-max: 1180px;
+        }
 
-    .badge-enrolled {
-      background-color: #e7f8ec;
-      color: #166534;
-      padding: 6px 12px;
-      border-radius: 999px;
-      font-size: 0.9rem;
-    }
-  </style>
+        /* ==== BASE ==== */
+        body {
+            background-color: var(--color-bg);
+            color: var(--color-text);
+            font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* ==== NAVBAR (keep markup; override look) ==== */
+        .navbar-dark.bg-primary{
+            background: linear-gradient(180deg, var(--color-primary), #2f4252) !important;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            min-height: 64px;
+        }
+        .navbar-dark .navbar-brand{
+            font-weight: 700;
+            font-size: 1.25rem;
+        }
+        .navbar .btn{
+            box-shadow: var(--shadow-subtle);
+        }
+        .navbar .btn.btn-light{
+            background: #fff; border-color: #fff; color: var(--color-primary);
+        }
+        .navbar .btn.btn-light:hover{
+            filter: brightness(.98); box-shadow: var(--shadow-hover);
+        }
+
+        /* ==== CONTAINER ==== */
+        .container.my-5{
+            margin-top: 2.5rem !important;
+            margin-bottom: 2.5rem !important;
+            max-width: var(--container-max);
+        }
+
+        /* ==== HEADINGS/TEXT ==== */
+        .text-primary { color: var(--color-primary) !important; }
+        .text-muted  { color: var(--color-muted) !important; }
+
+        /* ==== CARD SECTION ==== */
+        .form-section {
+            background: var(--color-surface);
+            padding: 20px;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-subtle);
+            margin-bottom: 40px;
+        }
+
+        /* ==== FILTER BAR ==== */
+        .input-group-text {
+            background: var(--color-surface);
+            border-right: 0;
+            border-color: var(--border);
+        }
+        .form-control, .form-select{
+            border-color: var(--border);
+            border-radius: 8px;
+        }
+        .form-control:focus, .form-select:focus{
+            border-color: var(--color-accent);
+            box-shadow: 0 0 0 .2rem rgba(52,152,219,.15);
+        }
+
+        /* ==== TABLE WRAPPER & TABLE ==== */
+        .table-responsive.shadow-sm.bg-white.rounded.p-3{
+            background: var(--color-surface) !important;
+            border: 1px solid var(--border);
+            border-radius: var(--radius) !important;
+            box-shadow: var(--shadow-subtle) !important;
+            padding: 0 !important;
+            overflow: hidden;
+        }
+        table.table { margin-bottom: 0; }
+        .table thead th{
+            background: rgba(52,152,219,0.08) !important;
+            color: var(--color-text);
+            border-bottom: 1px solid var(--border) !important;
+        }
+        .table-hover tbody tr:hover {
+            background-color: rgba(52,152,219,0.06) !important;
+        }
+        .table td, .table th { vertical-align: middle; }
+
+        /* ==== BADGES ==== */
+        .badge-enrolled {
+            background-color: #dcfce7;
+            color: #166534;
+            padding: 6px 12px;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            border: 1px solid #b7f3cb;
+            box-shadow: var(--shadow-subtle);
+        }
+
+        /* ==== ACTIONS ==== */
+        .table-actions .btn{
+            box-shadow: var(--shadow-subtle);
+        }
+        .table-actions .btn:hover{
+            box-shadow: var(--shadow-hover);
+        }
+        .table-actions button,
+        .table-actions a {
+            margin-right: 6px;
+        }
+    </style>
 </head>
 
 <body>
@@ -67,22 +171,83 @@
             <button type="submit" class="btn btn-primary w-100 fw-semibold">Save Settings</button>
           </div>
         </div>
-      </form>
-    </div>
-
-    <!-- Courses Section -->
-    <div class="form-section">
-      <div class="d-flex align-items-center justify-content-between mb-3">
-        <h5 class="fw-semibold mb-0">📘 Course List</h5>
+    </nav>
+    {% if messages %}
+  <div class="container mt-3" style="max-width:700px;">
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
       </div>
+    {% endfor %}
+  </div>
+{% endif %}
+    <div class="container my-5">
+        <h2 class="mb-3 text-primary">Grade Management</h2>
+        <p class="text-muted">Select a course to assign or edit grades for enrolled students.</p>
+        
+        <div class="form-section">
+            <!-- Filters -->
+            <div class="row g-2 mb-3">
+                <div class="col-12 col-md-6">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fa fa-search"></i></span>
+                        <input type="text" id="courseSearch" class="form-control" placeholder="Search by code or name…" />
+                    </div>
+                </div>
+                <div class="col-12 col-md-3">
+                    <select id="semesterFilter" class="form-select">
+                        <option value="">All Semesters</option>
+                        {% for sem in semesters %}
+                        <option value="{{ sem }}">Semester {{ sem }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-12 col-md-3">
+                    <select id="slotFilter" class="form-select">
+                        <option value="">All Slots</option>
+                        {% for s in slots %}
+                        <option value="{{ s }}">{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
 
-      <!-- Filters -->
-      <div class="row g-2 mb-3">
-        <div class="col-md-6">
-          <div class="input-group">
-            <span class="input-group-text"><i class="fa fa-search"></i></span>
-            <input type="text" id="courseSearch" class="form-control" placeholder="Search by code or name…" />
-          </div>
+            <!-- Table -->
+            <div class="table-responsive shadow-sm bg-white rounded p-3">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-primary">
+                        <tr>
+                            <th>Code</th>
+                            <th>Name</th>
+                            <th>Slot</th>
+                            <th>Enrolled Students</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="courseBody">
+                        {% for c in courses %}
+                        <tr class="course-row" data-slot="{{ c.slot }}">
+                            <td class="c-code">{{ c.code }}</td>
+                            <td class="c-name">{{ c.name }}</td>
+                            <td class="c-slot">{{ c.slot }}</td>
+                            <td>
+                                <span class="badge-enrolled">{{ c.enrolled_count }} student(s)</span>
+                            </td>
+                            <td class="text-end table-actions">
+                                <a href="{% url 'admin_assign_grades' c.code %}" class="btn btn-sm btn-success" title="Assign/Edit Grades">
+                                    <i class="fa fa-pencil me-1"></i> Manage Grades
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center">No courses with enrolled students found.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
         <div class="col-md-3">
           <select id="semesterFilter" class="form-select">
@@ -148,27 +313,46 @@
 
       const norm = s => (s || '').toString().toLowerCase().trim();
 
-      function matches(row, q, sem, slot) {
-        const code = row.querySelector('.c-code')?.textContent || '';
-        const name = row.querySelector('.c-name')?.textContent || '';
-        const rowSlot = row.dataset.slot || '';
-        const hay = (code + ' ' + name).toLowerCase();
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        setTimeout(function () {
+            document.querySelectorAll('.alert').forEach(function (alert) {
+                var bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close();
+            });
+        }, 4000);
+        (function () {
+            const qInput = document.getElementById('courseSearch');
+            const semFilter = document.getElementById('semesterFilter');
+            const slotFilter = document.getElementById('slotFilter');
+            const rows = Array.from(document.querySelectorAll('#courseBody .course-row'));
 
-        return (!q || hay.includes(q)) && (!slot || norm(rowSlot) === norm(slot));
-      }
+            function norm(s) { return (s || '').toString().toLowerCase().trim(); }
 
-      function applyFilters() {
-        const q = norm(qInput.value);
-        const sem = norm(semFilter.value);
-        const slot = norm(slotFilter.value);
-        rows.forEach(r => r.style.display = matches(r, q, sem, slot) ? '' : 'none');
-      }
+            function matches(row, q, sem, slot) {
+                const code = row.querySelector('.c-code')?.textContent || '';
+                const name = row.querySelector('.c-name')?.textContent || '';
+                const rowSlot = row.dataset.slot || '';
+                const hay = (code + ' ' + name).toLowerCase();
+                
+                const qHit = !q || hay.includes(q);
+                const slotHit = !slot || norm(rowSlot) === norm(slot);
+                
+                return qHit && slotHit;
+            }
 
-      qInput.addEventListener('input', applyFilters);
-      semFilter.addEventListener('change', applyFilters);
-      slotFilter.addEventListener('change', applyFilters);
-    })();
-  </script>
+            function applyFilters() {
+                const q = norm(qInput.value);
+                const sem = norm(semFilter.value);
+                const slot = norm(slotFilter.value);
+                rows.forEach(r => r.style.display = matches(r, q, sem, slot) ? '' : 'none');
+            }
+
+            qInput.addEventListener('input', applyFilters);
+            semFilter.addEventListener('change', applyFilters);
+            slotFilter.addEventListener('change', applyFilters);
+        })();
+    </script>
 </body>
 
 </html>
