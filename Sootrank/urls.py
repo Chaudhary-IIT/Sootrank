@@ -74,7 +74,7 @@ urlpatterns = [
     path("students_dashboard/registration/status/", views.check_status, name="check_status_page"),    
     path("faculty_dashboard/courses/", views.instructor_courses, name="instructor_courses"),
     path("faculty_dashboard/courses/<str:course_code>/<str:semester>/", views.course_roster , name="course_roster"),
-    path("students_dashboard/registration/apply_pf_changes/", views.apply_pf_changes, name="apply_pf_changes"),
+    path("students_dashboard/registration/apply_pf_changes/", views.apply_mode_changes, name="apply_mode_changes"),
     path("students_dashboard/registered_courses/", views.student_registered_courses, name="registered_courses"),
 
     path("logout/", LogoutView.as_view(next_page="login"), name="logout"),
@@ -130,6 +130,14 @@ urlpatterns = [
     path("custom-admin/fees/add/", views.admin_fee_add, name="admin_fee_add"),
     path("custom-admin/fees/update/<int:fee_id>/", views.admin_fee_update, name="admin_fee_update"),
     path("custom-admin/fees/upload_csv/", views.admin_fee_upload_csv, name="admin_fee_upload_csv"),
+    path("custom-admin/timetable/", views.admin_timetable_dashboard, name="admin_timetable_dashboard"),
+    path("custom-admin/timetable/add/", views.admin_timetable_add, name="admin_timetable_add"),
+    path("custom-admin/timetable/delete/<int:timetable_id>/", views.admin_timetable_delete, name="admin_timetable_delete"),
+    path("custom-admin/timetable/edit/<int:timetable_id>/", views.admin_timetable_edit, name="admin_timetable_edit"),
+    path("custom-admin/attendance/", views.admin_attendance_dashboard, name="admin_attendance_dashboard"),
+    path("custom-admin/attendance/<int:course_id>/", views.admin_course_attendance, name="admin_course_attendance"),
+
+
 
 ]
 

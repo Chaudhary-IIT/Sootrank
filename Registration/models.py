@@ -313,25 +313,31 @@ class StudentCourse(models.Model):
         ("PAS", "Pass"),
         ("FAI", "Fail"),
     ]
+    GRADES = [(g, g) for g in GRADE_POINTS.keys()]
 
-    GRADES = [(g, g) for g in GRADE_POINTS.keys()]  # Add grade choices list
+    COURSE_MODE = [
+        ("REG", "Regular"),
+        ("PF", "Pass/Fail"),
+        ("AUD", "Audit"),
+    ]
 
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="enrollments")
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="enrollments")
     status = models.CharField(max_length=3, choices=STATUS, default="PND")
     outcome = models.CharField(max_length=3, choices=OUTCOME, default="UNK")
-    grade = models.CharField(
-        max_length=3,
-        null=True,
-        blank=True,
-        choices=GRADES
-    )
-    is_pass_fail = models.BooleanField(default=False)  # NEW: PF selection at registration/approval
-    semester = models.IntegerField(null=True)  # e.g., 1, 2, ..., 8
+    grade = models.CharField(max_length=3, null=True, blank=True, choices=GRADES)
+    semester = models.IntegerField(null=True)
     type = models.CharField(max_length=10, null=True, blank=True)
+    course_mode = models.CharField(max_length=3, choices=COURSE_MODE, default="REG")
 
     class Meta:
         unique_together = ("student", "course", "semester")
+
+    def is_pass_fail(self):
+        return self.course_mode == "PF"
+
+    def is_audit(self):
+        return self.course_mode == "AUD"
 
 class ProgramRequirement(models.Model):
     CATEGORY_CHOICES = [

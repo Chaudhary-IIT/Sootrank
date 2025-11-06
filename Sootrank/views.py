@@ -9,7 +9,7 @@ from django.core.files.storage import FileSystemStorage
 from django.contrib import messages
 from django.views.decorators.csrf import csrf_exempt
 from django.db import IntegrityError, transaction
-from django.db.models import Prefetch, Sum
+from django.db.models import Prefetch, Sum,IntegerField, BigIntegerField,Count, Avg, F, FloatField, ExpressionWrapper,Case, When, Value
 from django.utils.text import slugify
 from django.http import Http404, HttpResponse, HttpResponseForbidden,JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -497,32 +497,39 @@ def check_status(request):
         .filter(student=student, semester=current_sem)
         .select_related("course")
         .prefetch_related(Prefetch("course__faculties"))
-        .order_by("course__slot","course__code")
+        .order_by("course__slot", "course__code")
     )
+
     pf_total = (
         StudentCourse.objects
-        .filter(student=student, is_pass_fail=True)
+        .filter(student=student, course_mode="PF")
         .aggregate(total=Sum("course__credits"))
         .get("total") or 0
     )
+    sem_pf_total = (
+        StudentCourse.objects
+        .filter(student=student, course_mode="PF", semester=current_sem)
+        .aggregate(total=Sum("course__credits"))
+        .get("total") or 0
+    )
+
     context = {
         "student": student,
         "enrollments": enrollments,
         "pf_total": pf_total,
+        "sem_pf_total": sem_pf_total,
         "sem_display": current_sem,
     }
     return render(request, "registration/check_status.html", context)
 
 @require_POST
-def apply_pf_changes(request):
-    # Auth: student session
+def apply_mode_changes(request):
     roll_no = request.session.get("roll_no")
     if not roll_no:
         login_url = getattr(settings, "LOGIN_URL", "/login/")
         return redirect(f"{login_url}?next={request.path}")
 
     student = get_object_or_404(Student, roll_no=roll_no)
-
     raw = request.POST.get("payload") or ""
     try:
         data = json.loads(raw)
@@ -531,10 +538,9 @@ def apply_pf_changes(request):
         messages.error(request, "Invalid update payload.")
         return redirect("check_status_page")
 
-    # Current PF total
-    pf_total = (
+    overall_pf_total = (
         StudentCourse.objects
-        .filter(student=student, is_pass_fail=True)
+        .filter(student=student, course_mode="PF")
         .aggregate(total=Sum("course__credits"))
         .get("total") or 0
     )
@@ -542,39 +548,57 @@ def apply_pf_changes(request):
     applied, blocked = 0, 0
     for item in changes:
         sc_id = item.get("sc_id")
-        to_pf = bool(item.get("to_pf"))
-        sc = StudentCourse.objects.select_related("course","student").filter(id=sc_id, student=student).first()
+        new_mode = item.get("new_mode")
+        if new_mode not in ["REG", "PF", "AUD"]:
+            continue
+
+        sc = StudentCourse.objects.select_related("course", "student").filter(id=sc_id, student=student).first()
         if not sc:
             continue
 
-        # Skip approved courses entirely
+        # Skip approved courses
         if sc.status == "ENR":
             blocked += 1
             continue
 
         credits = sc.course.credits or 0
-        current = bool(sc.is_pass_fail)
+        current_mode = sc.course_mode
 
-        # If no net change, skip
-        if to_pf == current:
+        # Skip no-change
+        if new_mode == current_mode:
             continue
 
-        # Enforce 9-credit cap when turning on
-        next_total = pf_total + credits if to_pf and not current else pf_total - credits if (not to_pf and current) else pf_total
-        if to_pf and next_total > 9:
+        # Calculate PF credit limits
+        sem_pf_total = (
+            StudentCourse.objects
+            .filter(student=student, semester=sc.semester, course_mode="PF")
+            .aggregate(total=Sum("course__credits"))
+            .get("total") or 0
+        )
+
+        next_overall = overall_pf_total
+        next_sem = sem_pf_total
+
+        if new_mode == "PF" and current_mode != "PF":
+            next_overall += credits
+            next_sem += credits
+        elif current_mode == "PF" and new_mode != "PF":
+            next_overall -= credits
+            next_sem -= credits
+
+        if new_mode == "PF" and (next_overall > 9 or next_sem > 6):
             blocked += 1
             continue
 
-        # Apply
-        sc.is_pass_fail = to_pf
-        sc.save(update_fields=["is_pass_fail"])
-        pf_total = next_total
+        sc.course_mode = new_mode
+        sc.save(update_fields=["course_mode"])
         applied += 1
+        overall_pf_total = next_overall
 
     if applied:
         messages.success(request, f"Applied {applied} change(s).")
     if blocked:
-        messages.warning(request, f"{blocked} change(s) were blocked (approved or over 9 credits).")
+        messages.warning(request, f"{blocked} change(s) blocked (approved or PF limit exceeded).")
 
     return redirect("check_status_page")
 
@@ -929,43 +953,65 @@ def delete_student_by_roll(request, roll_no):
         student.delete()
         return redirect('custom_admin_students')
 
+
 def custom_admin_edit_student(request, roll_no):
     student = get_object_or_404(Student, roll_no=roll_no)
+
     if request.method == "POST":
-        student.roll_no = request.POST.get("roll_no", "").strip().lower()
-        student.first_name = request.POST.get("first_name", "").strip()
-        student.last_name  = request.POST.get("last_name", "").strip()
-        student.email_id   = request.POST.get("email_id", "").strip().lower()
+        # Basic fields (safe .strip() and normalize where needed)
+        new_roll   = (request.POST.get("roll_no") or "").strip().lower()
+        student.roll_no   = new_roll or student.roll_no
+        student.first_name = (request.POST.get("first_name") or "").strip()
+        student.last_name  = (request.POST.get("last_name") or "").strip()
+        student.email_id   = (request.POST.get("email_id") or "").strip().lower()
 
+        # Department (optional)
         dept_id = request.POST.get("department")
-        br_id   = request.POST.get("branch")
-
-        # Resolve FKs safely
         if dept_id:
             try:
                 student.department = Department.objects.get(pk=dept_id)
             except Department.DoesNotExist:
-                messages.error(request, "Selected department does not exist.")
-                return redirect("custom_admin_edit_student", roll_no=student.roll_no)
+                # keep previous value; optionally show a warning
+                messages.warning(request, "Selected department not found. Keeping previous value.")
         else:
             student.department = None
 
+        # Branch (optional)
+        br_id = request.POST.get("branch")
         if br_id:
             try:
                 student.branch = Branch.objects.get(pk=br_id)
             except Branch.DoesNotExist:
-                messages.error(request, "Selected branch does not exist.")
-                return redirect("custom_admin_edit_student", roll_no=student.roll_no)
+                messages.warning(request, "Selected branch not found. Keeping previous value.")
         else:
             student.branch = None
 
-        student.mobile_no = request.POST.get("mobile_no") or None
+        # Mobile number — behave like student_edit_profile
+        mobile_no = (request.POST.get("mobile_no") or "").strip()
+        if mobile_no:
+            try:
+                student.mobile_no = int(mobile_no)
+            except ValueError:
+                # Ignore invalid mobile; do NOT block save or show an error
+                pass
+        else:
+            # Allow clearing
+            student.mobile_no = None
+
+        # Profile image (optional upload/remove, just like profile view)
+        if "profile_image" in request.FILES:
+            student.profile_image = request.FILES["profile_image"]
+        elif "remove_image" in request.POST:
+            if student.profile_image:
+                student.profile_image.delete(save=False)
+            student.profile_image = None
 
         student.save()
         messages.success(request, "Student details updated successfully.")
+        # Return to the same edit page (with possibly changed roll_no)
         return redirect("custom_admin_students")
 
-    # GET: provide dropdown data
+    # GET: render form
     departments = Department.objects.all().order_by('code')
     branches = Branch.objects.all().order_by('name')
     return render(request, "admin/custom_admin_edit_student.html", {
@@ -1124,37 +1170,42 @@ def custom_admin_edit_faculty(request, faculty_id):
     departments = Department.objects.all().order_by('code')
 
     if request.method == "POST":
-        first_name = request.POST.get("first_name", "").strip()
-        last_name  = request.POST.get("last_name", "").strip()
-        email_id   = request.POST.get("email_id", "").strip().lower()
-        mobile_no  = request.POST.get("mobile_no") or None
-        dept_id    = request.POST.get("department")
-        raw_pwd    = request.POST.get("password", "")
+        # Basic text fields
+        faculty.first_name = (request.POST.get("first_name") or "").strip()
+        faculty.last_name  = (request.POST.get("last_name") or "").strip()
+        faculty.email_id   = (request.POST.get("email_id") or "").strip().lower()
 
-        # Resolve FK
-        dept = None
+        # Department (optional)
+        dept_id = request.POST.get("department")
         if dept_id:
             try:
-                dept = Department.objects.get(pk=dept_id)
+                faculty.department = Department.objects.get(pk=dept_id)
             except Department.DoesNotExist:
-                messages.error(request, "Selected department does not exist.")
-                return redirect("custom_admin_edit_faculty", faculty_id=faculty.id)
+                messages.warning(request, "Selected department not found. Keeping previous value.")
 
-        # Assign fields
-        faculty.first_name = first_name
-        faculty.last_name  = last_name
-        faculty.email_id   = email_id
-        faculty.department = dept
-        faculty.mobile_no  = mobile_no
+        # Mobile number — parse like in student_edit_profile
+        mobile_str = (request.POST.get("mobile_no") or "").strip()
+        if mobile_str:
+            try:
+                faculty.mobile_no = int(mobile_str)
+            except ValueError:
+                pass
+        else:
+            # Allow clearing
+            faculty.mobile_no = None
 
-        # Update password only if a new one is provided (avoid double-hashing existing hash)
-        if raw_pwd.strip():
+        # Password (only if provided)
+        raw_pwd = (request.POST.get("password") or "").strip()
+        if raw_pwd:
             faculty.password = make_password(raw_pwd)
 
-        # Update profile image if new file uploaded
-        new_img = request.FILES.get("profile_image")
-        if new_img:
-            faculty.profile_image = new_img
+        # Profile image upload/remove
+        if "profile_image" in request.FILES:
+            faculty.profile_image = request.FILES["profile_image"]
+        elif "remove_image" in request.POST:
+            if faculty.profile_image:
+                faculty.profile_image.delete(save=False)
+            faculty.profile_image = None
 
         faculty.save()
         messages.success(request, "Faculty details updated successfully.")
@@ -1164,8 +1215,6 @@ def custom_admin_edit_faculty(request, faculty_id):
         "faculty": faculty,
         "departments": departments
     })
-
-
 
 def custom_admin_branch(request):
     branches = Branch.objects.select_related("department").order_by("department__code", "name")
@@ -3924,13 +3973,12 @@ from reportlab.lib.pagesizes import letter, A4, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
-from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.enums import TA_CENTER,TA_LEFT
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import mm
+from reportlab.lib.units import mm,inch
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-
 
 
 def database_management_view(request):
@@ -3938,18 +3986,22 @@ def database_management_view(request):
     Main view for database management dashboard
     Loads all data with pagination support
     """
-    
-    # Fetch all data from database
-    students = Student.objects.select_related('branch', 'department').all()
-    faculty = Faculty.objects.select_related('department').all()
-    courses = Course.objects.all()
-    branches = Branch.objects.select_related('department').all()
-    departments = Department.objects.all()
-    enrollments = StudentCourse.objects.select_related('student', 'course').all()
-    categories = Category.objects.all()
-    requirements = ProgramRequirement.objects.select_related('branch').all()
-    
-    # Prepare students data
+
+    # -------------------------------
+    # Fetch all data with sorting
+    # -------------------------------
+    students = Student.objects.select_related('branch', 'department').order_by('roll_no')
+    faculty = Faculty.objects.select_related('department').order_by('first_name')
+    courses = Course.objects.all().order_by('code')
+    branches = Branch.objects.select_related('department').order_by('name')
+    departments = Department.objects.all().order_by('code')
+    enrollments = StudentCourse.objects.select_related('student', 'course').order_by('student__roll_no', 'semester')
+    categories = Category.objects.all().order_by('code')
+    requirements = ProgramRequirement.objects.select_related('branch').order_by('branch__name')
+
+    # -------------------------------
+    # Prepare Students Data
+    # -------------------------------
     students_data = []
     for student in students:
         students_data.append({
@@ -3960,11 +4012,13 @@ def database_management_view(request):
             'email': student.email_id,
             'branch': student.branch.name if student.branch else 'N/A',
             'department': student.department.code if student.department else 'N/A',
-            'semester': student.calculate_current_semester(),  # Use calculated semester
+            'semester': student.calculate_current_semester(),
             'mobile': str(student.mobile_no) if student.mobile_no else 'N/A'
         })
-    
-    # Prepare faculty data
+
+    # -------------------------------
+    # Prepare Faculty Data
+    # -------------------------------
     faculty_data = []
     for fac in faculty:
         course_count = fac.courses.count()
@@ -3977,8 +4031,10 @@ def database_management_view(request):
             'mobile': str(fac.mobile_no) if fac.mobile_no else 'N/A',
             'courses': course_count
         })
-    
-    # Prepare courses data
+
+    # -------------------------------
+    # Prepare Courses Data
+    # -------------------------------
     courses_data = []
     for course in courses:
         enrolled_count = course.enrollments.filter(status__in=['ENR', 'CMP']).count()
@@ -3992,8 +4048,10 @@ def database_management_view(request):
             'status': course.status,
             'enrolled': enrolled_count
         })
-    
-    # Prepare branches data
+
+    # -------------------------------
+    # Prepare Branches Data
+    # -------------------------------
     branches_data = []
     for branch in branches:
         student_count = branch.student_set.count()
@@ -4006,8 +4064,10 @@ def database_management_view(request):
             'students': student_count,
             'courses': course_count
         })
-    
-    # Prepare departments data
+
+    # -------------------------------
+    # Prepare Departments Data
+    # -------------------------------
     departments_data = []
     for dept in departments:
         branch_count = dept.branches.count()
@@ -4021,8 +4081,10 @@ def database_management_view(request):
             'faculty': faculty_count,
             'students': student_count
         })
-    
-    # Prepare enrollments data
+
+    # -------------------------------
+    # Prepare Enrollments Data
+    # -------------------------------
     enrollments_data = []
     for enr in enrollments:
         enrollments_data.append({
@@ -4034,10 +4096,12 @@ def database_management_view(request):
             'status': enr.status,
             'grade': enr.grade or '-',
             'outcome': enr.outcome,
-            'is_pass_fail': enr.is_pass_fail
+            'course_mode': enr.course_mode  # ✅ new field replacing is_pass_fail
         })
-    
-    # Prepare categories data
+
+    # -------------------------------
+    # Prepare Categories Data
+    # -------------------------------
     categories_data = []
     for cat in categories:
         course_count = cat.course_branches.count()
@@ -4047,8 +4111,10 @@ def database_management_view(request):
             'label': cat.label,
             'courses': course_count
         })
-    
-    # Prepare requirements data
+
+    # -------------------------------
+    # Prepare Requirements Data
+    # -------------------------------
     requirements_data = []
     for req in requirements:
         requirements_data.append({
@@ -4057,9 +4123,10 @@ def database_management_view(request):
             'category': req.category,
             'required_credits': req.required_credits
         })
-    
-    # Convert to JSON for template
-    import json
+
+    # -------------------------------
+    # Context for Template
+    # -------------------------------
     context = {
         'students_json': json.dumps(students_data),
         'faculty_json': json.dumps(faculty_data),
@@ -4070,80 +4137,112 @@ def database_management_view(request):
         'categories_json': json.dumps(categories_data),
         'requirements_json': json.dumps(requirements_data),
     }
-    
+
     return render(request, 'admin/database_management.html', context)
 
 
 def edit_database_record(request, record_type, record_id):
-    """
-    View for editing a specific record
-    """
-    
     if request.method == 'POST':
         try:
+            # -------------------- STUDENT --------------------
             if record_type == 'student':
                 student = get_object_or_404(Student, id=record_id)
-                student.first_name = request.POST.get('first_name', student.first_name)
-                student.last_name = request.POST.get('last_name', student.last_name)
-                student.email_id = request.POST.get('email', student.email_id)
-                student.mobile_no = request.POST.get('mobile', student.mobile_no)
-                
+                first_name = request.POST.get('first_name')
+                last_name = request.POST.get('last_name')
+                email = request.POST.get('email')
+                mobile = request.POST.get('mobile')
                 branch_id = request.POST.get('branch')
-                if branch_id:
-                    student.branch = Branch.objects.get(id=branch_id)
-                
+
+                if first_name: student.first_name = first_name
+                if last_name: student.last_name = last_name
+                if email: student.email_id = email
+                if mobile and mobile.isdigit(): student.mobile_no = int(mobile)
+                if branch_id: student.branch = Branch.objects.filter(id=branch_id).first()
+
                 student.save()
-                return JsonResponse({'success': True, 'message': 'Student updated successfully'})
-            
+                messages.success(request, f"✅ Student '{student.first_name}' updated successfully.")
+                return redirect('database_management')
+
+            # -------------------- FACULTY --------------------
             elif record_type == 'faculty':
                 faculty = get_object_or_404(Faculty, id=record_id)
-                faculty.first_name = request.POST.get('first_name', faculty.first_name)
-                faculty.last_name = request.POST.get('last_name', faculty.last_name)
-                faculty.email_id = request.POST.get('email', faculty.email_id)
-                faculty.mobile_no = request.POST.get('mobile', faculty.mobile_no)
-                
+                first_name = request.POST.get('first_name')
+                last_name = request.POST.get('last_name')
+                email = request.POST.get('email')
+                mobile = request.POST.get('mobile')
                 dept_id = request.POST.get('department')
-                if dept_id:
-                    faculty.department = Department.objects.get(id=dept_id)
-                
+
+                if first_name: faculty.first_name = first_name
+                if last_name: faculty.last_name = last_name
+                if email: faculty.email_id = email
+                if mobile and mobile.isdigit(): faculty.mobile_no = int(mobile)
+                if dept_id: faculty.department = Department.objects.filter(id=dept_id).first()
+
                 faculty.save()
-                return JsonResponse({'success': True, 'message': 'Faculty updated successfully'})
-            
+                messages.success(request, f"✅ Faculty '{faculty.first_name}' updated successfully.")
+                return redirect('database_management')
+
+            # -------------------- COURSE --------------------
             elif record_type == 'course':
                 course = get_object_or_404(Course, id=record_id)
-                course.code = request.POST.get('code', course.code)
-                course.name = request.POST.get('name', course.name)
-                course.credits = request.POST.get('credits', course.credits)
-                course.LTPC = request.POST.get('ltpc', course.LTPC)
-                course.slot = request.POST.get('slot', course.slot)
-                course.status = request.POST.get('status', course.status)
+                code = request.POST.get('code')
+                name = request.POST.get('name')
+                credits = request.POST.get('credits')
+                ltpc = request.POST.get('ltpc')
+                slot = request.POST.get('slot')
+                status = request.POST.get('status')
+
+                if code: course.code = code
+                if name: course.name = name
+                if credits and credits.isdigit(): course.credits = int(credits)
+                if ltpc: course.LTPC = ltpc
+                if slot: course.slot = slot
+                if status: course.status = status
+
                 course.save()
-                return JsonResponse({'success': True, 'message': 'Course updated successfully'})
-            
+                messages.success(request, f"✅ Course '{course.code}' updated successfully.")
+                return redirect('database_management')
+
+            # -------------------- ENROLLMENT --------------------
             elif record_type == 'enrollment':
                 enrollment = get_object_or_404(StudentCourse, id=record_id)
-                enrollment.status = request.POST.get('status', enrollment.status)
-                enrollment.grade = request.POST.get('grade', enrollment.grade)
-                enrollment.outcome = request.POST.get('outcome', enrollment.outcome)
-                enrollment.is_pass_fail = request.POST.get('is_pass_fail', 'false') == 'true'
+                status = request.POST.get('status')
+                grade = request.POST.get('grade')
+                outcome = request.POST.get('outcome')
+                course_mode = request.POST.get('course_mode')
+
+                if status: enrollment.status = status
+                if grade: enrollment.grade = grade
+                if outcome: enrollment.outcome = outcome
+                if course_mode in ['REG', 'PF', 'AUD']:
+                    enrollment.course_mode = course_mode
+
                 enrollment.save()
-                return JsonResponse({'success': True, 'message': 'Enrollment updated successfully'})
-            
+                messages.info(request, f"ℹ️ Enrollment record for '{enrollment.student.roll_no}' updated.")
+                return redirect('database_management')
+
+            # -------------------- REQUIREMENT --------------------
             elif record_type == 'requirement':
                 requirement = get_object_or_404(ProgramRequirement, id=record_id)
-                requirement.required_credits = request.POST.get('required_credits', requirement.required_credits)
+                required_credits = request.POST.get('required_credits')
+                if required_credits and required_credits.isdigit():
+                    requirement.required_credits = int(required_credits)
                 requirement.save()
-                return JsonResponse({'success': True, 'message': 'Requirement updated successfully'})
-            
+                messages.success(request, f"✅ Requirement record updated successfully.")
+                return redirect('database_management')
+
+            # -------------------- INVALID TYPE --------------------
             else:
-                return JsonResponse({'success': False, 'error': 'Invalid record type'})
-        
+                messages.error(request, "❌ Invalid record type specified.")
+                return redirect('database_management')
+
         except Exception as e:
-            return JsonResponse({'success': False, 'error': str(e)})
-    
-    # GET request - show edit form
+            messages.error(request, f"⚠️ Error while updating record: {str(e)}")
+            return redirect('database_management')
+
+    # -------------------- GET REQUEST: Edit Form --------------------
     context = {}
-    
+
     if record_type == 'student':
         student = get_object_or_404(Student, id=record_id)
         branches = Branch.objects.all()
@@ -4152,7 +4251,7 @@ def edit_database_record(request, record_type, record_id):
             'record': student,
             'branches': branches
         }
-    
+
     elif record_type == 'faculty':
         faculty = get_object_or_404(Faculty, id=record_id)
         departments = Department.objects.all()
@@ -4161,7 +4260,7 @@ def edit_database_record(request, record_type, record_id):
             'record': faculty,
             'departments': departments
         }
-    
+
     elif record_type == 'course':
         course = get_object_or_404(Course, id=record_id)
         context = {
@@ -4169,7 +4268,7 @@ def edit_database_record(request, record_type, record_id):
             'record': course,
             'slots': Course.SLOT_CHOICES
         }
-    
+
     elif record_type == 'enrollment':
         enrollment = get_object_or_404(StudentCourse, id=record_id)
         context = {
@@ -4177,17 +4276,18 @@ def edit_database_record(request, record_type, record_id):
             'record': enrollment,
             'statuses': StudentCourse.STATUS,
             'outcomes': StudentCourse.OUTCOME,
-            'grades': StudentCourse.GRADES
+            'grades': StudentCourse.GRADES,
+            'modes': StudentCourse.COURSE_MODE,
         }
-    
+
     elif record_type == 'requirement':
         requirement = get_object_or_404(ProgramRequirement, id=record_id)
         context = {
             'record_type': 'Requirement',
             'record': requirement
         }
-    
-    return render(request, 'edit_record.html', context)
+
+    return render(request, 'admin/edit_record.html', context)
 
 
 @require_http_methods(["POST"])
@@ -4322,26 +4422,6 @@ def filter_students(request):
     if branches:
         students = students.filter(branch__name__in=branches)
     
-    # Filter by semester - UPDATED for multiple values
-    semesters = request.GET.getlist('semester')
-    if semesters:
-        # Convert to integers for comparison
-        semester_ints = [int(s) for s in semesters]
-        # Filter by calculated semester
-        filtered_students = []
-        for student in students:
-            if student.calculate_current_semester() in semester_ints:
-                filtered_students.append(student)
-        students = filtered_students
-    
-    # Filter by department - UPDATED for multiple values
-    departments = request.GET.getlist('department')
-    if departments:
-        if isinstance(students, list):
-            # If already filtered by semester (list)
-            students = [s for s in students if s.department and s.department.code in departments]
-        else:
-            students = students.filter(department__code__in=departments)
     
     # Prepare data rows
     data = []
@@ -4360,7 +4440,6 @@ def filter_students(request):
         ])
     
     return data
-
 
 def filter_faculty(request):
     """Filter faculty based on query parameters"""
@@ -4579,20 +4658,20 @@ def export_to_excel(data, headers, title):
 
 
 def export_to_pdf(data, headers, title):
-    """Export data to PDF format"""
+    """Export data to PDF format with wrapped text and optional email exclusion"""
     response = HttpResponse(content_type='application/pdf')
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     filename = f"{title.replace(' ', '_')}_{timestamp}.pdf"
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
-    
-    # Create PDF
+
+    # Create PDF document
     doc = SimpleDocTemplate(response, pagesize=landscape(A4),
-                           rightMargin=30, leftMargin=30,
-                           topMargin=30, bottomMargin=30)
-    
+                            rightMargin=30, leftMargin=30,
+                            topMargin=30, bottomMargin=30)
+
     elements = []
     styles = getSampleStyleSheet()
-    
+
     # Title
     title_style = ParagraphStyle(
         'CustomTitle',
@@ -4602,27 +4681,68 @@ def export_to_pdf(data, headers, title):
         spaceAfter=20,
         alignment=TA_CENTER
     )
-    
+
     title_para = Paragraph(f"{title}<br/>{datetime.now().strftime('%B %d, %Y %H:%M')}", title_style)
     elements.append(title_para)
-    elements.append(Spacer(1, 0.3*inch))
-    
-    # Prepare table data
-    table_data = [headers] + data[:100]  # Limit to 100 rows for PDF
-    
-    # Calculate column widths
-    available_width = landscape(A4)[0] - 60  # Total width minus margins
-    col_width = available_width / len(headers)
-    col_widths = [col_width] * len(headers)
-    
+    elements.append(Spacer(1, 0.3 * inch))
+
+    # ------------------------------------
+    # 🧹 Remove email column for Students
+    # ------------------------------------
+    if "Student" in title or "Students" in title:
+        if "Email" in headers:
+            email_index = headers.index("Email")
+            headers.pop(email_index)
+            for i in range(len(data)):
+                if len(data[i]) > email_index:
+                    data[i].pop(email_index)
+
+    # Limit to 100 rows
+    table_data = [headers]
+    for row in data[:100]:
+        wrapped_row = []
+        for cell in row:
+            # Convert everything to string safely
+            text = str(cell) if cell is not None else ""
+            # Wrap long text
+            wrapped_row.append(Paragraph(text.replace("\n", "<br/>"), styles["Normal"]))
+        table_data.append(wrapped_row)
+
+    # ------------------------------------
+    # Dynamic column width adjustment
+    # ------------------------------------
+    total_width = landscape(A4)[0] - 60
+    col_count = len(headers)
+
+    # Heuristic: wider columns for name/code, smaller for numeric fields
+    col_widths = []
+    for header in headers:
+        if any(k in header.lower() for k in ["name", "course", "branch", "department"]):
+            col_widths.append(total_width * 0.18)  # ~18% width for long text
+        elif any(k in header.lower() for k in ["roll", "id"]):
+            col_widths.append(total_width * 0.12)
+        elif any(k in header.lower() for k in ["credits", "sem", "status", "grade"]):
+            col_widths.append(total_width * 0.1)
+        else:
+            col_widths.append(total_width * 0.12)
+
+    # Normalize if total exceeds width
+    width_sum = sum(col_widths)
+    if width_sum > total_width:
+        scale = total_width / width_sum
+        col_widths = [w * scale for w in col_widths]
+
+    # ------------------------------------
     # Create table
+    # ------------------------------------
     table = Table(table_data, colWidths=col_widths, repeatRows=1)
-    
-    # Style table
+
+    # Table style
     table_style = TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0d6efd')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, 0), 10),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
@@ -4630,23 +4750,31 @@ def export_to_pdf(data, headers, title):
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
         ('FONTSIZE', (0, 1), (-1, -1), 8),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
     ])
-    
+
     table.setStyle(table_style)
     elements.append(table)
-    
-    # Add note if data was truncated
+
+    # ------------------------------------
+    # Add note if data truncated
+    # ------------------------------------
     if len(data) > 100:
-        elements.append(Spacer(1, 0.3*inch))
+        elements.append(Spacer(1, 0.3 * inch))
         note = Paragraph(
-            f"<i>Note: Showing first 100 of {len(data)} records. For complete data, please use Excel or CSV format.</i>",
-            styles['Normal']
+            f"<i>Note: Showing first 100 of {len(data)} records. For full export, please use Excel or CSV format.</i>",
+            styles["Normal"]
         )
         elements.append(note)
-    
+
     doc.build(elements)
     return response
+
+
 
 def faculty_view_courses_for_grades(request, faculty_id):
     faculty = get_object_or_404(Faculty, id=faculty_id)
@@ -5439,3 +5567,200 @@ def admin_fee_upload_csv(request):
         return redirect("admin_fee_dashboard")
 
     return render(request, "admin/fee_upload_csv.html")
+
+def admin_timetable_dashboard(request):
+    """
+    Centralized Timetable Management Dashboard:
+    - Lists all courses
+    - Sorts by courses with defined timetables first
+    - Provides search + add/edit modal data
+    """
+    # Annotate each course with the number of timetable entries
+    courses = (
+        Course.objects.annotate(timetable_count=Count("timetables"))
+        .prefetch_related("timetables", "faculties")
+        .order_by("-timetable_count", "code")  # Courses with timetables first
+    )
+
+    days = Timetable.DAYS
+
+    context = {
+        "courses": courses,
+        "days": days,
+    }
+
+    return render(request, "admin/admin_timetable.html", context)
+
+
+def admin_timetable_add(request):
+    """
+    Handle adding a new timetable entry from admin dashboard
+    """
+    if request.method == "POST":
+        course_id = request.POST.get("course")
+        faculty_id = request.POST.get("faculty")
+        day = request.POST.get("day")
+        start_time = request.POST.get("start_time")
+        end_time = request.POST.get("end_time")
+        location = request.POST.get("location")
+        remarks = request.POST.get("remarks")
+
+        if not course_id or not day or not start_time or not end_time:
+            messages.error(request, "Please fill all required fields.")
+            return redirect("admin_timetable_dashboard")
+
+        try:
+            course = Course.objects.get(id=course_id)
+            faculty = Faculty.objects.get(id=faculty_id) if faculty_id else None
+
+            # Conflict check
+            exists = Timetable.objects.filter(
+                course=course,
+                day=day,
+                start_time=start_time,
+                end_time=end_time
+            ).exists()
+            if exists:
+                messages.warning(request, "A timetable entry for this course and time already exists.")
+                return redirect("admin_timetable_dashboard")
+
+            Timetable.objects.create(
+                course=course,
+                faculty=faculty,
+                day=day,
+                start_time=start_time,
+                end_time=end_time,
+                location=location,
+                remarks=remarks,
+            )
+            messages.success(request, "Timetable entry added successfully.")
+        except Exception as e:
+            messages.error(request, f"Error adding timetable: {e}")
+
+    return redirect("admin_timetable_dashboard")
+
+
+def admin_timetable_delete(request, timetable_id):
+    """
+    Delete a timetable entry by ID
+    """
+    try:
+        timetable = Timetable.objects.get(id=timetable_id)
+        timetable.delete()
+        messages.success(request, "Timetable entry deleted successfully.")
+    except Timetable.DoesNotExist:
+        messages.error(request, "Timetable entry not found.")
+    return redirect("admin_timetable_dashboard")
+
+
+def admin_timetable_edit(request, timetable_id):
+    """
+    Edit an existing timetable entry (central admin control)
+    """
+    timetable = get_object_or_404(Timetable, id=timetable_id)
+
+    if request.method == "POST":
+        try:
+            course_id = request.POST.get("course")
+            faculty_id = request.POST.get("faculty")
+            day = request.POST.get("day")
+            start_time = request.POST.get("start_time")
+            end_time = request.POST.get("end_time")
+            location = request.POST.get("location")
+            remarks = request.POST.get("remarks")
+
+            if not course_id or not day or not start_time or not end_time:
+                messages.error(request, "All required fields must be filled.")
+                return redirect("admin_timetable_dashboard")
+
+            # Conflict check (excluding current record)
+            exists = Timetable.objects.filter(
+                course_id=course_id,
+                day=day,
+                start_time=start_time,
+                end_time=end_time
+            ).exclude(id=timetable_id).exists()
+            if exists:
+                messages.warning(request, "A conflicting timetable entry already exists.")
+                return redirect("admin_timetable_dashboard")
+
+            timetable.course_id = course_id
+            timetable.faculty_id = faculty_id if faculty_id else None
+            timetable.day = day
+            timetable.start_time = start_time
+            timetable.end_time = end_time
+            timetable.location = location
+            timetable.remarks = remarks
+            timetable.save()
+
+            messages.success(request, "Timetable entry updated successfully.")
+        except Exception as e:
+            messages.error(request, f"Error updating timetable: {e}")
+
+    return redirect("admin_timetable_dashboard")
+
+
+def admin_attendance_dashboard(request):
+    """
+    Shows all courses with attendance summary
+    Courses with enrolled students appear at the top
+    """
+    # Annotate courses safely (avoid division by zero)
+    courses = (
+        Course.objects.annotate(
+            total_students=Count("attendance_records__student", distinct=True),
+            avg_attendance=Avg(
+                Case(
+                    When(
+                        attendance_records__total_classes__gt=0,
+                        then=ExpressionWrapper(
+                            (F("attendance_records__attended_classes") * 100.0) /
+                            F("attendance_records__total_classes"),
+                            output_field=FloatField(),
+                        )
+                    ),
+                    default=Value(0.0),
+                    output_field=FloatField(),
+                )
+            ),
+        )
+        .order_by("-total_students", "-avg_attendance", "code")
+    )
+
+    return render(request, "admin/admin_attendance_dashboard.html", {"courses": courses})
+
+
+def admin_course_attendance(request, course_id):
+    """
+    Shows attendance for each student in the selected course
+    """
+    course = get_object_or_404(Course, id=course_id)
+    enrollments = StudentCourse.objects.filter(course=course)
+    student_ids = [e.student.id for e in enrollments]
+    
+    # Prefill attendance records if missing
+    for sid in student_ids:
+        Attendance.objects.get_or_create(student_id=sid, course=course)
+
+    records = (
+        Attendance.objects.filter(course=course)
+        .select_related("student")
+        .order_by("student__roll_no")
+    )
+
+    if request.method == "POST":
+        for rec in records:
+            total = request.POST.get(f"total_{rec.id}")
+            attended = request.POST.get(f"attended_{rec.id}")
+            if total is not None and attended is not None:
+                rec.total_classes = int(total)
+                rec.attended_classes = int(attended)
+                rec.save()
+        messages.success(request, "Attendance updated successfully.")
+        return redirect("admin_course_attendance", course_id=course.id)
+
+    return render(request, "admin/admin_course_attendance.html", {
+        "course": course,
+        "records": records
+    })
+

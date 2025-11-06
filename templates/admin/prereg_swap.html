@@ -4,17 +4,81 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Swap Courses | Sootrank Admin</title>
+
+  <!-- Bootstrap & Icons -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+
   <style>
-    body{ background:#f8f9fa; }
-    .card{ box-shadow:0 8px 20px rgba(0,0,0,.08); }
-    .code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-    .course-list{ max-height: 520px; overflow:auto; }
-    .sticky-top-20{ position:sticky; top:20px; z-index: 10; }
+    /* ===== Unified Sootrank Admin Theme (CSS only) ===== */
+    :root{
+      --color-primary:#34495e;      /* navbar & headings */
+      --color-accent:#3498db;       /* primary actions */
+      --color-bg:#ecf0f1;           /* page background */
+      --color-surface:#ffffff;      /* cards */
+      --color-text:#2c3e50;
+      --border:#e6ecf1;
+      --radius:12px;
+      --shadow-subtle:0 2px 8px rgba(0,0,0,.06);
+      --shadow-hover:0 12px 24px rgba(52,152,219,.12);
+    }
+
+    body{
+      background:var(--color-bg);
+      color:var(--color-text);
+      font-family:"Segoe UI", Inter, Roboto, Arial, sans-serif;
+      -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+      font-size:14px; margin:0;
+    }
+
+    /* Navbar */
+    .navbar-dark.bg-primary{
+      background:linear-gradient(180deg, var(--color-primary), #2f4252) !important;
+      border-bottom:1px solid rgba(255,255,255,.06);
+      min-height:64px;
+    }
+    .navbar-brand{ font-weight:700 }
+
+    /* Cards */
+    .card{
+      background:var(--color-surface);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow-subtle);
+    }
+    .card:hover{ box-shadow:var(--shadow-hover); }
+
+    /* Buttons */
+    .btn-primary{
+      background-color:var(--color-accent) !important;
+      border-color:var(--color-accent) !important;
+      box-shadow:var(--shadow-subtle);
+    }
+    .btn-primary:hover{ box-shadow:var(--shadow-hover); }
+    .btn-outline-light{ box-shadow:var(--shadow-subtle); }
+    .btn-outline-light:hover{ box-shadow:var(--shadow-hover); }
+    .btn-warning{ box-shadow:var(--shadow-subtle); }
+    .btn-warning:hover{ box-shadow:var(--shadow-hover); }
+
+    /* Forms */
+    .form-label{ font-weight:600; }
+    .form-control, .form-select{ border-color:#dfe7ee; }
+    .form-control:focus, .form-select:focus{
+      border-color:var(--color-accent);
+      box-shadow:0 0 0 .2rem rgba(52,152,219,.15);
+    }
+
+    /* Table-ish / code cells */
+    .code{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    /* Utilities */
+    .course-list{ max-height:520px; overflow:auto; }
   </style>
 </head>
 <body>
+  <!-- Standard Sootrank Admin navbar -->
   <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm mb-4">
     <div class="container">
       <a class="navbar-brand fw-bold" href="{% url 'custom_admin_home' %}">Sootrank Admin</a>
@@ -26,14 +90,17 @@
     </div>
   </nav>
 
-  <div class="container" style="max-width: 1120px;">
+  <div class="container" style="max-width:1120px;">
     {% if messages %}
-      <div class="mb-3">
-        {% for message in messages %}
-          <div class="alert alert-{{ message.tags }} mb-2" role="alert">{{ message }}</div>
-        {% endfor %}
+  <div class="container mt-3" style="max-width:700px;">
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
       </div>
-    {% endif %}
+    {% endfor %}
+  </div>
+{% endif %}
 
     <div class="row g-4">
       <!-- Left: course search, slot filter, and list -->
@@ -43,7 +110,7 @@
             <div class="d-flex align-items-end justify-content-between mb-3">
               <h5 class="mb-0">Course Directory</h5>
             </div>
-            <!-- Filter bar -->
+
             <form method="get" class="row g-2 align-items-end mb-3">
               <div class="col-sm-7">
                 <label class="form-label mb-1">Search</label>
@@ -53,13 +120,10 @@
                 <label class="form-label mb-1">Slot</label>
                 <select name="slot" class="form-select">
                   <option value="">All</option>
-                  <option value="A" {% if request.GET.slot == "A" %}selected{% endif %}>A</option>
-                  <option value="B" {% if request.GET.slot == "B" %}selected{% endif %}>B</option>
-                  <option value="C" {% if request.GET.slot == "C" %}selected{% endif %}>C</option>
-                  <option value="D" {% if request.GET.slot == "D" %}selected{% endif %}>D</option>
-                  <option value="E" {% if request.GET.slot == "E" %}selected{% endif %}>E</option>
-                  <option value="F" {% if request.GET.slot == "F" %}selected{% endif %}>F</option>
-                  <option value="G" {% if request.GET.slot == "G" %}selected{% endif %}>G</option>
+                  {% for s in "ABCDEFGH" %}
+                    <option value="{{ s }}" {% if request.GET.slot == s %}selected{% endif %}>{{ s }}</option>
+                  {% endfor %}
+                  <option value="FS" {% if request.GET.slot == "FS" %}selected{% endif %}>FS</option>
                 </select>
               </div>
               <div class="col-sm-2 d-grid">
@@ -69,7 +133,6 @@
               </div>
             </form>
 
-            <!-- Full list: render all courses passed by the view -->
             <div class="course-list list-group">
               {% for c in courses %}
                 {% if not request.GET.slot or c.slot == request.GET.slot %}
@@ -79,11 +142,11 @@
                   </div>
                 {% endif %}
               {% empty %}
-                <div class="text-muted small">No courses found.</div>
+                <div class="text-muted small px-2 py-1">No courses found.</div>
               {% endfor %}
             </div>
             <div class="small text-muted mt-2">
-              Tip: pick any code from the list and enter it in the swap form on the right. Queries use server-side filtering based on GET parameters. [All items rendered]
+              Tip: pick any code from the list and enter it in the swap form on the right. Queries use server-side filtering based on GET parameters.
             </div>
           </div>
         </div>
@@ -122,7 +185,7 @@
 
             <hr class="my-4" />
             <div class="small text-muted">
-              The course list renders all items provided by the server; use the Slot dropdown to filter A–G and the search to narrow results by code or name. [Query filtering is server-side]
+              The course list renders all items provided by the server; use the Slot dropdown to filter A–H/FS and the search to narrow results by code or name.
             </div>
           </div>
         </div>
@@ -131,5 +194,13 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    setTimeout(function () {
+            document.querySelectorAll('.alert').forEach(function (alert) {
+                var bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close();
+            });
+        }, 4000);
+  </script>
 </body>
 </html>
