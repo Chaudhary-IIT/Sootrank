@@ -252,6 +252,28 @@ class Admins(models.Model):
     email_id=models.EmailField(max_length=255,unique=True)
     password=models.CharField(max_length=255)
 
+    results_mode = models.CharField(
+        max_length=20,
+        choices=[
+            ("FORCE_OPEN", "Force Open"),
+            ("FORCE_CLOSE", "Force Close"),
+            ("DEADLINE", "Deadline")
+        ],
+        default="FORCE_CLOSE"
+    )
+    results_deadline = models.DateTimeField(null=True, blank=True)
+
+    def is_results_visible(self):
+        """Check if results should currently be visible."""
+        from django.utils import timezone
+        if self.results_mode == "FORCE_OPEN":
+            return True
+        elif self.results_mode == "FORCE_CLOSE":
+            return False
+        elif self.results_mode == "DEADLINE":
+            return self.results_deadline and timezone.now() >= self.results_deadline
+        return False
+
     def __str__(self):
         return self.first_name+ " " +self.last_name
 

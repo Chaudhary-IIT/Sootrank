@@ -248,10 +248,16 @@ def students_dashboard(request):
 
     flash = request.session.pop("flash_ctx", {})  # optional, disappears after first load
     semesters = StudentCourse.objects.filter(student=student).order_by('semester').values_list('semester', flat=True).distinct()
+    results_visible = False
+    admin = Admins.objects.first()
+    if admin:
+        results_visible = admin.is_results_visible()
+
     context = {
         "student": student,
         "full_name": flash.get("full_name"),
         "role_label": flash.get("role_label", "Student"),
+        "results_visible": results_visible,
         "semesters": semesters,
     }
     return render(request, "students_dashboard.html", context)
@@ -3550,9 +3556,12 @@ def grade_results(request, course_code):
         'sort': sort,
     })
 
-
 def student_result_semester_list(request, roll_no):
     student = get_object_or_404(Student, roll_no=roll_no)
+    admin = Admins.objects.first()
+
+    results_visible = admin.is_results_visible() if admin else False
+    current_sem = student.calculate_current_semester()
 
     semesters = (
         student.enrollments
@@ -3562,10 +3571,13 @@ def student_result_semester_list(request, roll_no):
         .order_by('semester')
     )
 
-    return render(request, "student/result_semester_list.html", {
+    context = {
         "student": student,
         "semesters": semesters,
-    })
+        "current_sem": current_sem,
+        "results_visible": results_visible,
+    }
+    return render(request, "student/result_semester_list.html", context)
 
 def student_view_results(request, student_id, semester):
     student = get_object_or_404(Student, id=student_id)
@@ -3671,10 +3683,20 @@ def student_result_pdf(request, student_id, semester):
     response["Content-Disposition"] = f"attachment; filename=Marksheet_{student.roll_no}_Sem_{semester}.pdf"
     return response
 
+from django.db.models import Count, Q
+from django.shortcuts import render, redirect
+from django.contrib import messages
+from django.utils import timezone
+
+
+def get_main_admin():
+    """Fetch main admin record (assuming 1 admin controls visibility)."""
+    return Admins.objects.first()
+
 
 def admin_grade_management(request):
     """
-    Admin landing page: List all courses with enrolled students
+    Admin landing page: List all courses with enrolled students + control result visibility.
     """
     # Get all courses with at least one enrolled student
     courses = Course.objects.annotate(
@@ -3682,24 +3704,51 @@ def admin_grade_management(request):
     ).filter(enrolled_count__gt=0)
 
     # Prepare course data (no grading_type needed)
-    course_data = []
-    for course in courses:
-        course_data.append({
-            'code': course.code,
-            'name': course.name,
-            'slot': course.slot,
-            'enrolled_count': course.enrolled_count,
-        })
+    course_data = [
+        {
+            'code': c.code,
+            'name': c.name,
+            'slot': c.slot,
+            'enrolled_count': c.enrolled_count,
+        }
+        for c in courses
+    ]
 
     # Get unique semesters and slots for filters
     semesters = StudentCourse.objects.values_list('semester', flat=True).distinct().order_by('semester')
     slots = Course.objects.values_list('slot', flat=True).distinct().order_by('slot')
 
+    # ✅ Fetch result visibility settings from Admin model
+    admin = get_main_admin()
+    if not admin:
+        admin = Admins.objects.create(
+            first_name="Default", last_name="Admin",
+            email_id="admin@example.com", password="admin"
+        )
+
     return render(request, 'admin/assign_grade_management.html', {
         'courses': course_data,
         'semesters': semesters,
         'slots': slots,
+        'admin': admin,  # 👈 Pass to template for mode + deadline
     })
+
+
+def set_result_visibility(request):
+    """
+    Handle result visibility setting form submission.
+    """
+    if request.method == "POST":
+        admin = get_main_admin()
+        mode = request.POST.get("mode")
+        deadline = request.POST.get("deadline") or None
+
+        admin.results_mode = mode
+        admin.results_deadline = deadline
+        admin.save()
+
+        messages.success(request, "Result visibility settings updated successfully!")
+    return redirect("admin_grade_management")
 
 def admin_assign_grades(request, course_code):
     """
@@ -4525,3 +4574,6 @@ def faculty_view_course_grades(request, faculty_id, course_code):
         'course': course,
         'results': results,
     })
+
+
+

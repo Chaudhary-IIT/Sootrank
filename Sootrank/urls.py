@@ -110,8 +110,9 @@ urlpatterns = [
     #-------------(View Results - Instructor)
     path('instructor/<int:faculty_id>/courses/', views.faculty_view_courses_for_grades, name='faculty_view_courses_for_grades'),
     path('instructor/<int:faculty_id>/courses/<str:course_code>/results/', views.faculty_view_course_grades, name='view_results_courses'),
+    #------------(Deadline Management for Results- Admin)
+    path('custom-admin/grades/visibility/', views.set_result_visibility, name='set_result_visibility'),
 ]
-
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT) 
