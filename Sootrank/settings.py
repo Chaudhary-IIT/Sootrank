@@ -84,7 +84,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'sootrank_db',
         'USER': 'sootrank_user',
-        'PASSWORD': 'YO123#yo',
+        'PASSWORD': 'yourpassword',
         'HOST': 'localhost',
         'PORT': '5432',
     }
@@ -139,3 +139,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 MEDIA_URL = "/media/"          
 MEDIA_ROOT = BASE_DIR / "media"
+
+# Razorpay keys (test mode for now)
+RAZORPAY_KEY_ID = "rzp_test_XXXXXXXXXXXX"
+RAZORPAY_KEY_SECRET = "YYYYYYYYYYYYYYYYYYYY"

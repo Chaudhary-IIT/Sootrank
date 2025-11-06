@@ -3,31 +3,111 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Pre‑Reg Reports | Sootrank Admin</title>
+  <title>Pre-Reg Reports | Sootrank Admin</title>
+
+  <!-- Bootstrap & Icons -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+
   <style>
-    body{ background:#f8f9fa; }
-    .card{ box-shadow:0 8px 20px rgba(0,0,0,.06); }
-    .code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    /* ===== Unified Sootrank Admin Theme (CSS only) ===== */
+    :root{
+      --color-primary:#34495e;      /* navbar & headings */
+      --color-accent:#3498db;       /* primary actions */
+      --color-bg:#ecf0f1;           /* page background */
+      --color-surface:#ffffff;      /* cards */
+      --color-text:#2c3e50;
+      --border:#e6ecf1;
+      --radius:12px;
+      --shadow-subtle:0 2px 8px rgba(0,0,0,.06);
+      --shadow-hover:0 12px 24px rgba(52,152,219,.12);
+    }
+
+    body{
+      background:var(--color-bg);
+      color:var(--color-text);
+      font-family:"Segoe UI", Inter, Roboto, Arial, sans-serif;
+      -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+      font-size:14px; margin:0;
+    }
+
+    /* Navbar */
+    .navbar-dark.bg-primary{
+      background:linear-gradient(180deg, var(--color-primary), #2f4252) !important;
+      border-bottom:1px solid rgba(255,255,255,.06);
+      min-height:64px;
+    }
+    .navbar-brand{ font-weight:700 }
+
+    /* Cards */
+    .card{
+      background:var(--color-surface);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow-subtle);
+    }
+    .card:hover{ box-shadow:var(--shadow-hover); }
+
+    /* Buttons */
+    .btn-primary{
+      background-color:var(--color-accent) !important;
+      border-color:var(--color-accent) !important;
+      box-shadow:var(--shadow-subtle);
+    }
+    .btn-primary:hover{ box-shadow:var(--shadow-hover); }
+    .btn-success, .btn-danger, .btn-outline-light{ box-shadow:var(--shadow-subtle); }
+    .btn-success:hover, .btn-danger:hover, .btn-outline-light:hover{ box-shadow:var(--shadow-hover); }
+
+    /* Forms */
+    .form-label{ font-weight:600; }
+    .form-control, .form-select{ border-color:#dfe7ee; }
+    .form-control:focus, .form-select:focus{
+      border-color:var(--color-accent);
+      box-shadow:0 0 0 .2rem rgba(52,152,219,.15);
+    }
+
+    /* Table */
+    .table thead th{
+      background:#f4f8fb !important;
+      border-bottom:1px solid #e8eef5 !important;
+      color:#475569;
+      font-weight:700;
+    }
+    .table tbody tr:hover{ background:#f9fcff; }
+
+    /* Codey cells */
+    .code{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
   </style>
 </head>
 <body>
+  <!-- Standard Sootrank Admin navbar -->
   <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm mb-4">
     <div class="container">
-      <a class="navbar-brand fw-bold" href="#">Sootrank Admin</a>
-      <div class="ms-auto">
+      <a class="navbar-brand fw-bold" href="{% url 'custom_admin_home' %}">Sootrank Admin</a>
+      <div class="ms-auto d-flex gap-2">
         <a href="{% url 'admin_preregistration' %}" class="btn btn-outline-light btn-sm">
           <i class="fa-solid fa-arrow-left me-1"></i> Back
         </a>
       </div>
     </div>
   </nav>
-
-  <div class="container" style="max-width: 1100px;">
+  {% if messages %}
+  <div class="container mt-3" style="max-width:700px;">
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+  <div class="container" style="max-width:1100px;">
+    <!-- Filters -->
     <div class="card mb-3">
       <div class="card-body">
-        <form method="get" class="row g-2 align-items-end">
+        <form method="get" class="row g-3 align-items-end">
           <div class="col-md-7">
             <label class="form-label mb-1">Search</label>
             <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="Code or course name">
@@ -36,24 +116,28 @@
             <label class="form-label mb-1">Slot</label>
             <select name="slot" class="form-select">
               <option value="">All</option>
-              {% for s in "ABCDEFG" %}
+              {% for s in "ABCDEFGH" %}
                 <option value="{{ s }}" {% if slot == s %}selected{% endif %}>{{ s }}</option>
               {% endfor %}
+              <option value="FS" {% if slot == 'FS' %}selected{% endif %}>FS</option>
             </select>
           </div>
           <div class="col-md-2 d-grid">
             <label class="form-label mb-1">&nbsp;</label>
-            <button class="btn btn-primary"><i class="fa-solid fa-filter me-1"></i>Filter</button>
+            <button class="btn btn-primary">
+              <i class="fa-solid fa-filter me-1"></i>Filter
+            </button>
           </div>
         </form>
       </div>
     </div>
 
+    <!-- Table -->
     <div class="card">
       <div class="card-body">
         <div class="table-responsive">
           <table class="table table-hover align-middle">
-            <thead class="table-light">
+            <thead>
               <tr>
                 <th>Slot</th>
                 <th>Code</th>
@@ -88,6 +172,15 @@
     </div>
 
   </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    setTimeout(function () {
+            document.querySelectorAll('.alert').forEach(function (alert) {
+                var bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close();
+            });
+        }, 4000);
+  </script>
 </body>
 </html>

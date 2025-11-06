@@ -1,0 +1,240 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>{{ course.code }} – Attendance | Sootrank Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+  <style>
+    /* ==== THEME (shared) ==== */
+    :root{
+      --color-primary: #34495e;   /* navbar / headings */
+      --color-accent:  #3498db;   /* focus / primary buttons */
+      --color-bg:      #f4f6f8;   /* app background */
+      --color-surface: #ffffff;   /* cards/tables */
+      --color-text:    #2c3e50;   /* main text */
+      --color-muted:   #7f8c8d;   /* muted text */
+      --border:        #e6ecf1;   /* light borders */
+      --radius:        12px;
+      --shadow-subtle: 0 2px 8px rgba(0,0,0,0.06);
+      --shadow-hover:  0 10px 20px rgba(52,152,219,0.12);
+      --container-max: 1140px;
+    }
+
+    body{
+      background-color: var(--color-bg) !important;
+      color: var(--color-text);
+      font-family: "Segoe UI", Roboto, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+    }
+    .text-primary{ color: var(--color-primary) !important; }
+    .muted{ color: var(--color-muted); }
+
+    /* Navbar */
+    .navbar-dark.bg-primary{
+      background: linear-gradient(180deg, var(--color-primary), #2f4252) !important;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      min-height: 64px;
+    }
+    .navbar-brand{ font-weight: 700; font-size: 1.1rem; }
+
+    /* Cards / shells */
+    .card-surface{
+      background: var(--color-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-subtle);
+    }
+    .card-surface:hover{ box-shadow: var(--shadow-hover); transition: box-shadow .2s ease; }
+
+    /* Inputs */
+    .form-control{
+      border-color: var(--border);
+      border-radius: 10px;
+    }
+    .form-control:focus{
+      border-color: var(--color-accent);
+      box-shadow: 0 0 0 .2rem rgba(52,152,219,.15);
+    }
+
+    /* Buttons */
+    .btn-primary{
+      background-color: var(--color-accent) !important;
+      border-color: var(--color-accent) !important;
+      box-shadow: var(--shadow-subtle);
+    }
+    .btn-success{ box-shadow: var(--shadow-subtle); }
+    .btn-primary:hover, .btn-success:hover{ filter: brightness(.98); box-shadow: var(--shadow-hover); }
+
+    /* Table head */
+    .table thead.table-primary{
+      --bs-table-color: #fff;
+      --bs-table-bg: #3a7db3;
+      --bs-table-border-color: #3a7db3;
+    }
+
+    /* Sticky save footer on wide forms (mobile-safe) */
+    .save-bar{
+      position: sticky;
+      bottom: 0;
+      background: var(--color-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-subtle);
+      padding: .75rem;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Sootrank Admin Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm mb-4">
+    <div class="container">
+      <a class="navbar-brand" href="{% url 'custom_admin_home' %}">
+        <i class="fa-solid fa-clipboard-list me-2"></i> Sootrank Admin
+      </a>
+      <div class="ms-auto d-flex gap-2">
+        <a href="{% url 'admin_attendance_dashboard' %}" class="btn btn-outline-light btn-sm">
+          <i class="fa-solid fa-arrow-left me-1"></i> Back to Attendance
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container" style="max-width: var(--container-max);">
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+          {{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    <div class="mb-3">
+      <h2 class="mb-0 text-primary">{{ course.code }} — {{ course.name }}</h2>
+      {% if course.slot %}<div class="muted">Slot: {{ course.slot }}</div>{% endif %}
+    </div>
+
+    <form method="post" id="attendanceForm" class="gap-3 d-flex flex-column">
+      {% csrf_token %}
+
+      <div class="card-surface p-3 p-md-4">
+        <div class="d-flex flex-wrap align-items-center justify-content-between mb-3">
+          <h4 class="mb-2 mb-md-0">Student Attendance Records</h4>
+          <div class="muted small">Tip: Use ↑/↓ keys to adjust numbers quickly.</div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table align-middle">
+            <thead class="table-primary">
+              <tr>
+                <th style="min-width: 120px;">Roll No</th>
+                <th>Name</th>
+                <th style="width: 160px;">Total Classes</th>
+                <th style="width: 160px;">Attended</th>
+                <th style="width: 160px;">Attendance (%)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for rec in records %}
+                <tr>
+                  <td><strong>{{ rec.student.roll_no }}</strong></td>
+                  <td>{{ rec.student.first_name }} {{ rec.student.last_name }}</td>
+                  <td>
+                    <input
+                      type="number"
+                      name="total_{{ rec.id }}"
+                      value="{{ rec.total_classes }}"
+                      class="form-control form-control-sm"
+                      inputmode="numeric"
+                      min="0"
+                      data-kind="total"
+                      data-id="{{ rec.id }}"
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      name="attended_{{ rec.id }}"
+                      value="{{ rec.attended_classes }}"
+                      class="form-control form-control-sm"
+                      inputmode="numeric"
+                      min="0"
+                      data-kind="attended"
+                      data-id="{{ rec.id }}"
+                    />
+                  </td>
+                  <td>
+                    <strong>
+                      {% if rec.attendance_percent is not None %}
+                        {{ rec.attendance_percent|floatformat:1 }}
+                      {% else %}
+                        0.0
+                      {% endif %}
+                    </strong>%
+                  </td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="5" class="text-center text-muted py-3">No students enrolled.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="save-bar">
+        <button type="submit" class="btn btn-success px-4">
+          <i class="fa-solid fa-floppy-disk me-1"></i> Save Changes
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    setTimeout(function () {
+            document.querySelectorAll('.alert').forEach(function (alert) {
+                var bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close();
+            });
+        }, 4000);
+    // Light client-side guard: attended <= total and both >= 0
+    (function(){
+      const form = document.getElementById('attendanceForm');
+      if (!form) return;
+
+      function clampRow(id){
+        const total = form.querySelector('input[data-kind="total"][data-id="'+id+'"]');
+        const attended = form.querySelector('input[data-kind="attended"][data-id="'+id+'"]');
+        if (!total || !attended) return;
+
+        const t = Math.max(0, parseInt(total.value || '0', 10));
+        let a = Math.max(0, parseInt(attended.value || '0', 10));
+        if (a > t) a = t;
+
+        total.value = t;
+        attended.value = a;
+      }
+
+      form.addEventListener('change', (e) => {
+        const id = e.target.getAttribute('data-id');
+        if (id) clampRow(id);
+      });
+
+      form.addEventListener('submit', (e) => {
+        // Validate all rows
+        const ids = new Set(Array.from(form.querySelectorAll('input[data-id]')).map(i => i.getAttribute('data-id')));
+        ids.forEach(clampRow);
+        // allow submit—server remains source of truth
+      });
+    })();
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

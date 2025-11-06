@@ -1,0 +1,234 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Fee Management | Admin | Sootrank</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Icons (optional) -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"/>
+
+  <style>
+    /* ===== Unified Sootrank Admin Theme ===== */
+    :root{
+      --color-primary:#34495e;   /* navbar / headings */
+      --color-accent:#3498db;    /* primary actions */
+      --color-bg:#f4f6f8;        /* page background */
+      --color-surface:#ffffff;   /* cards/tables */
+      --color-text:#2c3e50;
+      --color-muted:#7f8c8d;
+      --border:#e6ecf1;
+      --radius:12px;
+      --shadow-subtle:0 2px 8px rgba(0,0,0,.06);
+      --shadow-hover:0 10px 20px rgba(52,152,219,.12);
+      --container-max:1200px;
+    }
+
+    html,body{height:100%;}
+    body{
+      background:var(--color-bg);
+      font-family: Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color:var(--color-text);
+      margin:0;
+      font-size:14px;
+      -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+    }
+
+    /* Navbar (standard across admin) */
+    .navbar-dark.bg-primary{
+      background: linear-gradient(180deg, var(--color-primary), #2f4252) !important;
+      border-bottom:1px solid rgba(255,255,255,.06);
+      min-height:64px;
+    }
+    .navbar-brand{font-weight:700;font-size:1.1rem;}
+    .navbar .btn{box-shadow:var(--shadow-subtle);}
+
+    /* Page container */
+    .container-main{max-width:var(--container-max); margin:32px auto; padding:0 12px;}
+
+    /* Card-like table wrapper */
+    .table-wrap{
+      background:var(--color-surface);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow-subtle);
+      overflow:hidden;
+    }
+
+    /* Title + toolbar row */
+    .page-title{color:#fff;}
+    .hero-card{
+      background:linear-gradient(135deg, var(--color-primary), #3d6b8a);
+      border-radius:var(--radius);
+      padding:18px 20px;
+      color:#eaf2f6;
+      box-shadow:var(--shadow-subtle);
+      border:1px solid rgba(255,255,255,.08);
+    }
+
+    /* Buttons (respect original functionality) */
+    .btn-primary{
+      background:var(--color-accent) !important;
+      border-color:var(--color-accent) !important;
+    }
+    .btn-primary:hover{filter:brightness(.98); box-shadow:var(--shadow-hover);}
+    .btn-outline-primary{
+      color:var(--color-accent);
+      border-color:var(--color-accent);
+      background:#fff;
+    }
+    .btn-outline-primary:hover{
+      color:#fff; background:var(--color-accent); border-color:var(--color-accent);
+      box-shadow:var(--shadow-hover);
+    }
+
+    /* Table */
+    .table thead th{
+      background:#eef6ff;
+      border-bottom:1px solid var(--border) !important;
+      color:#1f2856;
+      font-weight:700;
+    }
+    .table > :not(caption) > * > *{
+      border-color:var(--border);
+      vertical-align:middle;
+    }
+    .table tbody tr:hover{background:#f7fbff;}
+    .table-bordered{border-color:var(--border) !important;}
+
+    .stat-pill{
+      display:inline-block; padding:.35rem .6rem; border-radius:999px; background:#fff; 
+      border:1px solid rgba(255,255,255,.4); color:#eaf2f6; font-weight:600;
+    }
+
+    .summary-line{color:var(--color-text);}
+    .summary-line .ok{color:#198754; font-weight:600;}
+    .summary-line .pending{color:#b45309; font-weight:600;}
+    .summary-line .bad{color:#dc3545; font-weight:600;}
+
+    .shadow-soft{box-shadow:var(--shadow-subtle);}
+  </style>
+</head>
+<body>
+
+  <!-- Standard Sootrank Admin Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
+    <div class="container">
+      <a class="navbar-brand" href="{% url 'custom_admin_home' %}">Sootrank Admin</a>
+      <!-- keep navbar minimal to avoid changing routes/logic -->
+    </div>
+  </nav>
+  {% if messages %}
+  <div class="container mt-3" style="max-width:700px;">
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+  <div class="container-main">
+    <!-- Header / Summary -->
+    <div class="hero-card mb-3">
+      <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+        <h2 class="page-title fw-bold mb-0">Admin Fee Management</h2>
+        <div class="d-flex align-items-center gap-2">
+          <span class="stat-pill">
+            <i class="fa-solid fa-database me-2"></i>Total: {{ total_records }}
+          </span>
+          <span class="stat-pill">
+            <i class="fa-solid fa-circle-check me-2"></i>Paid: {{ paid_count }}
+          </span>
+          <span class="stat-pill">
+            <i class="fa-solid fa-clock me-2"></i>Pending: {{ pending_count }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div class="d-flex gap-2">
+        <a href="{% url 'admin_fee_add' %}" class="btn btn-primary btn-sm">
+          <i class="fa fa-plus me-1"></i> Add Fee Record
+        </a>
+        <a href="{% url 'admin_fee_upload_csv' %}" class="btn btn-outline-primary btn-sm">
+          <i class="fa fa-upload me-1"></i> Upload CSV
+        </a>
+      </div>
+      <div class="text-end summary-line">
+        <strong>Total:</strong> {{ total_records }} |
+        <span class="ok">Paid:</span> {{ paid_count }} |
+        <span class="pending">Pending:</span> {{ pending_count }}
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="table-wrap">
+      <div class="table-responsive">
+        <table class="table table-bordered align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Roll No</th>
+              <th>Name</th>
+              <th>Branch</th>
+              <th>Semester</th>
+              <th>Amount Due</th>
+              <th>Amount Paid</th>
+              <th>Status</th>
+              <th style="width:110px;">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for student in students %}
+              {% for fee in student.fees.all %}
+              <tr>
+                <td>{{ student.roll_no }}</td>
+                <td>{{ student.first_name }} {{ student.last_name }}</td>
+                <td>{{ student.branch.name }}</td>
+                <td>{{ fee.semester }}</td>
+                <td>₹{{ fee.amount_due }}</td>
+                <td>₹{{ fee.amount_paid }}</td>
+                <td>
+                  {% if fee.status == "Paid" %}
+                    <span class="badge bg-success">Paid</span>
+                  {% elif fee.status == "Pending" %}
+                    <span class="badge bg-warning text-dark">Pending</span>
+                  {% else %}
+                    <span class="badge bg-danger">{{ fee.status }}</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <a href="{% url 'admin_fee_update' fee.id %}" class="btn btn-sm btn-outline-primary">
+                    <i class="fa fa-pen me-1"></i>Edit
+                  </a>
+                </td>
+              </tr>
+              {% endfor %}
+            {% empty %}
+              <tr>
+                <td colspan="8" class="text-center text-muted py-4">No fee records found.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap JS (no functionality changed) -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    setTimeout(function () {
+            document.querySelectorAll('.alert').forEach(function (alert) {
+                var bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close();
+            });
+        }, 4000);
+  </script>
+</body>
+</html>

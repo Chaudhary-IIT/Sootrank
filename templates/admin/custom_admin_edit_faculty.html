@@ -2,95 +2,159 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Edit Faculty - Sootrank Admin</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
-    <style>
-        body {
-            background-color: #f8f9fa;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Edit Faculty - Sootrank Admin</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
 
-        .form-section {
-            max-width: 700px;
-            margin: 40px auto;
-            padding: 25px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 0 18px rgb(0 0 0 / 0.1);
-        }
-    </style>
+  <style>
+    /* ==== THEME VARIABLES (uniform across admin) ==== */
+    :root{
+      --color-primary: #34495e;   /* navbar / headings */
+      --color-accent:  #3498db;   /* focus / primary */
+      --color-bg:      #f4f6f8;   /* app background */
+      --color-surface: #ffffff;   /* cards/tables */
+      --color-text:    #2c3e50;   /* main text */
+      --color-muted:   #7f8c8d;   /* muted text */
+      --border:        #e6ecf1;   /* light borders */
+      --radius:        12px;
+      --shadow-subtle: 0 2px 8px rgba(0,0,0,0.06);
+      --shadow-hover:  0 10px 20px rgba(52,152,219,0.12);
+      --container-max: 1180px;
+    }
+
+    /* ==== BASE ==== */
+    html, body { height: 100%; }
+    body {
+      background-color: var(--color-bg);
+      color: var(--color-text);
+      font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+      margin: 0;
+    }
+    .text-primary{ color: var(--color-primary) !important; }
+    .text-muted{ color: var(--color-muted) !important; }
+
+    /* ==== NAVBAR (markup unchanged) ==== */
+    .navbar-dark.bg-primary{
+      background: linear-gradient(180deg, var(--color-primary), #2f4252) !important;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      min-height: 64px;
+    }
+    .navbar-dark .navbar-brand{
+      font-weight: 700;
+      font-size: 1.15rem;
+    }
+
+    /* ==== CARD / FORM WRAPPER ==== */
+    .form-section{
+      max-width: 700px;
+      margin: 40px auto;
+      padding: 25px;
+      background: var(--color-surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-subtle);
+    }
+    .form-section:hover{ box-shadow: var(--shadow-hover); transition: box-shadow .2s ease; }
+
+    /* ==== FORM CONTROLS ==== */
+    .form-label{ font-weight: 600; color: var(--color-text); }
+    .form-control, .form-select{
+      border-color: var(--border);
+      border-radius: 10px;
+    }
+    .form-control:focus, .form-select:focus{
+      border-color: var(--color-accent);
+      box-shadow: 0 0 0 .2rem rgba(52,152,219,.15);
+    }
+
+    /* ==== BUTTONS ==== */
+    .btn-primary{
+      background-color: var(--color-accent) !important;
+      border-color: var(--color-accent) !important;
+      box-shadow: var(--shadow-subtle);
+    }
+    .btn-secondary{ box-shadow: var(--shadow-subtle); }
+    .btn-primary:hover, .btn-secondary:hover{
+      box-shadow: var(--shadow-hover); filter: brightness(.98);
+    }
+
+    /* ==== IMAGE THUMB ==== */
+    .img-thumbnail{
+      border-color: var(--border);
+      box-shadow: var(--shadow-subtle);
+      border-radius: 10px;
+    }
+  </style>
 </head>
 
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
-        <div class="container">
-            <a class="navbar-brand" href="{% url 'custom_admin_home' %}">
-                Sootrank Admin
-            </a>
-        </div>
-    </nav>
-
-    <div class="form-section">
-        <h2 class="mb-4 text-primary">Edit Faculty Details</h2>
-        <form method="post" enctype="multipart/form-data" action="{% url 'custom_admin_edit_faculty' faculty.id %}">
-            {% csrf_token %}
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <label for="first_name" class="form-label">First Name</label>
-                    <input type="text" class="form-control" id="first_name" name="first_name"
-                        value="{{ faculty.first_name }}" required />
-                </div>
-                <div class="col-md-6">
-                    <label for="last_name" class="form-label">Last Name</label>
-                    <input type="text" class="form-control" id="last_name" name="last_name"
-                        value="{{ faculty.last_name }}" required />
-                </div>
-                <div class="col-md-6">
-                    <label for="email_id" class="form-label">Email</label>
-                    <input type="email" class="form-control" id="email_id" name="email_id"
-                        value="{{ faculty.email_id }}" required />
-                </div>
-                <div class="col-md-6">
-                    <label for="department" class="form-label">Department</label>
-                    <select class="form-select" id="department" name="department" required>
-                        <option value="" {% if not faculty or not faculty.department %}selected{% endif %}>Choose...
-                        </option>
-                        {% for dept in departments %}
-                        <option value="{{ dept.id }}" {% if faculty and faculty.department and faculty.department.id == dept.id %}selected{% endif %}>
-                            {{ dept.code }} - {{ dept.name }}
-                        </option>
-
-                        {% endfor %}
-                    </select>
-
-
-                </div>
-
-                <div class="col-md-6">
-                    <label for="mobile_no" class="form-label">Mobile Number</label>
-                    <input type="text" class="form-control" id="mobile_no" name="mobile_no"
-                        value="{{ faculty.mobile_no }}" />
-                </div>
-                <div class="col-md-6">
-                    <label for="profile_image" class="form-label">Profile Image</label>
-                    <input type="file" class="form-control" id="profile_image" name="profile_image" accept="image/*" />
-                    {% if faculty.profile_image %}
-                    <small class="text-muted">Current Image: </small>
-                    <br />
-                    <img src="{{ faculty.profile_image.url }}" alt="Profile Image" class="img-thumbnail mt-1"
-                        style="max-width: 150px;" />
-                    {% endif %}
-                </div>
-                <div class="col-12 mt-3">
-                    <button type="submit" class="btn btn-primary">Save Changes</button>
-                    <a href="{% url 'custom_admin_faculty' %}" class="btn btn-secondary ms-2">Cancel</a>
-                </div>
-            </div>
-        </form>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
+    <div class="container">
+      <a class="navbar-brand" href="{% url 'custom_admin_home' %}">
+        Sootrank Admin
+      </a>
     </div>
+  </nav>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+  <div class="form-section">
+    <h2 class="mb-4 text-primary">Edit Faculty Details</h2>
+    <form method="post" enctype="multipart/form-data" action="{% url 'custom_admin_edit_faculty' faculty.id %}">
+      {% csrf_token %}
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label for="first_name" class="form-label">First Name</label>
+          <input type="text" class="form-control" id="first_name" name="first_name"
+                 value="{{ faculty.first_name }}" required />
+        </div>
+        <div class="col-md-6">
+          <label for="last_name" class="form-label">Last Name</label>
+          <input type="text" class="form-control" id="last_name" name="last_name"
+                 value="{{ faculty.last_name }}" required />
+        </div>
+        <div class="col-md-6">
+          <label for="email_id" class="form-label">Email</label>
+          <input type="email" class="form-control" id="email_id" name="email_id"
+                 value="{{ faculty.email_id }}" required />
+        </div>
+        <div class="col-md-6">
+          <label for="department" class="form-label">Department</label>
+          <select class="form-select" id="department" name="department" required>
+            <option value="" {% if not faculty or not faculty.department %}selected{% endif %}>Choose...</option>
+            {% for dept in departments %}
+            <option value="{{ dept.id }}" {% if faculty and faculty.department and faculty.department.id == dept.id %}selected{% endif %}>
+              {{ dept.code }} - {{ dept.name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-md-6">
+          <label for="mobile_no" class="form-label">Mobile Number</label>
+          <input type="text" class="form-control" id="mobile_no" name="mobile_no"
+                 value="{{ faculty.mobile_no }}" />
+        </div>
+        <div class="col-md-6">
+          <label for="profile_image" class="form-label">Profile Image</label>
+          <input type="file" class="form-control" id="profile_image" name="profile_image" accept="image/*" />
+          {% if faculty.profile_image %}
+          <small class="text-muted">Current Image: </small>
+          <br />
+          <img src="{{ faculty.profile_image.url }}" alt="Profile Image" class="img-thumbnail mt-1"
+               style="max-width: 150px;" />
+          {% endif %}
+        </div>
+
+        <div class="col-12 mt-3">
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+          <a href="{% url 'custom_admin_faculty' %}" class="btn btn-secondary ms-2">Cancel</a>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 
 </html>

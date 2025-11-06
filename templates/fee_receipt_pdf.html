@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Fee Receipt - Semester {{ fee.semester }}</title>
+<style>
+body { font-family:"Times New Roman",serif; margin:50px; }
+.header { text-align:center; margin-bottom:20px; }
+.header h2 { margin:2px; font-size:20px; }
+.header h3 { margin:2px; font-size:16px; }
+.info { margin-top:30px; font-size:15px; }
+.footer { margin-top:30px; font-size:15px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h2>भारतीय प्रौद्योगिकी संस्थान मंडी</h2>
+  <h2>Indian Institute of Technology Mandi</h2>
+  <h3>Kamand, Himachal Pradesh (175075)</h3>
+  <h3><u>FEE PAYMENT RECEIPT</u></h3>
+</div>
+
+<div class="info">
+  <p><strong>Roll No:</strong> {{ student.roll_no }}</p>
+  <p><strong>Name:</strong> {{ student.first_name }} {{ student.last_name|default_if_none:"" }}</p>
+  <p><strong>Programme:</strong> B.Tech in {{ student.branch }}</p>
+  <p><strong>Semester:</strong> {{ fee.semester }}</p>
+  <p><strong>Amount Paid:</strong> ₹{{ fee.amount_paid }}</p>
+  <p><strong>Payment Date:</strong> {{ fee.payment_time|date:"d M Y, H:i A" }}</p>
+  <p><strong>Status:</strong> {{ fee.status }}</p>
+</div>
+
+<div class="footer">
+  <p><em>This is a computer-generated receipt and does not require a physical signature.</em></p>
+  <p>Date of Issue: {{ fee.payment_time|date:"d M Y" }}</p>
+</div>
+</body>
+</html>

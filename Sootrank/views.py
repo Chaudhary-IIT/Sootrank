@@ -1,25 +1,31 @@
 from collections import defaultdict
-from io import TextIOWrapper
+from io import BytesIO, TextIOWrapper
 import json
+import io
+import os
+import razorpay
 from django.conf import settings
+from django.core.files.storage import FileSystemStorage
 from django.contrib import messages
+from django.views.decorators.csrf import csrf_exempt
 from django.db import IntegrityError, transaction
-from django.db.models import Prefetch, Sum
+from django.db.models import Prefetch, Sum,IntegerField, BigIntegerField,Count, Avg, F, FloatField, ExpressionWrapper,Case, When, Value
 from django.utils.text import slugify
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, HttpResponseForbidden,JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from openpyxl import Workbook
-from Registration.models import Branch, Category, Course, CourseBranch, Department, ProgramRequirement, Student, Faculty, Admins, StudentCourse, AssessmentComponent,AssessmentScore
+from Registration.models import Branch, Category, Course, CourseBranch, Department, ProgramRequirement, Student, Faculty, Admins, StudentCourse, AssessmentComponent,AssessmentScore, Attendance, Timetable,FeeRecord
 from django.contrib.auth import authenticate , login as auth_login
 from django.contrib.auth.hashers import make_password,check_password
-from django.db.models import Count, Q, OuterRef, Exists 
+from django.db.models import Count, Q, OuterRef, Exists ,Max
 from django.views.decorators.http import require_POST,require_http_methods
 from django.template.loader import render_to_string
 from weasyprint import HTML, CSS
 from django.contrib.auth.decorators import login_required
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
+from django.conf import settings
 from urllib.parse import urlencode
 from django.core.files.storage import default_storage
 import re
@@ -93,6 +99,27 @@ def _compute_semester_from_roll_and_today(roll_no: str, today=None) -> int:
     sem = years_delta * 2 + term_index
     return max(1, sem)
 
+CATEGORY_PRIORITY = {
+    "IC": 1,
+    "DC": 2,
+    "DE": 3,
+    "HSS": 4,
+    "IKS": 5,
+    "FE": 6,
+}
+
+# Slot mapping for timetable
+SLOT_SCHEDULE = {
+    "A": [("Monday", "8–8:50 AM"), ("Tuesday", "11–11:50 AM"), ("Thursday", "9–9:50 AM")],
+    "B": [("Monday", "9–9:50 AM"), ("Tuesday", "12–12:50 PM"), ("Thursday", "10–10:50 AM")],
+    "C": [("Monday", "10–10:50 AM"), ("Thursday", "11–11:50 AM"), ("Wednesday", "8–8:50 AM")],
+    "D": [("Monday", "11–11:50 AM"), ("Wednesday", "9–9:50 AM"), ("Thursday", "12–12:50 PM")],
+    "E": [("Monday", "12–12:50 PM"), ("Wednesday", "11–11:50 AM"), ("Friday", "9–9:50 AM")],
+    "F": [("Tuesday", "8–8:50 AM"), ("Wednesday", "10–10:50 AM"), ("Friday", "11–11:50 AM")],
+    "G": [("Tuesday", "9–9:50 AM"), ("Thursday", "8–8:50 AM"), ("Friday", "10–10:50 AM")],
+    "H": [("Tuesday", "10–10:50 AM"), ("Wednesday", "12–12:50 PM"), ("Friday", "8–8:50 AM")],
+    "FS": [("Friday", "2–5 PM")],
+}
 
 # settings flag name
 TEMP_PREREG_OPEN_FLAG = "PREREG_TEMP_OPEN"
@@ -244,17 +271,29 @@ def students_dashboard(request):
     if not roll_no:
         # not logged in or session expired
         return redirect("/")
+
     student = get_object_or_404(Student, roll_no=roll_no)
 
+    # ✅ Always calculate the current semester dynamically
+    computed_semester = student.calculate_current_semester()
+
     flash = request.session.pop("flash_ctx", {})  # optional, disappears after first load
-    semesters = StudentCourse.objects.filter(student=student).order_by('semester').values_list('semester', flat=True).distinct()
+    semesters = (
+        StudentCourse.objects.filter(student=student)
+        .order_by('semester')
+        .values_list('semester', flat=True)
+        .distinct()
+    )
+
     context = {
         "student": student,
+        "computed_semester": computed_semester,  # ✅ pass live semester
         "full_name": flash.get("full_name"),
         "role_label": flash.get("role_label", "Student"),
         "semesters": semesters,
     }
     return render(request, "students_dashboard.html", context)
+
 
 def faculty_dashboard(request):
     email_id = request.session.get("email_id")
@@ -279,7 +318,7 @@ def pre_registration(request):
 
     student = get_object_or_404(Student, roll_no=roll_no)
     branch = student.branch
-    current_sem = _compute_semester_from_roll_and_today(student.roll_no)
+    current_sem = student.calculate_current_semester()
     window_open = _deadline_open()
 
     if request.method == "POST":
@@ -451,39 +490,46 @@ def check_status(request):
         return redirect(f"{login_url}?next={request.path}")
 
     student = get_object_or_404(Student, roll_no=roll_no)
-    current_sem = _compute_semester_from_roll_and_today(student.roll_no)
+    current_sem = student.calculate_current_semester()
 
     enrollments = (
         StudentCourse.objects
         .filter(student=student, semester=current_sem)
         .select_related("course")
         .prefetch_related(Prefetch("course__faculties"))
-        .order_by("course__slot","course__code")
+        .order_by("course__slot", "course__code")
     )
+
     pf_total = (
         StudentCourse.objects
-        .filter(student=student, is_pass_fail=True)
+        .filter(student=student, course_mode="PF")
         .aggregate(total=Sum("course__credits"))
         .get("total") or 0
     )
+    sem_pf_total = (
+        StudentCourse.objects
+        .filter(student=student, course_mode="PF", semester=current_sem)
+        .aggregate(total=Sum("course__credits"))
+        .get("total") or 0
+    )
+
     context = {
         "student": student,
         "enrollments": enrollments,
         "pf_total": pf_total,
+        "sem_pf_total": sem_pf_total,
         "sem_display": current_sem,
     }
     return render(request, "registration/check_status.html", context)
 
 @require_POST
-def apply_pf_changes(request):
-    # Auth: student session
+def apply_mode_changes(request):
     roll_no = request.session.get("roll_no")
     if not roll_no:
         login_url = getattr(settings, "LOGIN_URL", "/login/")
         return redirect(f"{login_url}?next={request.path}")
 
     student = get_object_or_404(Student, roll_no=roll_no)
-
     raw = request.POST.get("payload") or ""
     try:
         data = json.loads(raw)
@@ -492,10 +538,9 @@ def apply_pf_changes(request):
         messages.error(request, "Invalid update payload.")
         return redirect("check_status_page")
 
-    # Current PF total
-    pf_total = (
+    overall_pf_total = (
         StudentCourse.objects
-        .filter(student=student, is_pass_fail=True)
+        .filter(student=student, course_mode="PF")
         .aggregate(total=Sum("course__credits"))
         .get("total") or 0
     )
@@ -503,39 +548,57 @@ def apply_pf_changes(request):
     applied, blocked = 0, 0
     for item in changes:
         sc_id = item.get("sc_id")
-        to_pf = bool(item.get("to_pf"))
-        sc = StudentCourse.objects.select_related("course","student").filter(id=sc_id, student=student).first()
+        new_mode = item.get("new_mode")
+        if new_mode not in ["REG", "PF", "AUD"]:
+            continue
+
+        sc = StudentCourse.objects.select_related("course", "student").filter(id=sc_id, student=student).first()
         if not sc:
             continue
 
-        # Skip approved courses entirely
+        # Skip approved courses
         if sc.status == "ENR":
             blocked += 1
             continue
 
         credits = sc.course.credits or 0
-        current = bool(sc.is_pass_fail)
+        current_mode = sc.course_mode
 
-        # If no net change, skip
-        if to_pf == current:
+        # Skip no-change
+        if new_mode == current_mode:
             continue
 
-        # Enforce 9-credit cap when turning on
-        next_total = pf_total + credits if to_pf and not current else pf_total - credits if (not to_pf and current) else pf_total
-        if to_pf and next_total > 9:
+        # Calculate PF credit limits
+        sem_pf_total = (
+            StudentCourse.objects
+            .filter(student=student, semester=sc.semester, course_mode="PF")
+            .aggregate(total=Sum("course__credits"))
+            .get("total") or 0
+        )
+
+        next_overall = overall_pf_total
+        next_sem = sem_pf_total
+
+        if new_mode == "PF" and current_mode != "PF":
+            next_overall += credits
+            next_sem += credits
+        elif current_mode == "PF" and new_mode != "PF":
+            next_overall -= credits
+            next_sem -= credits
+
+        if new_mode == "PF" and (next_overall > 9 or next_sem > 6):
             blocked += 1
             continue
 
-        # Apply
-        sc.is_pass_fail = to_pf
-        sc.save(update_fields=["is_pass_fail"])
-        pf_total = next_total
+        sc.course_mode = new_mode
+        sc.save(update_fields=["course_mode"])
         applied += 1
+        overall_pf_total = next_overall
 
     if applied:
         messages.success(request, f"Applied {applied} change(s).")
     if blocked:
-        messages.warning(request, f"{blocked} change(s) were blocked (approved or over 9 credits).")
+        messages.warning(request, f"{blocked} change(s) blocked (approved or PF limit exceeded).")
 
     return redirect("check_status_page")
 
@@ -546,21 +609,128 @@ def registered_courses(request):
 # def course_request(request):
 #     return render(request, 'instructor/course_request.html')
 
+
 def student_profile(request):
     roll_no = request.session.get("roll_no")
     if not roll_no:
         login_url = getattr(settings, "LOGIN_URL", "/login/")
         return redirect(f"{login_url}?next={request.path}")
+
     student = get_object_or_404(Student, roll_no=roll_no)
-    return render(request, "student_profile.html", {"student": student})
+    computed_semester = student.calculate_current_semester()
+
+    cumulative = student.calculate_cumulative_metrics()
+    cgpa = cumulative.get("CGPA", 0)
+    total_earned = cumulative.get("TECR", 0)
+
+    requirements = ProgramRequirement.objects.filter(branch=student.branch)
+    total_required = sum(req.required_credits or 0 for req in requirements)
+
+    # Base queryset: only CMP & PAS
+    completed_qs = (
+        StudentCourse.objects.filter(student=student, status="CMP", outcome="PAS")
+        .select_related("course")
+        .prefetch_related(
+            Prefetch(
+                "course__coursebranch_set",
+                queryset=CourseBranch.objects.filter(branch=student.branch).prefetch_related("categories"),
+                to_attr="cb_for_branch"
+            )
+        )
+    )
+
+    # Step 1: Determine each course’s primary (highest priority) category
+    course_to_category = {}
+    for sc in completed_qs:
+        highest_cat = None
+        highest_rank = float('inf')
+        for cb in getattr(sc.course, "cb_for_branch", []):
+            for cat in cb.categories.all():
+                rank = CATEGORY_PRIORITY.get(cat.code.upper(), 999)
+                if rank < highest_rank:
+                    highest_rank = rank
+                    highest_cat = cat.code.upper()
+        if highest_cat:
+            course_to_category[sc.course.code] = {
+                "category": highest_cat,
+                "course": sc.course,
+                "semester": sc.semester,
+            }
+
+    # Step 2: Group courses by their final assigned category
+    completed_by_category = {}
+    for data in course_to_category.values():
+        cat = data["category"]
+        course = data["course"]
+        if cat not in completed_by_category:
+            completed_by_category[cat] = []
+        completed_by_category[cat].append({
+            "code": course.code,
+            "name": course.name,
+            "credits": course.credits,
+            "slot": course.slot,
+            "semester": data["semester"],
+        })
+
+    # Step 3: Compute category-wise credit progress
+    categories_progress = []
+    for req in requirements:
+        cat_code = req.category
+        cat_courses = completed_by_category.get(cat_code, [])
+        completed_sum = sum(c["credits"] for c in cat_courses)
+        remaining = max(req.required_credits - completed_sum, 0)
+        percent = (completed_sum / req.required_credits * 100) if req.required_credits else 0
+        categories_progress.append({
+            "category": cat_code,
+            "required": req.required_credits,
+            "completed": completed_sum,
+            "remaining": remaining,
+            "percent": round(min(percent, 100), 1),
+        })
+
+    # Step 4: Totals
+    remaining_total = max(total_required - total_earned, 0)
+    overall_percent = round((total_earned / total_required) * 100, 1) if total_required else 0
+    overall_percent = min(overall_percent, 100.0)
+
+    context = {
+        "student": student,
+        "computed_semester": computed_semester,
+        "cgpa": cgpa,
+        "total_earned": total_earned,
+        "total_required": total_required,
+        "remaining": remaining_total,
+        "overall_percent": overall_percent,
+        "categories_progress": categories_progress,
+        "completed_by_category": completed_by_category,
+    }
+    return render(request, "student_profile.html", context)
+
 
 def faculty_profile(request):
     email_id = request.session.get("email_id")
     if not email_id:
         login_url = getattr(settings, "LOGIN_URL", "/login/")
         return redirect(f"{login_url}?next={request.path}")
+
     faculty = get_object_or_404(Faculty, email_id=email_id)
-    return render(request, "instructor/profile.html", {"faculty": faculty})
+
+    # All courses the faculty is teaching (linked via M2M)
+    teaching_courses = Course.objects.filter(faculties=faculty).distinct()
+    total_courses = teaching_courses.count()
+
+    # Total unique students enrolled in these courses
+    students_enrolled = StudentCourse.objects.filter(
+        course__in=teaching_courses, status='ENR'
+    ).values('student').distinct().count()
+
+    context = {
+        "faculty": faculty,
+        "total_courses": total_courses,
+        "students_enrolled": students_enrolled,
+        "teaching_courses": teaching_courses,
+    }
+    return render(request, "instructor/profile.html", context)
 
 
 def student_edit_profile(request):
@@ -568,18 +738,35 @@ def student_edit_profile(request):
     if not roll_no:
         login_url = getattr(settings, "LOGIN_URL", "/login/")
         return redirect(f"{login_url}?next={request.path}")
+
     student = get_object_or_404(Student, roll_no=roll_no)
+
     if request.method == "POST":
-        form = StudentEditForm(request.POST, request.FILES, instance=student)
-        if form.is_valid():
-            form.save()
-            return redirect(reverse("student_profile"))
-    else:
-        form = StudentEditForm(instance=student)
-    context = {
-        "form": form,
-        "student": student,
-    }
+        # Handle mobile number safely
+        mobile_no = request.POST.get("mobile_no", "").strip()
+        if mobile_no:
+            try:
+                student.mobile_no = int(mobile_no)
+            except ValueError:
+                # Ignore if not numeric (user error)
+                pass
+        else:
+            student.mobile_no = None  # Allow clearing mobile number
+
+        # Handle image upload
+        if "profile_image" in request.FILES:
+            student.profile_image = request.FILES["profile_image"]
+
+        # Handle image removal
+        elif "remove_image" in request.POST:
+            if student.profile_image:
+                student.profile_image.delete(save=False)
+            student.profile_image = None
+
+        student.save()
+        return redirect(reverse("student_profile"))
+
+    context = {"student": student}
     return render(request, "student_edit_profile.html", context)
 
 
@@ -766,43 +953,65 @@ def delete_student_by_roll(request, roll_no):
         student.delete()
         return redirect('custom_admin_students')
 
+
 def custom_admin_edit_student(request, roll_no):
     student = get_object_or_404(Student, roll_no=roll_no)
+
     if request.method == "POST":
-        student.roll_no = request.POST.get("roll_no", "").strip().lower()
-        student.first_name = request.POST.get("first_name", "").strip()
-        student.last_name  = request.POST.get("last_name", "").strip()
-        student.email_id   = request.POST.get("email_id", "").strip().lower()
+        # Basic fields (safe .strip() and normalize where needed)
+        new_roll   = (request.POST.get("roll_no") or "").strip().lower()
+        student.roll_no   = new_roll or student.roll_no
+        student.first_name = (request.POST.get("first_name") or "").strip()
+        student.last_name  = (request.POST.get("last_name") or "").strip()
+        student.email_id   = (request.POST.get("email_id") or "").strip().lower()
 
+        # Department (optional)
         dept_id = request.POST.get("department")
-        br_id   = request.POST.get("branch")
-
-        # Resolve FKs safely
         if dept_id:
             try:
                 student.department = Department.objects.get(pk=dept_id)
             except Department.DoesNotExist:
-                messages.error(request, "Selected department does not exist.")
-                return redirect("custom_admin_edit_student", roll_no=student.roll_no)
+                # keep previous value; optionally show a warning
+                messages.warning(request, "Selected department not found. Keeping previous value.")
         else:
             student.department = None
 
+        # Branch (optional)
+        br_id = request.POST.get("branch")
         if br_id:
             try:
                 student.branch = Branch.objects.get(pk=br_id)
             except Branch.DoesNotExist:
-                messages.error(request, "Selected branch does not exist.")
-                return redirect("custom_admin_edit_student", roll_no=student.roll_no)
+                messages.warning(request, "Selected branch not found. Keeping previous value.")
         else:
             student.branch = None
 
-        student.mobile_no = request.POST.get("mobile_no") or None
+        # Mobile number — behave like student_edit_profile
+        mobile_no = (request.POST.get("mobile_no") or "").strip()
+        if mobile_no:
+            try:
+                student.mobile_no = int(mobile_no)
+            except ValueError:
+                # Ignore invalid mobile; do NOT block save or show an error
+                pass
+        else:
+            # Allow clearing
+            student.mobile_no = None
+
+        # Profile image (optional upload/remove, just like profile view)
+        if "profile_image" in request.FILES:
+            student.profile_image = request.FILES["profile_image"]
+        elif "remove_image" in request.POST:
+            if student.profile_image:
+                student.profile_image.delete(save=False)
+            student.profile_image = None
 
         student.save()
         messages.success(request, "Student details updated successfully.")
+        # Return to the same edit page (with possibly changed roll_no)
         return redirect("custom_admin_students")
 
-    # GET: provide dropdown data
+    # GET: render form
     departments = Department.objects.all().order_by('code')
     branches = Branch.objects.all().order_by('name')
     return render(request, "admin/custom_admin_edit_student.html", {
@@ -961,37 +1170,42 @@ def custom_admin_edit_faculty(request, faculty_id):
     departments = Department.objects.all().order_by('code')
 
     if request.method == "POST":
-        first_name = request.POST.get("first_name", "").strip()
-        last_name  = request.POST.get("last_name", "").strip()
-        email_id   = request.POST.get("email_id", "").strip().lower()
-        mobile_no  = request.POST.get("mobile_no") or None
-        dept_id    = request.POST.get("department")
-        raw_pwd    = request.POST.get("password", "")
+        # Basic text fields
+        faculty.first_name = (request.POST.get("first_name") or "").strip()
+        faculty.last_name  = (request.POST.get("last_name") or "").strip()
+        faculty.email_id   = (request.POST.get("email_id") or "").strip().lower()
 
-        # Resolve FK
-        dept = None
+        # Department (optional)
+        dept_id = request.POST.get("department")
         if dept_id:
             try:
-                dept = Department.objects.get(pk=dept_id)
+                faculty.department = Department.objects.get(pk=dept_id)
             except Department.DoesNotExist:
-                messages.error(request, "Selected department does not exist.")
-                return redirect("custom_admin_edit_faculty", faculty_id=faculty.id)
+                messages.warning(request, "Selected department not found. Keeping previous value.")
 
-        # Assign fields
-        faculty.first_name = first_name
-        faculty.last_name  = last_name
-        faculty.email_id   = email_id
-        faculty.department = dept
-        faculty.mobile_no  = mobile_no
+        # Mobile number — parse like in student_edit_profile
+        mobile_str = (request.POST.get("mobile_no") or "").strip()
+        if mobile_str:
+            try:
+                faculty.mobile_no = int(mobile_str)
+            except ValueError:
+                pass
+        else:
+            # Allow clearing
+            faculty.mobile_no = None
 
-        # Update password only if a new one is provided (avoid double-hashing existing hash)
-        if raw_pwd.strip():
+        # Password (only if provided)
+        raw_pwd = (request.POST.get("password") or "").strip()
+        if raw_pwd:
             faculty.password = make_password(raw_pwd)
 
-        # Update profile image if new file uploaded
-        new_img = request.FILES.get("profile_image")
-        if new_img:
-            faculty.profile_image = new_img
+        # Profile image upload/remove
+        if "profile_image" in request.FILES:
+            faculty.profile_image = request.FILES["profile_image"]
+        elif "remove_image" in request.POST:
+            if faculty.profile_image:
+                faculty.profile_image.delete(save=False)
+            faculty.profile_image = None
 
         faculty.save()
         messages.success(request, "Faculty details updated successfully.")
@@ -1001,8 +1215,6 @@ def custom_admin_edit_faculty(request, faculty_id):
         "faculty": faculty,
         "departments": departments
     })
-
-
 
 def custom_admin_branch(request):
     branches = Branch.objects.select_related("department").order_by("department__code", "name")
@@ -3761,13 +3973,12 @@ from reportlab.lib.pagesizes import letter, A4, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
-from reportlab.lib.enums import TA_CENTER
-
-from Registration.models import (
-    Student, Faculty, Course, Branch, Department, 
-    StudentCourse, Category, ProgramRequirement, 
-    CourseBranch, AssessmentComponent, AssessmentScore
-)
+from reportlab.lib.enums import TA_CENTER,TA_LEFT
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm,inch
+from reportlab.pdfgen import canvas
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 
 def database_management_view(request):
@@ -3775,18 +3986,22 @@ def database_management_view(request):
     Main view for database management dashboard
     Loads all data with pagination support
     """
-    
-    # Fetch all data from database
-    students = Student.objects.select_related('branch', 'department').all()
-    faculty = Faculty.objects.select_related('department').all()
-    courses = Course.objects.all()
-    branches = Branch.objects.select_related('department').all()
-    departments = Department.objects.all()
-    enrollments = StudentCourse.objects.select_related('student', 'course').all()
-    categories = Category.objects.all()
-    requirements = ProgramRequirement.objects.select_related('branch').all()
-    
-    # Prepare students data
+
+    # -------------------------------
+    # Fetch all data with sorting
+    # -------------------------------
+    students = Student.objects.select_related('branch', 'department').order_by('roll_no')
+    faculty = Faculty.objects.select_related('department').order_by('first_name')
+    courses = Course.objects.all().order_by('code')
+    branches = Branch.objects.select_related('department').order_by('name')
+    departments = Department.objects.all().order_by('code')
+    enrollments = StudentCourse.objects.select_related('student', 'course').order_by('student__roll_no', 'semester')
+    categories = Category.objects.all().order_by('code')
+    requirements = ProgramRequirement.objects.select_related('branch').order_by('branch__name')
+
+    # -------------------------------
+    # Prepare Students Data
+    # -------------------------------
     students_data = []
     for student in students:
         students_data.append({
@@ -3797,11 +4012,13 @@ def database_management_view(request):
             'email': student.email_id,
             'branch': student.branch.name if student.branch else 'N/A',
             'department': student.department.code if student.department else 'N/A',
-            'semester': student.calculate_current_semester(),  # Use calculated semester
+            'semester': student.calculate_current_semester(),
             'mobile': str(student.mobile_no) if student.mobile_no else 'N/A'
         })
-    
-    # Prepare faculty data
+
+    # -------------------------------
+    # Prepare Faculty Data
+    # -------------------------------
     faculty_data = []
     for fac in faculty:
         course_count = fac.courses.count()
@@ -3814,8 +4031,10 @@ def database_management_view(request):
             'mobile': str(fac.mobile_no) if fac.mobile_no else 'N/A',
             'courses': course_count
         })
-    
-    # Prepare courses data
+
+    # -------------------------------
+    # Prepare Courses Data
+    # -------------------------------
     courses_data = []
     for course in courses:
         enrolled_count = course.enrollments.filter(status__in=['ENR', 'CMP']).count()
@@ -3829,8 +4048,10 @@ def database_management_view(request):
             'status': course.status,
             'enrolled': enrolled_count
         })
-    
-    # Prepare branches data
+
+    # -------------------------------
+    # Prepare Branches Data
+    # -------------------------------
     branches_data = []
     for branch in branches:
         student_count = branch.student_set.count()
@@ -3843,8 +4064,10 @@ def database_management_view(request):
             'students': student_count,
             'courses': course_count
         })
-    
-    # Prepare departments data
+
+    # -------------------------------
+    # Prepare Departments Data
+    # -------------------------------
     departments_data = []
     for dept in departments:
         branch_count = dept.branches.count()
@@ -3858,8 +4081,10 @@ def database_management_view(request):
             'faculty': faculty_count,
             'students': student_count
         })
-    
-    # Prepare enrollments data
+
+    # -------------------------------
+    # Prepare Enrollments Data
+    # -------------------------------
     enrollments_data = []
     for enr in enrollments:
         enrollments_data.append({
@@ -3871,10 +4096,12 @@ def database_management_view(request):
             'status': enr.status,
             'grade': enr.grade or '-',
             'outcome': enr.outcome,
-            'is_pass_fail': enr.is_pass_fail
+            'course_mode': enr.course_mode  # ✅ new field replacing is_pass_fail
         })
-    
-    # Prepare categories data
+
+    # -------------------------------
+    # Prepare Categories Data
+    # -------------------------------
     categories_data = []
     for cat in categories:
         course_count = cat.course_branches.count()
@@ -3884,8 +4111,10 @@ def database_management_view(request):
             'label': cat.label,
             'courses': course_count
         })
-    
-    # Prepare requirements data
+
+    # -------------------------------
+    # Prepare Requirements Data
+    # -------------------------------
     requirements_data = []
     for req in requirements:
         requirements_data.append({
@@ -3894,9 +4123,10 @@ def database_management_view(request):
             'category': req.category,
             'required_credits': req.required_credits
         })
-    
-    # Convert to JSON for template
-    import json
+
+    # -------------------------------
+    # Context for Template
+    # -------------------------------
     context = {
         'students_json': json.dumps(students_data),
         'faculty_json': json.dumps(faculty_data),
@@ -3907,80 +4137,112 @@ def database_management_view(request):
         'categories_json': json.dumps(categories_data),
         'requirements_json': json.dumps(requirements_data),
     }
-    
+
     return render(request, 'admin/database_management.html', context)
 
 
 def edit_database_record(request, record_type, record_id):
-    """
-    View for editing a specific record
-    """
-    
     if request.method == 'POST':
         try:
+            # -------------------- STUDENT --------------------
             if record_type == 'student':
                 student = get_object_or_404(Student, id=record_id)
-                student.first_name = request.POST.get('first_name', student.first_name)
-                student.last_name = request.POST.get('last_name', student.last_name)
-                student.email_id = request.POST.get('email', student.email_id)
-                student.mobile_no = request.POST.get('mobile', student.mobile_no)
-                
+                first_name = request.POST.get('first_name')
+                last_name = request.POST.get('last_name')
+                email = request.POST.get('email')
+                mobile = request.POST.get('mobile')
                 branch_id = request.POST.get('branch')
-                if branch_id:
-                    student.branch = Branch.objects.get(id=branch_id)
-                
+
+                if first_name: student.first_name = first_name
+                if last_name: student.last_name = last_name
+                if email: student.email_id = email
+                if mobile and mobile.isdigit(): student.mobile_no = int(mobile)
+                if branch_id: student.branch = Branch.objects.filter(id=branch_id).first()
+
                 student.save()
-                return JsonResponse({'success': True, 'message': 'Student updated successfully'})
-            
+                messages.success(request, f"✅ Student '{student.first_name}' updated successfully.")
+                return redirect('database_management')
+
+            # -------------------- FACULTY --------------------
             elif record_type == 'faculty':
                 faculty = get_object_or_404(Faculty, id=record_id)
-                faculty.first_name = request.POST.get('first_name', faculty.first_name)
-                faculty.last_name = request.POST.get('last_name', faculty.last_name)
-                faculty.email_id = request.POST.get('email', faculty.email_id)
-                faculty.mobile_no = request.POST.get('mobile', faculty.mobile_no)
-                
+                first_name = request.POST.get('first_name')
+                last_name = request.POST.get('last_name')
+                email = request.POST.get('email')
+                mobile = request.POST.get('mobile')
                 dept_id = request.POST.get('department')
-                if dept_id:
-                    faculty.department = Department.objects.get(id=dept_id)
-                
+
+                if first_name: faculty.first_name = first_name
+                if last_name: faculty.last_name = last_name
+                if email: faculty.email_id = email
+                if mobile and mobile.isdigit(): faculty.mobile_no = int(mobile)
+                if dept_id: faculty.department = Department.objects.filter(id=dept_id).first()
+
                 faculty.save()
-                return JsonResponse({'success': True, 'message': 'Faculty updated successfully'})
-            
+                messages.success(request, f"✅ Faculty '{faculty.first_name}' updated successfully.")
+                return redirect('database_management')
+
+            # -------------------- COURSE --------------------
             elif record_type == 'course':
                 course = get_object_or_404(Course, id=record_id)
-                course.code = request.POST.get('code', course.code)
-                course.name = request.POST.get('name', course.name)
-                course.credits = request.POST.get('credits', course.credits)
-                course.LTPC = request.POST.get('ltpc', course.LTPC)
-                course.slot = request.POST.get('slot', course.slot)
-                course.status = request.POST.get('status', course.status)
+                code = request.POST.get('code')
+                name = request.POST.get('name')
+                credits = request.POST.get('credits')
+                ltpc = request.POST.get('ltpc')
+                slot = request.POST.get('slot')
+                status = request.POST.get('status')
+
+                if code: course.code = code
+                if name: course.name = name
+                if credits and credits.isdigit(): course.credits = int(credits)
+                if ltpc: course.LTPC = ltpc
+                if slot: course.slot = slot
+                if status: course.status = status
+
                 course.save()
-                return JsonResponse({'success': True, 'message': 'Course updated successfully'})
-            
+                messages.success(request, f"✅ Course '{course.code}' updated successfully.")
+                return redirect('database_management')
+
+            # -------------------- ENROLLMENT --------------------
             elif record_type == 'enrollment':
                 enrollment = get_object_or_404(StudentCourse, id=record_id)
-                enrollment.status = request.POST.get('status', enrollment.status)
-                enrollment.grade = request.POST.get('grade', enrollment.grade)
-                enrollment.outcome = request.POST.get('outcome', enrollment.outcome)
-                enrollment.is_pass_fail = request.POST.get('is_pass_fail', 'false') == 'true'
+                status = request.POST.get('status')
+                grade = request.POST.get('grade')
+                outcome = request.POST.get('outcome')
+                course_mode = request.POST.get('course_mode')
+
+                if status: enrollment.status = status
+                if grade: enrollment.grade = grade
+                if outcome: enrollment.outcome = outcome
+                if course_mode in ['REG', 'PF', 'AUD']:
+                    enrollment.course_mode = course_mode
+
                 enrollment.save()
-                return JsonResponse({'success': True, 'message': 'Enrollment updated successfully'})
-            
+                messages.info(request, f"ℹ️ Enrollment record for '{enrollment.student.roll_no}' updated.")
+                return redirect('database_management')
+
+            # -------------------- REQUIREMENT --------------------
             elif record_type == 'requirement':
                 requirement = get_object_or_404(ProgramRequirement, id=record_id)
-                requirement.required_credits = request.POST.get('required_credits', requirement.required_credits)
+                required_credits = request.POST.get('required_credits')
+                if required_credits and required_credits.isdigit():
+                    requirement.required_credits = int(required_credits)
                 requirement.save()
-                return JsonResponse({'success': True, 'message': 'Requirement updated successfully'})
-            
+                messages.success(request, f"✅ Requirement record updated successfully.")
+                return redirect('database_management')
+
+            # -------------------- INVALID TYPE --------------------
             else:
-                return JsonResponse({'success': False, 'error': 'Invalid record type'})
-        
+                messages.error(request, "❌ Invalid record type specified.")
+                return redirect('database_management')
+
         except Exception as e:
-            return JsonResponse({'success': False, 'error': str(e)})
-    
-    # GET request - show edit form
+            messages.error(request, f"⚠️ Error while updating record: {str(e)}")
+            return redirect('database_management')
+
+    # -------------------- GET REQUEST: Edit Form --------------------
     context = {}
-    
+
     if record_type == 'student':
         student = get_object_or_404(Student, id=record_id)
         branches = Branch.objects.all()
@@ -3989,7 +4251,7 @@ def edit_database_record(request, record_type, record_id):
             'record': student,
             'branches': branches
         }
-    
+
     elif record_type == 'faculty':
         faculty = get_object_or_404(Faculty, id=record_id)
         departments = Department.objects.all()
@@ -3998,7 +4260,7 @@ def edit_database_record(request, record_type, record_id):
             'record': faculty,
             'departments': departments
         }
-    
+
     elif record_type == 'course':
         course = get_object_or_404(Course, id=record_id)
         context = {
@@ -4006,7 +4268,7 @@ def edit_database_record(request, record_type, record_id):
             'record': course,
             'slots': Course.SLOT_CHOICES
         }
-    
+
     elif record_type == 'enrollment':
         enrollment = get_object_or_404(StudentCourse, id=record_id)
         context = {
@@ -4014,17 +4276,18 @@ def edit_database_record(request, record_type, record_id):
             'record': enrollment,
             'statuses': StudentCourse.STATUS,
             'outcomes': StudentCourse.OUTCOME,
-            'grades': StudentCourse.GRADES
+            'grades': StudentCourse.GRADES,
+            'modes': StudentCourse.COURSE_MODE,
         }
-    
+
     elif record_type == 'requirement':
         requirement = get_object_or_404(ProgramRequirement, id=record_id)
         context = {
             'record_type': 'Requirement',
             'record': requirement
         }
-    
-    return render(request, 'edit_record.html', context)
+
+    return render(request, 'admin/edit_record.html', context)
 
 
 @require_http_methods(["POST"])
@@ -4159,26 +4422,6 @@ def filter_students(request):
     if branches:
         students = students.filter(branch__name__in=branches)
     
-    # Filter by semester - UPDATED for multiple values
-    semesters = request.GET.getlist('semester')
-    if semesters:
-        # Convert to integers for comparison
-        semester_ints = [int(s) for s in semesters]
-        # Filter by calculated semester
-        filtered_students = []
-        for student in students:
-            if student.calculate_current_semester() in semester_ints:
-                filtered_students.append(student)
-        students = filtered_students
-    
-    # Filter by department - UPDATED for multiple values
-    departments = request.GET.getlist('department')
-    if departments:
-        if isinstance(students, list):
-            # If already filtered by semester (list)
-            students = [s for s in students if s.department and s.department.code in departments]
-        else:
-            students = students.filter(department__code__in=departments)
     
     # Prepare data rows
     data = []
@@ -4197,7 +4440,6 @@ def filter_students(request):
         ])
     
     return data
-
 
 def filter_faculty(request):
     """Filter faculty based on query parameters"""
@@ -4416,20 +4658,20 @@ def export_to_excel(data, headers, title):
 
 
 def export_to_pdf(data, headers, title):
-    """Export data to PDF format"""
+    """Export data to PDF format with wrapped text and optional email exclusion"""
     response = HttpResponse(content_type='application/pdf')
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     filename = f"{title.replace(' ', '_')}_{timestamp}.pdf"
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
-    
-    # Create PDF
+
+    # Create PDF document
     doc = SimpleDocTemplate(response, pagesize=landscape(A4),
-                           rightMargin=30, leftMargin=30,
-                           topMargin=30, bottomMargin=30)
-    
+                            rightMargin=30, leftMargin=30,
+                            topMargin=30, bottomMargin=30)
+
     elements = []
     styles = getSampleStyleSheet()
-    
+
     # Title
     title_style = ParagraphStyle(
         'CustomTitle',
@@ -4439,27 +4681,68 @@ def export_to_pdf(data, headers, title):
         spaceAfter=20,
         alignment=TA_CENTER
     )
-    
+
     title_para = Paragraph(f"{title}<br/>{datetime.now().strftime('%B %d, %Y %H:%M')}", title_style)
     elements.append(title_para)
-    elements.append(Spacer(1, 0.3*inch))
-    
-    # Prepare table data
-    table_data = [headers] + data[:100]  # Limit to 100 rows for PDF
-    
-    # Calculate column widths
-    available_width = landscape(A4)[0] - 60  # Total width minus margins
-    col_width = available_width / len(headers)
-    col_widths = [col_width] * len(headers)
-    
+    elements.append(Spacer(1, 0.3 * inch))
+
+    # ------------------------------------
+    # 🧹 Remove email column for Students
+    # ------------------------------------
+    if "Student" in title or "Students" in title:
+        if "Email" in headers:
+            email_index = headers.index("Email")
+            headers.pop(email_index)
+            for i in range(len(data)):
+                if len(data[i]) > email_index:
+                    data[i].pop(email_index)
+
+    # Limit to 100 rows
+    table_data = [headers]
+    for row in data[:100]:
+        wrapped_row = []
+        for cell in row:
+            # Convert everything to string safely
+            text = str(cell) if cell is not None else ""
+            # Wrap long text
+            wrapped_row.append(Paragraph(text.replace("\n", "<br/>"), styles["Normal"]))
+        table_data.append(wrapped_row)
+
+    # ------------------------------------
+    # Dynamic column width adjustment
+    # ------------------------------------
+    total_width = landscape(A4)[0] - 60
+    col_count = len(headers)
+
+    # Heuristic: wider columns for name/code, smaller for numeric fields
+    col_widths = []
+    for header in headers:
+        if any(k in header.lower() for k in ["name", "course", "branch", "department"]):
+            col_widths.append(total_width * 0.18)  # ~18% width for long text
+        elif any(k in header.lower() for k in ["roll", "id"]):
+            col_widths.append(total_width * 0.12)
+        elif any(k in header.lower() for k in ["credits", "sem", "status", "grade"]):
+            col_widths.append(total_width * 0.1)
+        else:
+            col_widths.append(total_width * 0.12)
+
+    # Normalize if total exceeds width
+    width_sum = sum(col_widths)
+    if width_sum > total_width:
+        scale = total_width / width_sum
+        col_widths = [w * scale for w in col_widths]
+
+    # ------------------------------------
     # Create table
+    # ------------------------------------
     table = Table(table_data, colWidths=col_widths, repeatRows=1)
-    
-    # Style table
+
+    # Table style
     table_style = TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0d6efd')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, 0), 10),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
@@ -4467,23 +4750,31 @@ def export_to_pdf(data, headers, title):
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
         ('FONTSIZE', (0, 1), (-1, -1), 8),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
     ])
-    
+
     table.setStyle(table_style)
     elements.append(table)
-    
-    # Add note if data was truncated
+
+    # ------------------------------------
+    # Add note if data truncated
+    # ------------------------------------
     if len(data) > 100:
-        elements.append(Spacer(1, 0.3*inch))
+        elements.append(Spacer(1, 0.3 * inch))
         note = Paragraph(
-            f"<i>Note: Showing first 100 of {len(data)} records. For complete data, please use Excel or CSV format.</i>",
-            styles['Normal']
+            f"<i>Note: Showing first 100 of {len(data)} records. For full export, please use Excel or CSV format.</i>",
+            styles["Normal"]
         )
         elements.append(note)
-    
+
     doc.build(elements)
     return response
+
+
 
 def faculty_view_courses_for_grades(request, faculty_id):
     faculty = get_object_or_404(Faculty, id=faculty_id)
@@ -4525,3 +4816,951 @@ def faculty_view_course_grades(request, faculty_id, course_code):
         'course': course,
         'results': results,
     })
+
+
+
+def bulk_preregistration(request):
+    context = {
+        "columns": ["roll_no"] + [f"slot_{s}" for s in SLOTS],
+        "preview_data": None,
+    }
+
+    if request.method == "POST":
+        try:
+            file = request.FILES.get("file")
+            text_data = request.POST.get("csv_text", "").strip()
+            enroll_mode = request.POST.get("enroll_mode", "PND")  # Default: PND
+            parsed_data = []
+
+            # --- STEP 1: Read CSV or Excel ---
+            if file:
+                if file.name.endswith(".csv"):
+                    df = pd.read_csv(file)
+                elif file.name.endswith((".xls", ".xlsx")):
+                    df = pd.read_excel(file)
+                else:
+                    messages.error(request, "Please upload only CSV or Excel files.")
+                    return redirect("bulk_preregistration")
+            elif text_data:
+                df = pd.read_csv(io.StringIO(text_data))
+            else:
+                messages.error(request, "Please provide a CSV/Excel file or paste data.")
+                return redirect("bulk_preregistration")
+
+            # --- STEP 2: Validate required columns ---
+            expected_cols = ["roll_no"] + [f"slot_{s}" for s in SLOTS]
+            missing_cols = [c for c in expected_cols if c not in df.columns]
+            if missing_cols:
+                messages.error(request, f"Missing columns: {', '.join(missing_cols)}")
+                return redirect("bulk_preregistration")
+
+            df = df.fillna("")  # Replace NaN with blank
+            parsed_data = df.to_dict(orient="records")
+
+            # --- STEP 3: If Preview Button Clicked ---
+            if "preview" in request.POST:
+                context["preview_data"] = parsed_data
+                context["enroll_mode"] = enroll_mode
+                messages.info(request, f"Preview loaded in {enroll_mode} mode. Review before submitting.")
+                return render(request, "admin/prereg_bulk.html", context)
+
+            # --- STEP 4: Process Data ---
+            created, skipped = 0, 0
+            current_year = datetime.now().year
+            current_month = datetime.now().month
+            semester_in_year = 1 if current_month >= 7 else 2
+
+            def compute_sem(roll):
+                try:
+                    admission_year = 2000 + int(roll[1:3])
+                    return (current_year - admission_year) * 2 + semester_in_year
+                except:
+                    return 1
+
+            with transaction.atomic():
+                for row in parsed_data:
+                    roll_no = str(row.get("roll_no")).strip().lower()
+                    student = Student.objects.filter(roll_no=roll_no).first()
+                    if not student:
+                        skipped += 1
+                        continue
+
+                    semester = compute_sem(roll_no)
+
+                    for slot in SLOTS:
+                        code = str(row.get(f"slot_{slot}", "")).strip().upper()
+                        if not code:
+                            continue
+
+                        course = Course.objects.filter(code__iexact=code, slot=slot).first()
+                        if not course:
+                            skipped += 1
+                            continue
+
+                        obj, created_now = StudentCourse.objects.get_or_create(
+                            student=student,
+                            course=course,
+                            semester=semester,
+                            defaults={"status": enroll_mode, "is_pass_fail": False},
+                        )
+                        if created_now:
+                            created += 1
+
+            messages.success(
+                request,
+                f"✅ Bulk preregistration complete ({enroll_mode} mode): {created} added, {skipped} skipped."
+            )
+            return redirect("bulk_preregistration")
+
+        except Exception as e:
+            messages.error(request, f"Error: {e}")
+            return redirect("bulk_preregistration")
+
+    return render(request, "admin/prereg_bulk.html", context)
+
+
+# optional things
+
+def parse_time_range(time_str):
+    """
+    Convert strings like '8–8:50 AM' or '2–5 PM' to (start_time, end_time) objects.
+    """
+    try:
+        start_str, end_str = time_str.replace("–", "-").split("-")
+        period = "AM" if "AM" in end_str else "PM"
+        start_str = start_str.strip() + " " + period
+        end_str = end_str.strip()
+        if "AM" not in end_str and "PM" not in end_str:
+            end_str += " " + period
+        start_time = datetime.strptime(start_str.strip(), "%I:%M %p" if ":" in start_str else "%I %p").time()
+        end_time = datetime.strptime(end_str.strip(), "%I:%M %p" if ":" in end_str else "%I %p").time()
+        return start_time, end_time
+    except Exception as e:
+        print("❌ Time parsing error:", e, "for string:", time_str)
+        return None, None
+
+
+def student_timetable(request):
+    roll_no = request.session.get("roll_no")
+    if not roll_no:
+        return redirect("login")
+
+    student = get_object_or_404(Student, roll_no=roll_no)
+
+    # 🔹 Get student's enrolled courses
+    enrolled_courses = (
+        StudentCourse.objects
+        .filter(student=student, status="ENR")
+        .select_related("course")
+    )
+
+    enrolled_course_ids = [sc.course.id for sc in enrolled_courses if sc.course]
+    if not enrolled_course_ids:
+        return render(request, "timetable.html", {
+            "timetable": {},
+            "role": "student",
+            "message": "No enrolled courses found.",
+        })
+
+    # 🔹 Auto-generate timetable entries if missing
+    with transaction.atomic():
+        for sc in enrolled_courses:
+            course = sc.course
+            slot = (course.slot or "").strip().upper()
+            if not slot or slot not in SLOT_SCHEDULE:
+                continue
+
+            existing = Timetable.objects.filter(course=course)
+            if not existing.exists():
+                for day, time_range in SLOT_SCHEDULE[slot]:
+                    start_time, end_time = parse_time_range(time_range)
+                    if start_time and end_time:
+                        Timetable.objects.create(
+                            course=course,
+                            faculty=course.faculties.first() if hasattr(course, "faculties") and course.faculties.exists() else None,
+                            day=day,
+                            start_time=start_time,
+                            end_time=end_time,
+                            location="TBD",
+                            remarks="Auto-generated by slot system"
+                        )
+
+    # 🔹 Fetch timetable after generation
+    timetable_data = (
+        Timetable.objects
+        .filter(course_id__in=enrolled_course_ids)
+        .select_related("course", "faculty")
+        .order_by("day", "start_time")
+    )
+
+    # 🔹 Organize by day for UI
+    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+    timetable_by_day = {day: [] for day in days}
+
+    for entry in timetable_data:
+        timetable_by_day[entry.day].append({
+            "course": f"{entry.course.code} – {entry.course.name}",
+            "slot": entry.course.slot or "—",
+            "faculty": f"{entry.faculty.first_name} {entry.faculty.last_name}" if entry.faculty else "N/A",
+            "time": f"{entry.start_time.strftime('%I:%M %p')} – {entry.end_time.strftime('%I:%M %p')}",
+            "location": entry.location or "—",
+            "remarks": entry.remarks or "",
+        })
+
+    # 🔹 Remove empty days to avoid blank cards
+    timetable_by_day = {k: v for k, v in timetable_by_day.items() if v}
+
+    return render(request, "timetable.html", {
+        "timetable": timetable_by_day,
+        "role": "student",
+    })
+
+
+def faculty_course_list(request):
+    email_id = request.session.get("email_id")
+    if not email_id:
+        return redirect("login")
+
+    faculty = get_object_or_404(Faculty, email_id=email_id)
+    courses = faculty.courses.all().distinct()
+
+    return render(request, "instructor/course_list.html", {"faculty": faculty, "courses": courses})
+
+
+def faculty_timetable_manage(request, course_id):
+    email_id = request.session.get("email_id")
+    if not email_id:
+        return redirect("login")
+
+    faculty = get_object_or_404(Faculty, email_id=email_id)
+    course = get_object_or_404(Course, id=course_id, faculties=faculty)
+
+    # Handle ADD / EDIT / DELETE
+    if request.method == "POST":
+        action = request.POST.get("action")
+
+        if action == "add":
+            day = request.POST.get("day")
+            start_time = request.POST.get("start_time")
+            end_time = request.POST.get("end_time")
+            location = request.POST.get("location")
+            remarks = request.POST.get("remarks")
+
+            Timetable.objects.create(
+                course=course,
+                faculty=faculty,
+                day=day,
+                start_time=start_time,
+                end_time=end_time,
+                location=location or None,
+                remarks=remarks or None,
+            )
+            messages.success(request, f"✅ Added class on {day} at {start_time}.")
+            return redirect("faculty_timetable_manage", course_id=course.id)
+
+        elif action == "edit":
+            entry_id = request.POST.get("entry_id")
+            timetable_entry = get_object_or_404(Timetable, id=entry_id, course=course)
+
+            timetable_entry.day = request.POST.get("day")
+            timetable_entry.start_time = request.POST.get("start_time")
+            timetable_entry.end_time = request.POST.get("end_time")
+            timetable_entry.location = request.POST.get("location")
+            timetable_entry.remarks = request.POST.get("remarks")
+            timetable_entry.save()
+
+            messages.success(request, f"✏️ Updated timetable entry successfully.")
+            return redirect("faculty_timetable_manage", course_id=course.id)
+
+        elif action == "delete":
+            entry_id = request.POST.get("entry_id")
+            Timetable.objects.filter(id=entry_id, course=course).delete()
+            messages.success(request, "🗑️ Timetable entry deleted.")
+            return redirect("faculty_timetable_manage", course_id=course.id)
+
+    # GET — show timetable
+    timetable = Timetable.objects.filter(course=course).order_by("day", "start_time")
+    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+    return render(
+        request,
+        "instructor/timetable_manage.html",
+        {"course": course, "timetable": timetable, "days": days},
+    )
+
+
+def student_attendance(request):
+    roll_no = request.session.get("roll_no")
+    if not roll_no:
+        return redirect("login")
+
+    student = get_object_or_404(Student, roll_no=roll_no)
+    enrolled_courses = StudentCourse.objects.filter(student=student, status="ENR").select_related("course")
+    attendance_data = []
+
+    for enr in enrolled_courses:
+        att = Attendance.objects.filter(student=student, course=enr.course).first()
+        attendance_data.append({
+            "course": enr.course.name,
+            "code": enr.course.code,
+            "attended": att.attended_classes if att else 0,
+            "total": att.total_classes if att else 0,
+            "percent": att.attendance_percent if att else 0,
+        })
+
+    return render(request, "attendance.html", {"attendance_data": attendance_data, "student": student})
+
+
+def faculty_attendance(request, course_id):
+    email_id = request.session.get("email_id")
+    if not email_id:
+        return redirect("login")
+
+    faculty = get_object_or_404(Faculty, email_id=email_id)
+    course = get_object_or_404(Course, id=course_id, faculties=faculty)
+    enrollments = StudentCourse.objects.filter(course=course, status="ENR").select_related("student")
+
+    if request.method == "POST":
+        for enr in enrollments:
+            total = request.POST.get(f"total_{enr.student.id}", 0)
+            attended = request.POST.get(f"attended_{enr.student.id}", 0)
+            total = int(total) if total else 0
+            attended = int(attended) if attended else 0
+            obj, _ = Attendance.objects.get_or_create(student=enr.student, course=course)
+            obj.total_classes = total
+            obj.attended_classes = attended
+            obj.save()
+        messages.success(request, "Attendance updated successfully!")
+        return redirect("faculty_attendance", course_id=course.id)
+
+    data = []
+    for enr in enrollments:
+        att = Attendance.objects.filter(student=enr.student, course=course).first()
+        data.append({
+            "student": enr.student,
+            "attended": att.attended_classes if att else 0,
+            "total": att.total_classes if att else 0,
+            "percent": att.attendance_percent if att else 0,
+        })
+
+    return render(request, "instructor/attendance_manage.html", {"course": course, "data": data})
+
+razorpay_client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+
+
+
+from decimal import Decimal, ROUND_HALF_UP
+
+
+
+def student_fees(request):
+    roll_no = request.session.get("roll_no")
+    if not roll_no:
+        return redirect("login")
+
+    student = get_object_or_404(Student, roll_no=roll_no)
+    pending_fees = FeeRecord.objects.filter(student=student, status="Pending").order_by("semester")
+    paid_fees = FeeRecord.objects.filter(student=student, status="Paid").order_by("-semester")
+
+    total_due = sum([(f.amount_due - f.amount_paid) for f in pending_fees if (f.amount_due - f.amount_paid) > 0])
+    total_paid = sum([f.amount_paid for f in paid_fees])
+
+    return render(request, "student_fees.html", {
+        "student": student,
+        "due_fees": pending_fees,
+        "paid_fees": paid_fees,
+        "total_due": total_due,
+        "total_paid": total_paid,
+    })
+
+
+def mock_payment(request, fee_id):
+    """Simulate payment gateway and mark as paid."""
+    roll_no = request.session.get("roll_no")
+    if not roll_no:
+        return redirect("login")
+
+    fee = get_object_or_404(FeeRecord, id=fee_id, student__roll_no=roll_no)
+
+    # Simulate payment success
+    fee.status = "Paid"
+    fee.amount_paid = fee.amount_due
+    fee.payment_time = timezone.now()
+    fee.save()
+
+    return JsonResponse({"message": "Payment successful!", "redirect": "/fees/receipt/" + str(fee.id)})
+
+
+def download_fee_receipt(request, fee_id):
+    roll_no = request.session.get("roll_no")
+    if not roll_no:
+        return redirect("login")
+
+    student = get_object_or_404(Student, roll_no=roll_no)
+    fee = get_object_or_404(FeeRecord, id=fee_id, student=student)
+
+    # Prepare PDF
+    response = HttpResponse(content_type="application/pdf")
+    filename = f"Fee_Receipt_Sem{fee.semester}_{student.roll_no}.pdf"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    # Register Hindi-compatible font
+    font_path = os.path.join(settings.BASE_DIR, "static", "fonts", "NotoSansDevanagari-Regular.ttf")
+    if os.path.exists(font_path):
+        pdfmetrics.registerFont(TTFont("NotoSans", font_path))
+        font_name = "NotoSans"
+    else:
+        font_name = "Helvetica"
+
+    p = canvas.Canvas(response, pagesize=A4)
+    width, height = A4
+
+    # Header
+    p.setFont(font_name, 16)
+    p.drawCentredString(width / 2, height - 80, "भारतीय प्रौद्योगिकी संस्थान मंडी")
+    p.drawCentredString(width / 2, height - 100, "Indian Institute of Technology Mandi")
+    p.setFont(font_name, 13)
+    p.drawCentredString(width / 2, height - 120, "Kamand, Himachal Pradesh (175075)")
+    p.setFont(font_name, 15)
+    p.drawCentredString(width / 2, height - 150, "FEE PAYMENT RECEIPT")
+
+    # Details
+    y = height - 200
+    p.setFont("Helvetica", 12)
+    p.drawString(60, y, f"Name: {student.first_name} {student.last_name or ''}")
+    y -= 18
+    p.drawString(60, y, f"Roll No: {student.roll_no}")
+    y -= 18
+    p.drawString(60, y, f"Semester: {fee.semester}")
+    y -= 18
+    p.drawString(60, y, f"Amount Paid: ₹{fee.amount_paid}")
+    y -= 18
+    p.drawString(60, y, f"Payment Date: {fee.payment_time.strftime('%d %B %Y, %I:%M %p')}")
+
+    y -= 30
+    p.setFont("Helvetica-Oblique", 11)
+    p.drawString(60, y, "This is a system-generated receipt. No signature required.")
+
+    p.showPage()
+    p.save()
+    return response
+
+#---------------------------
+
+
+def initiate_fee_payment(request, fee_id):
+    roll_no = request.session.get("roll_no")
+    if not roll_no:
+        return redirect("login")
+    student = get_object_or_404(Student, roll_no=roll_no)
+    fee = get_object_or_404(FeeRecord, id=fee_id, student=student)
+
+    # amount to be paid (remaining)
+    remaining = (fee.amount_due - fee.amount_paid)
+    if remaining <= 0 or fee.status == "Paid":
+        return redirect("student_fees")
+
+    amount_paise = int(remaining * 100)  # Razorpay expects paise
+
+    order = razorpay_client.order.create({
+        "amount": amount_paise,
+        "currency": "INR",
+        "payment_capture": "1"
+    })
+
+    fee.razorpay_order_id = order["id"]
+    fee.save(update_fields=["razorpay_order_id"])
+
+    context = {
+        "fee": fee,
+        "student": student,
+        "razorpay_key": settings.RAZORPAY_KEY_ID,
+        "order_id": order["id"],
+        "amount": amount_paise,
+        "currency": "INR",
+    }
+    return render(request, "pay_fee.html", context)
+
+
+def payment_success(request):
+    """
+    Frontend sends razorpay_payment_id, razorpay_order_id, razorpay_signature.
+    We will verify signature and update FeeRecord.
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid method"}, status=405)
+
+    try:
+        data = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    payment_id = data.get("razorpay_payment_id")
+    order_id = data.get("razorpay_order_id")
+    signature = data.get("razorpay_signature")
+
+    if not (payment_id and order_id and signature):
+        return JsonResponse({"error": "Missing payment parameters"}, status=400)
+
+    fee = FeeRecord.objects.filter(razorpay_order_id=order_id).first()
+    if not fee:
+        return JsonResponse({"error": "Fee record not found"}, status=404)
+
+    # Verify signature
+    params = {
+        "razorpay_order_id": order_id,
+        "razorpay_payment_id": payment_id,
+        "razorpay_signature": signature,
+    }
+
+    try:
+        razorpay_client.utility.verify_payment_signature(params)
+    except razorpay.errors.SignatureVerificationError:
+        fee.status = "Failed"
+        fee.save(update_fields=["status"])
+        return JsonResponse({"error": "Signature verification failed"}, status=400)
+
+    # If verified, update record (mark fully paid for simplicity)
+    fee.razorpay_payment_id = payment_id
+    fee.razorpay_signature = signature
+    fee.status = "Paid"
+    fee.amount_paid = fee.amount_due
+    fee.payment_time = timezone.now()
+    fee.save()
+
+    return JsonResponse({"message": "Payment verified and recorded"})
+
+
+def razorpay_webhook(request):
+    """
+    Webhook endpoint (recommended to configure on Razorpay Dashboard).
+    Validate signature (Razorpay sends signature in header 'X-Razorpay-Signature').
+    This is optional because we verify on payment_success, but webhook is more robust.
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "invalid method"}, status=405)
+
+    payload = request.body
+    signature = request.META.get("HTTP_X_RAZORPAY_SIGNATURE", "")
+
+    # If you set an endpoint secret in Razorpay, verify it here:
+    try:
+        event = json.loads(payload.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"error": "invalid payload"}, status=400)
+
+    # Get payment entity if present (payment.captured event)
+    try:
+        payment_entity = event.get("payload", {}).get("payment", {}).get("entity", {})
+        order_id = payment_entity.get("order_id")
+        payment_id = payment_entity.get("id")
+    except Exception:
+        return JsonResponse({"error": "no payment entity"}, status=400)
+
+    # Find fee record and mark paid after verifying signature using SDK
+    fee = FeeRecord.objects.filter(razorpay_order_id=order_id).first()
+    if not fee:
+        return JsonResponse({"error": "fee not found"}, status=404)
+
+    try:
+        razorpay_client.utility.verify_payment_signature({
+            "razorpay_order_id": order_id,
+            "razorpay_payment_id": payment_id,
+            "razorpay_signature": signature,
+        })
+    except razorpay.errors.SignatureVerificationError:
+        fee.status = "Failed"
+        fee.save(update_fields=["status"])
+        return JsonResponse({"error": "signature failed"}, status=400)
+
+    # Mark paid
+    fee.razorpay_payment_id = payment_id
+    fee.razorpay_signature = signature
+    fee.status = "Paid"
+    fee.amount_paid = fee.amount_due
+    fee.payment_time = timezone.now()
+    fee.save()
+
+    return JsonResponse({"status": "ok"})
+
+
+
+def fee_receipt_pdf(request, fee_id):
+    """
+    Generates a simple PDF receipt for a paid FeeRecord.
+    Only student who owns the fee (or staff) can download.
+    """
+    roll_no = request.session.get("roll_no")
+    fee = get_object_or_404(FeeRecord, id=fee_id)
+
+    # Permission: either the student (session) or admin/staff (you can expand)
+    if roll_no:
+        if fee.student.roll_no != roll_no:
+            return HttpResponseForbidden("Not authorized to download this receipt.")
+    # else: you might allow staff to download by other checks (not implemented here)
+
+    if fee.status != "Paid":
+        return HttpResponse("Receipt only available for paid fees.", status=400)
+
+    # Create PDF
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+
+    margin = 20 * mm
+    x = margin
+    y = height - margin
+
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(x, y, "Sootrank — Fee Receipt")
+    c.setFont("Helvetica", 10)
+    c.drawString(x, y - 18, f"Receipt No: {fee.receipt_number()}")
+    c.drawString(x, y - 32, f"Date: {fee.payment_time.strftime('%Y-%m-%d %H:%M') if fee.payment_time else fee.created_at.strftime('%Y-%m-%d')}")
+
+    y -= 60
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(x, y, "Student Details")
+    c.setFont("Helvetica", 10)
+    c.drawString(x, y - 16, f"Name: {fee.student.first_name} {fee.student.last_name or ''}")
+    c.drawString(x, y - 32, f"Roll No: {fee.student.roll_no}")
+    c.drawString(x, y - 48, f"Branch: {fee.student.branch.name if fee.student.branch else ''}")
+
+    y -= 80
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(x, y, "Payment Details")
+    c.setFont("Helvetica", 10)
+    c.drawString(x, y - 16, f"Semester: {fee.semester}")
+    c.drawString(x, y - 32, f"Amount Paid: ₹{fee.amount_paid}")
+    c.drawString(x, y - 48, f"Payment ID: {fee.razorpay_payment_id or '—'}")
+    c.drawString(x, y - 64, f"Order ID: {fee.razorpay_order_id or '—'}")
+
+    y -= 100
+    c.setFont("Helvetica", 9)
+    c.drawString(x, y, "This is a computer-generated receipt from Sootrank. No signature required.")
+
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+
+    filename = f"receipt_{fee.receipt_number()}.pdf"
+    return HttpResponse(buffer, content_type="application/pdf", headers={
+        "Content-Disposition": f'attachment; filename="{filename}"'
+    })
+
+
+def admin_fee_dashboard(request):
+    """
+    Main page — list of all students and their fee records.
+    """
+    students = Student.objects.all().order_by("roll_no").prefetch_related("fees")
+
+    # Filter by semester if needed
+    sem_filter = request.GET.get("semester")
+    if sem_filter:
+        students = students.filter(fees__semester=sem_filter).distinct()
+
+    total_records = FeeRecord.objects.count()
+    paid_count = FeeRecord.objects.filter(status="Paid").count()
+    pending_count = FeeRecord.objects.filter(status="Pending").count()
+
+    context = {
+        "students": students,
+        "total_records": total_records,
+        "paid_count": paid_count,
+        "pending_count": pending_count,
+    }
+    return render(request, "admin/fees_manage.html", context)
+
+
+def admin_fee_add(request):
+    """
+    Add a new fee record manually.
+    """
+    if request.method == "POST":
+        roll_no = request.POST.get("roll_no")
+        semester = request.POST.get("semester")
+        amount_due = request.POST.get("amount_due")
+
+        student = Student.objects.filter(roll_no=roll_no).first()
+        if not student:
+            messages.error(request, f"Student with Roll No {roll_no} not found.")
+            return redirect("admin_fee_add")
+
+        FeeRecord.objects.create(
+            student=student,
+            semester=semester,
+            amount_due=amount_due,
+            status="Pending"
+        )
+        messages.success(request, f"Fee record added for {roll_no} (Sem {semester}).")
+        return redirect("admin_fee_dashboard")
+
+    return render(request, "admin/add_fee.html")
+
+
+def admin_fee_update(request, fee_id):
+    """
+    Edit an existing fee record — mark paid, update amount, etc.
+    """
+    fee = get_object_or_404(FeeRecord, id=fee_id)
+    if request.method == "POST":
+        fee.amount_due = request.POST.get("amount_due")
+        fee.amount_paid = request.POST.get("amount_paid")
+        fee.status = request.POST.get("status")
+        fee.semester = request.POST.get("semester")
+        fee.save()
+        messages.success(request, "Fee record updated successfully.")
+        return redirect("admin_fee_dashboard")
+
+    return render(request, "admin/update_fee.html", {"fee": fee})
+
+
+def admin_fee_upload_csv(request):
+    """
+    Upload a CSV file with columns:
+    roll_no, semester, amount_due, amount_paid, status
+    """
+    if request.method == "POST" and request.FILES.get("csv_file"):
+        csv_file = request.FILES["csv_file"]
+        if not csv_file.name.endswith(".csv"):
+            messages.error(request, "Please upload a valid CSV file.")
+            return redirect("admin_fee_upload_csv")
+
+        fs = FileSystemStorage()
+        filename = fs.save(csv_file.name, csv_file)
+        file_path = fs.path(filename)
+
+        created, updated, failed = 0, 0, 0
+        with open(file_path, mode="r", encoding="utf-8-sig") as file:
+            reader = csv.DictReader(file)
+            with transaction.atomic():
+                for row in reader:
+                    roll_no = row.get("roll_no")
+                    semester = row.get("semester")
+                    amount_due = row.get("amount_due")
+                    amount_paid = row.get("amount_paid", "0")
+                    status = row.get("status", "Pending")
+
+                    if not roll_no or not semester or not amount_due:
+                        failed += 1
+                        continue
+
+                    student = Student.objects.filter(roll_no=roll_no).first()
+                    if not student:
+                        failed += 1
+                        continue
+
+                    obj, created_now = FeeRecord.objects.update_or_create(
+                        student=student,
+                        semester=semester,
+                        defaults={
+                            "amount_due": amount_due,
+                            "amount_paid": amount_paid or 0,
+                            "status": status or "Pending",
+                        },
+                    )
+                    if created_now:
+                        created += 1
+                    else:
+                        updated += 1
+
+        messages.success(request, f"CSV processed — Added: {created}, Updated: {updated}, Skipped: {failed}")
+        return redirect("admin_fee_dashboard")
+
+    return render(request, "admin/fee_upload_csv.html")
+
+def admin_timetable_dashboard(request):
+    """
+    Centralized Timetable Management Dashboard:
+    - Lists all courses
+    - Sorts by courses with defined timetables first
+    - Provides search + add/edit modal data
+    """
+    # Annotate each course with the number of timetable entries
+    courses = (
+        Course.objects.annotate(timetable_count=Count("timetables"))
+        .prefetch_related("timetables", "faculties")
+        .order_by("-timetable_count", "code")  # Courses with timetables first
+    )
+
+    days = Timetable.DAYS
+
+    context = {
+        "courses": courses,
+        "days": days,
+    }
+
+    return render(request, "admin/admin_timetable.html", context)
+
+
+def admin_timetable_add(request):
+    """
+    Handle adding a new timetable entry from admin dashboard
+    """
+    if request.method == "POST":
+        course_id = request.POST.get("course")
+        faculty_id = request.POST.get("faculty")
+        day = request.POST.get("day")
+        start_time = request.POST.get("start_time")
+        end_time = request.POST.get("end_time")
+        location = request.POST.get("location")
+        remarks = request.POST.get("remarks")
+
+        if not course_id or not day or not start_time or not end_time:
+            messages.error(request, "Please fill all required fields.")
+            return redirect("admin_timetable_dashboard")
+
+        try:
+            course = Course.objects.get(id=course_id)
+            faculty = Faculty.objects.get(id=faculty_id) if faculty_id else None
+
+            # Conflict check
+            exists = Timetable.objects.filter(
+                course=course,
+                day=day,
+                start_time=start_time,
+                end_time=end_time
+            ).exists()
+            if exists:
+                messages.warning(request, "A timetable entry for this course and time already exists.")
+                return redirect("admin_timetable_dashboard")
+
+            Timetable.objects.create(
+                course=course,
+                faculty=faculty,
+                day=day,
+                start_time=start_time,
+                end_time=end_time,
+                location=location,
+                remarks=remarks,
+            )
+            messages.success(request, "Timetable entry added successfully.")
+        except Exception as e:
+            messages.error(request, f"Error adding timetable: {e}")
+
+    return redirect("admin_timetable_dashboard")
+
+
+def admin_timetable_delete(request, timetable_id):
+    """
+    Delete a timetable entry by ID
+    """
+    try:
+        timetable = Timetable.objects.get(id=timetable_id)
+        timetable.delete()
+        messages.success(request, "Timetable entry deleted successfully.")
+    except Timetable.DoesNotExist:
+        messages.error(request, "Timetable entry not found.")
+    return redirect("admin_timetable_dashboard")
+
+
+def admin_timetable_edit(request, timetable_id):
+    """
+    Edit an existing timetable entry (central admin control)
+    """
+    timetable = get_object_or_404(Timetable, id=timetable_id)
+
+    if request.method == "POST":
+        try:
+            course_id = request.POST.get("course")
+            faculty_id = request.POST.get("faculty")
+            day = request.POST.get("day")
+            start_time = request.POST.get("start_time")
+            end_time = request.POST.get("end_time")
+            location = request.POST.get("location")
+            remarks = request.POST.get("remarks")
+
+            if not course_id or not day or not start_time or not end_time:
+                messages.error(request, "All required fields must be filled.")
+                return redirect("admin_timetable_dashboard")
+
+            # Conflict check (excluding current record)
+            exists = Timetable.objects.filter(
+                course_id=course_id,
+                day=day,
+                start_time=start_time,
+                end_time=end_time
+            ).exclude(id=timetable_id).exists()
+            if exists:
+                messages.warning(request, "A conflicting timetable entry already exists.")
+                return redirect("admin_timetable_dashboard")
+
+            timetable.course_id = course_id
+            timetable.faculty_id = faculty_id if faculty_id else None
+            timetable.day = day
+            timetable.start_time = start_time
+            timetable.end_time = end_time
+            timetable.location = location
+            timetable.remarks = remarks
+            timetable.save()
+
+            messages.success(request, "Timetable entry updated successfully.")
+        except Exception as e:
+            messages.error(request, f"Error updating timetable: {e}")
+
+    return redirect("admin_timetable_dashboard")
+
+
+def admin_attendance_dashboard(request):
+    """
+    Shows all courses with attendance summary
+    Courses with enrolled students appear at the top
+    """
+    # Annotate courses safely (avoid division by zero)
+    courses = (
+        Course.objects.annotate(
+            total_students=Count("attendance_records__student", distinct=True),
+            avg_attendance=Avg(
+                Case(
+                    When(
+                        attendance_records__total_classes__gt=0,
+                        then=ExpressionWrapper(
+                            (F("attendance_records__attended_classes") * 100.0) /
+                            F("attendance_records__total_classes"),
+                            output_field=FloatField(),
+                        )
+                    ),
+                    default=Value(0.0),
+                    output_field=FloatField(),
+                )
+            ),
+        )
+        .order_by("-total_students", "-avg_attendance", "code")
+    )
+
+    return render(request, "admin/admin_attendance_dashboard.html", {"courses": courses})
+
+
+def admin_course_attendance(request, course_id):
+    """
+    Shows attendance for each student in the selected course
+    """
+    course = get_object_or_404(Course, id=course_id)
+    enrollments = StudentCourse.objects.filter(course=course)
+    student_ids = [e.student.id for e in enrollments]
+    
+    # Prefill attendance records if missing
+    for sid in student_ids:
+        Attendance.objects.get_or_create(student_id=sid, course=course)
+
+    records = (
+        Attendance.objects.filter(course=course)
+        .select_related("student")
+        .order_by("student__roll_no")
+    )
+
+    if request.method == "POST":
+        for rec in records:
+            total = request.POST.get(f"total_{rec.id}")
+            attended = request.POST.get(f"attended_{rec.id}")
+            if total is not None and attended is not None:
+                rec.total_classes = int(total)
+                rec.attended_classes = int(attended)
+                rec.save()
+        messages.success(request, "Attendance updated successfully.")
+        return redirect("admin_course_attendance", course_id=course.id)
+
+    return render(request, "admin/admin_course_attendance.html", {
+        "course": course,
+        "records": records
+    })
+

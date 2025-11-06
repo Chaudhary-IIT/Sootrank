@@ -1,0 +1,206 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Attendance Dashboard - Sootrank Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+  <style>
+    /* ==== THEME (shared across admin) ==== */
+    :root{
+      --color-primary: #34495e;   /* navbar / headings */
+      --color-accent:  #3498db;   /* focus / primary */
+      --color-bg:      #f4f6f8;   /* app background */
+      --color-surface: #ffffff;   /* cards/tables */
+      --color-text:    #2c3e50;   /* main text */
+      --color-muted:   #7f8c8d;   /* muted text */
+      --border:        #e6ecf1;   /* light borders */
+      --radius:        12px;
+      --shadow-subtle: 0 2px 8px rgba(0,0,0,0.06);
+      --shadow-hover:  0 10px 20px rgba(52,152,219,0.12);
+      --container-max: 1140px;
+    }
+
+    body{
+      background-color: var(--color-bg);
+      color: var(--color-text);
+      font-family: "Segoe UI", Roboto, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    .text-primary{ color: var(--color-primary) !important; }
+    .muted{ color: var(--color-muted); }
+
+    /* Navbar */
+    .navbar-dark.bg-primary{
+      background: linear-gradient(180deg, var(--color-primary), #2f4252) !important;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      min-height: 64px;
+    }
+    .navbar-brand{ font-weight: 700; font-size: 1.15rem; }
+
+    /* Card shell */
+    .card-surface{
+      background: var(--color-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-subtle);
+    }
+    .card-surface:hover{ box-shadow: var(--shadow-hover); transition: box-shadow .2s ease; }
+
+    /* Inputs */
+    .form-control{
+      border-color: var(--border);
+      border-radius: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .form-control:focus{
+      border-color: var(--color-accent);
+      box-shadow: 0 0 0 .2rem rgba(52,152,219,.15);
+    }
+
+    /* Buttons */
+    .btn-primary{
+      background-color: var(--color-accent) !important;
+      border-color: var(--color-accent) !important;
+      box-shadow: var(--shadow-subtle);
+    }
+    .btn-outline-light{ box-shadow: var(--shadow-subtle); }
+    .btn-primary:hover, .btn-outline-light:hover{ filter: brightness(.98); box-shadow: var(--shadow-hover); }
+
+    /* Table */
+    .table thead.table-primary{
+      --bs-table-color: #fff;
+      --bs-table-bg: #3a7db3;
+      --bs-table-border-color: #3a7db3;
+    }
+
+    /* Status pills */
+    .indicator{
+      display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px;
+    }
+    .indicator.active{ background-color:#198754; }
+    .indicator.inactive{ background-color:#adb5bd; }
+    .course-active{ color:#198754; font-weight:600; }
+    .course-inactive{ color:#6c757d; }
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm mb-4">
+    <div class="container">
+      <a class="navbar-brand" href="{% url 'custom_admin_home' %}"><i class="fa-solid fa-clipboard-list me-2"></i> Sootrank Admin</a>
+      <div class="ms-auto">
+        <a href="{% url 'custom_admin_home' %}" class="btn btn-outline-light btn-sm">
+          <i class="fa-solid fa-home me-1"></i> Home
+        </a>
+      </div>
+    </div>
+  </nav>
+  {% if messages %}
+  <div class="container mt-3" style="max-width:700px;">
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+  <div class="container" style="max-width: var(--container-max);">
+    <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-md-between mb-3">
+      <div>
+        <h2 class="mb-1 text-primary">Attendance Dashboard</h2>
+        <div class="muted">Sorted by courses with attendance first</div>
+      </div>
+    </div>
+
+    <!-- Search -->
+    <div class="input-group mb-3">
+      <span class="input-group-text"><i class="fa fa-search"></i></span>
+      <input type="text" id="searchInput" class="form-control" placeholder="Search by course code or name…" onkeyup="filterCourses()">
+    </div>
+
+    <!-- Table -->
+    <div class="card-surface p-0">
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead class="table-primary">
+            <tr>
+              <th style="width: 140px;">Course Code</th>
+              <th>Course Name</th>
+              <th style="width: 130px;">Students</th>
+              <th style="width: 170px;">Avg Attendance (%)</th>
+              <th style="width: 140px;">Status</th>
+              <th style="width: 140px;" class="text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="courseList">
+            {% for course in courses %}
+            <tr class="course-item" data-name="{{ course.code }} {{ course.name }}"
+                data-has-attendance="{% if course.total_students and course.total_students > 0 %}1{% else %}0{% endif %}">
+              <td><strong>{{ course.code }}</strong></td>
+              <td>{{ course.name }}</td>
+              <td>{{ course.total_students|default:"0" }}</td>
+              <td>
+                {% if course.avg_attendance %}
+                  {{ course.avg_attendance|floatformat:1 }}
+                {% else %}
+                  0.0
+                {% endif %}
+              </td>
+              <td>
+                {% if course.total_students > 0 %}
+                  <span class="indicator active"></span><span class="course-active">Active</span>
+                {% else %}
+                  <span class="indicator inactive"></span><span class="course-inactive">No Records</span>
+                {% endif %}
+              </td>
+              <td class="text-center">
+                <a href="{% url 'admin_course_attendance' course.id %}" class="btn btn-sm btn-outline-primary">
+                  <i class="fa-solid fa-list"></i> View
+                </a>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="6" class="text-center text-muted py-3">No courses found.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    setTimeout(function () {
+            document.querySelectorAll('.alert').forEach(function (alert) {
+                var bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close();
+            });
+        }, 4000);
+    // Text filter
+    function filterCourses() {
+      const q = (document.getElementById('searchInput').value || '').toLowerCase();
+      document.querySelectorAll('#courseList .course-item').forEach(row => {
+        const hay = (row.getAttribute('data-name') || '').toLowerCase();
+        row.style.display = hay.includes(q) ? '' : 'none';
+      });
+    }
+
+    // Prioritize rows having attendance (students > 0)
+    document.addEventListener('DOMContentLoaded', () => {
+      const body = document.getElementById('courseList');
+      if (!body) return;
+      const rows = Array.from(body.children);
+      rows.sort((a, b) => (parseInt(b.dataset.hasAttendance || '0', 10) - parseInt(a.dataset.hasAttendance || '0', 10)));
+      rows.forEach(r => body.appendChild(r));
+    });
+  </script>
+</body>
+</html>

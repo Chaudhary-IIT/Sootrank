@@ -1,0 +1,117 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Fee Payment | Sootrank</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    body { background:#f8faff; font-family:'Inter',sans-serif; }
+    .page-title { color:#2469f0; font-weight:700; text-align:center; margin-top:30px; }
+    .card { border:0; border-radius:12px; box-shadow:0 5px 20px rgba(0,0,0,0.08); }
+    .btn-pay { background:#2469f0; color:white; font-weight:600; border-radius:10px; }
+    .btn-pay:hover { background:#1a52d1; }
+    .modal-content { border-radius:18px; box-shadow:0 10px 30px rgba(0,0,0,0.15); }
+    .modal-header { background:#2469f0; color:white; border-top-left-radius:18px; border-top-right-radius:18px; }
+  </style>
+</head>
+<body>
+
+<div class="container py-4">
+  <h2 class="page-title">Fee Details</h2>
+
+  <!-- Summary -->
+  <div class="alert alert-info text-center mt-3">
+    <strong>Total Due:</strong> ₹{{ total_due }} &nbsp;&nbsp; | &nbsp;&nbsp;
+    <strong>Total Paid:</strong> ₹{{ total_paid }}
+  </div>
+
+  <!-- Pending Fees -->
+  <div class="card p-4 mb-4">
+    <h5 class="mb-3 text-primary"><i class="bi bi-clock"></i> Pending Fees</h5>
+    {% if due_fees %}
+    <table class="table table-striped align-middle text-center">
+      <thead>
+        <tr><th>Semester</th><th>Amount Due</th><th>Status</th><th>Action</th></tr>
+      </thead>
+      <tbody>
+      {% for f in due_fees %}
+        <tr>
+          <td>{{ f.semester }}</td>
+          <td>₹{{ f.amount_due }}</td>
+          <td><span class="badge bg-warning text-dark">{{ f.status }}</span></td>
+          <td><button class="btn btn-pay" onclick="openPaymentModal({{ f.id }}, {{ f.amount_due }})">Pay Now</button></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-muted mb-0">🎉 No dues — all fees cleared.</p>
+    {% endif %}
+  </div>
+
+  <!-- Paid Fees -->
+  <div class="card p-4">
+    <h5 class="mb-3 text-success"><i class="bi bi-check-circle"></i> Paid Fees</h5>
+    {% if paid_fees %}
+    <table class="table table-striped align-middle text-center">
+      <thead><tr><th>Semester</th><th>Amount Paid</th><th>Date</th><th>Receipt</th></tr></thead>
+      <tbody>
+      {% for f in paid_fees %}
+        <tr>
+          <td>{{ f.semester }}</td>
+          <td>₹{{ f.amount_paid }}</td>
+          <td>{{ f.payment_time|date:"d M Y, h:i A" }}</td>
+          <td><a href="{% url 'download_fee_receipt' f.id %}" class="btn btn-outline-primary btn-sm">Download</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-muted mb-0">No payment history yet.</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Modal (Razorpay-like) -->
+<div class="modal fade" id="paymentModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Secure Payment</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-center">
+        <h6 class="text-muted mb-3">Sootrank Fee Payment Gateway</h6>
+        <h4 class="text-primary mb-4">₹<span id="payAmount"></span></h4>
+        <button id="confirmPay" class="btn btn-pay w-100">Confirm Payment</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+let currentFeeId = null;
+function openPaymentModal(feeId, amount) {
+  currentFeeId = feeId;
+  document.getElementById("payAmount").innerText = amount;
+  const modal = new bootstrap.Modal(document.getElementById('paymentModal'));
+  modal.show();
+}
+
+document.getElementById("confirmPay").addEventListener("click", function() {
+  fetch(`/fees/pay/${currentFeeId}/`)
+    .then(r => r.json())
+    .then(data => {
+      alert(data.message);
+      window.location.href = data.redirect;
+    })
+    .catch(() => alert("Error while processing payment."));
+});
+</script>
+
+</body>
+</html>

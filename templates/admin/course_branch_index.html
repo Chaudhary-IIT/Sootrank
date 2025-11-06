@@ -1,15 +1,110 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Course–Branch Categories - Sootrank Admin</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
+
   <style>
-    body { background-color: #f9fafb; }
-    .table-actions button, .table-actions a { margin-right: 5px; }
+    /* ==== THEME VARIABLES (uniform across admin) ==== */
+    :root{
+      --color-primary: #34495e;   /* navbar / headings */
+      --color-accent:  #3498db;   /* focus / primary */
+      --color-bg:      #f4f6f8;   /* app background */
+      --color-surface: #ffffff;   /* cards/tables */
+      --color-text:    #2c3e50;   /* main text */
+      --color-muted:   #7f8c8d;   /* muted text */
+      --border:        #e6ecf1;   /* light borders */
+      --radius:        10px;
+      --shadow-subtle: 0 2px 8px rgba(0,0,0,0.06);
+      --shadow-hover:  0 10px 20px rgba(52,152,219,0.12);
+      --container-max: 1180px;
+    }
+
+    /* ==== BASE ==== */
+    body{
+      background-color: var(--color-bg);
+      color: var(--color-text);
+      font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      margin: 0;
+    }
+
+    /* ==== NAVBAR (markup unchanged) ==== */
+    .navbar-dark.bg-primary{
+      background: linear-gradient(180deg, var(--color-primary), #2f4252) !important;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      min-height: 64px;
+    }
+    .navbar-dark .navbar-brand{
+      font-weight: 700;
+      font-size: 1.15rem;
+    }
+    .navbar .btn{
+      box-shadow: var(--shadow-subtle);
+    }
+    .navbar .btn.btn-light{
+      background: #fff; border-color: #fff; color: var(--color-primary);
+    }
+    .navbar .btn.btn-outline-light{
+      border-color: #fff !important; color: #fff !important;
+      background: transparent !important;
+    }
+    .navbar .btn:hover{ filter: brightness(.98); box-shadow: var(--shadow-hover); }
+
+    /* ==== CONTAINER / HEADERS ==== */
+    .container.my-5{
+      margin-top: 2.5rem !important;
+      margin-bottom: 2.5rem !important;
+      max-width: var(--container-max);
+    }
+    .text-primary{ color: var(--color-primary) !important; }
+
+    /* ==== FILTERS ==== */
+    .input-group-text{
+      background: var(--color-surface);
+      border-right: 0;
+      border-color: var(--border);
+    }
+    .form-control{
+      border-color: var(--border);
+      border-radius: 10px;
+    }
+    .form-control:focus{
+      border-color: var(--color-accent);
+      box-shadow: 0 0 0 .2rem rgba(52,152,219,.15);
+    }
+
+    /* ==== TABLE WRAPPER & TABLE ==== */
+    .table-responsive.shadow-sm.bg-white.rounded.p-3{
+      background: var(--color-surface) !important;
+      border: 1px solid var(--border);
+      border-radius: var(--radius) !important;
+      box-shadow: var(--shadow-subtle) !important;
+      padding: 0 !important;
+      overflow: hidden;
+    }
+    table.table{ margin-bottom: 0; }
+    thead.table-primary th{
+      background: rgba(52,152,219,0.08) !important;
+      color: var(--color-text);
+      border-bottom: 1px solid var(--border) !important;
+    }
+    .table td, .table th{ border-color: var(--border) !important; vertical-align: middle; }
+    .table-hover tbody tr:hover{ background: rgba(52,152,219,0.06) !important; }
+
+    /* ==== ACTION BUTTONS ==== */
+    .table-actions button, .table-actions a{ margin-right: 5px; box-shadow: var(--shadow-subtle); }
+    .table-actions .btn-secondary{
+      background: #6c757d; border-color: #6c757d;
+    }
+    .table-actions .btn-secondary:hover{ box-shadow: var(--shadow-hover); filter: brightness(.98); }
   </style>
 </head>
+
 <body>
   <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow">
     <div class="container">

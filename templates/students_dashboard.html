@@ -21,7 +21,7 @@
             </h2>
             <p class="mb-1">Enrollment No: {{ student.roll_no|upper }}</p>
             <p class="mb-1">Course: {{ student.branch }} ({{ student.department }})</p>
-            <p class="mb-2">Semester: {{ student.semester }}</p>
+            <p class="mb-2">Semester: {{ computed_semester }}</p>
             <a href="{% url 'student_edit_profile' %}" class="btn btn-warning">Edit Profile</a>
             <a href="{% url 'registered_courses' %}" class="btn btn-info">Registered Courses</a>
         </div>
@@ -57,14 +57,20 @@
         <h2 class="fs-5 fw-semibold mb-3">📌 Quick Links</h2>
         <div class="row g-3">
             <div class="col-6">
-                <button class="btn btn-secondary w-100">Attendance</button>
-            </div>
+            <a href="{% url 'student_attendance' %}" class="btn btn-secondary w-100">
+                <i class="fa-solid fa-file-lines me-1"></i> Attendance
+            </a>
+        </div>
             <div class="col-6">
-                <button class="btn btn-secondary w-100">Fee Status</button>
-            </div>
+            <a href="{% url 'timetable' %}" class="btn btn-secondary w-100">
+                <i class="fa-solid fa-file-lines me-1"></i> Timetable
+            </a>
+        </div>
             <div class="col-6">
-                <button class="btn btn-secondary w-100">Time Table</button>
-            </div>
+            <a href="{% url 'student_fees' %}" class="btn btn-secondary w-100">
+                <i class="fa-solid fa-file-lines me-1"></i> Fee Status
+            </a>
+        </div>
             <div class="col-6">
                 <a href="https://academics.iitmandi.ac.in/calendar" class="btn btn-secondary w-100">
                     Academic Calendar

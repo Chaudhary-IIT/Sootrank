@@ -23,7 +23,7 @@
       <div>
         <h1 class="text-3xl font-bold">Course Summary</h1>
         <p class="text-sm text-gray-600 mt-1">
-          Review the current pre‑registration status for one selected course per slot for this semester.
+          Review the current pre-registration status and modify course mode (Regular, Pass/Fail, or Audit).
         </p>
       </div>
       <span class="inline-flex items-center rounded-full bg-blue-100 text-blue-800 text-xs font-medium px-3 py-1">
@@ -31,23 +31,22 @@
       </span>
     </div>
 
-    <!-- PF info -->
+    <!-- Info -->
     <div class="mb-3 text-sm text-gray-700">
-      Pass/Fail credits used: <span class="font-semibold" id="pfUsed">{{ pf_total }}</span> / 9
+      Pass/Fail credits used: <span class="font-semibold" id="pfUsed">{{ pf_total }}</span> / 9 overall  
+      (Max 6 PF credits allowed per semester)
     </div>
     <div class="mb-4 text-xs text-gray-500">
-      Changes to Pass/Fail are staged locally until Update is pressed. Approved courses cannot be set to P/F.
+      Mode changes are staged locally until "Apply Changes" is pressed. Approved courses cannot be modified.
     </div>
 
     <!-- Card -->
     <div class="bg-white rounded-2xl shadow">
-
-      <!-- Scrollable table wrapper to avoid clipping -->
       <div class="rounded-2xl overflow-x-auto">
         <table class="w-full text-left border-collapse table-fixed min-w-[1050px]">
           <thead>
             <tr class="bg-gray-50 text-gray-700">
-              <th class="px-5 py-3 text-sm font-semibold w-24">Course Code</th>
+              <th class="px-5 py-3 text-sm font-semibold w-24">Code</th>
               <th class="px-5 py-3 text-sm font-semibold w-[260px]">Course Name</th>
               <th class="px-5 py-3 text-sm font-semibold w-[220px]">Instructor</th>
               <th class="px-5 py-3 text-sm font-semibold w-20">Type</th>
@@ -55,25 +54,23 @@
               <th class="px-5 py-3 text-sm font-semibold w-16">Credits</th>
               <th class="px-5 py-3 text-sm font-semibold w-20">LTPC</th>
               <th class="px-5 py-3 text-sm font-semibold min-w-[140px]">Status</th>
-              <th class="px-5 py-3 text-sm font-semibold min-w-[160px]">Pass/Fail</th>
+              <th class="px-5 py-3 text-sm font-semibold min-w-[160px]">Course Mode</th>
             </tr>
           </thead>
-          <tbody class="text-gray-900">
 
+          <tbody class="text-gray-900">
             {% if enrollments %}
               {% for sc in enrollments %}
                 {% with course=sc.course %}
-                <tr class="{% cycle '' 'bg-gray-50' %} border-t"
+                <tr class="{% cycle '' 'bg-gray-50' %} border-t" 
                     data-sc-id="{{ sc.id }}"
                     data-credits="{{ course.credits }}"
-                    {% if sc.status == 'ENR' %}data-approved="1"{% else %}data-approved="0"{% endif %}
-                    {% if sc.is_pass_fail %}data-current-pf="1"{% else %}data-current-pf="0"{% endif %}>
+                    {% if sc.status == 'ENR' %}data-approved="1"{% else %}data-approved="0"{% endif %}>
 
                   <td class="px-5 py-3 whitespace-nowrap">{{ course.code }}</td>
-
-                  <!-- Wrap long names to next line -->
                   <td class="px-5 py-3 whitespace-normal break-words">{{ course.name }}</td>
 
+                  <!-- Instructor -->
                   <td class="px-5 py-3 whitespace-normal break-words">
                     {% with facs=course.faculties.all %}
                       {% if facs %}
@@ -86,6 +83,7 @@
                     {% endwith %}
                   </td>
 
+                  <!-- Type -->
                   <td class="px-5 py-3 whitespace-nowrap">
                     {% if sc.type and sc.type != "ALL" %}
                       {{ sc.type }}
@@ -104,11 +102,12 @@
                   <td class="px-5 py-3 whitespace-nowrap">{{ course.credits }}</td>
                   <td class="px-5 py-3 whitespace-nowrap">{{ course.LTPC }}</td>
 
+                  <!-- Status -->
                   <td class="px-5 py-3">
                     {% if sc.status == "ENR" %}
                       <span class="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1">Approved</span>
                     {% elif sc.status == "PND" %}
-                      <span class="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-xs font-medium px-3 py-1">Pending at Instructor</span>
+                      <span class="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-xs font-medium px-3 py-1">Pending</span>
                     {% elif sc.status == "DRP" %}
                       <span class="inline-flex items-center rounded-full bg-red-100 text-red-700 text-xs font-medium px-3 py-1">Rejected</span>
                     {% else %}
@@ -116,14 +115,17 @@
                     {% endif %}
                   </td>
 
-                  <!-- PF column with guaranteed width and full-width button -->
+                  <!-- Dropdown -->
                   <td class="px-5 py-3">
-                    <button type="button"
-                            class="w-full px-3 py-1 rounded text-white bg-gray-800 hover:bg-black border border-gray-800 inline-flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-400"
-                            data-action="toggle-pf">
-                      {% if sc.is_pass_fail %}Unset P/F{% else %}Set P/F{% endif %}
-                    </button>
-                    <div class="text-[11px] mt-1 text-gray-600" data-pf-hint></div>
+                    <select class="mode-dropdown w-full px-3 py-1 rounded border border-gray-300 text-sm bg-white"
+                            data-sc-id="{{ sc.id }}"
+                            data-credits="{{ course.credits }}"
+                            data-approved="{% if sc.status == 'ENR' %}1{% else %}0{% endif %}">
+                      <option value="REG" {% if sc.course_mode == 'REG' %}selected{% endif %}>Regular</option>
+                      <option value="PF" {% if sc.course_mode == 'PF' %}selected{% endif %}>Pass/Fail</option>
+                      <option value="AUD" {% if sc.course_mode == 'AUD' %}selected{% endif %}>Audit</option>
+                    </select>
+                    <div class="text-[11px] mt-1 text-gray-600" data-mode-hint></div>
                   </td>
 
                 </tr>
@@ -132,31 +134,27 @@
             {% else %}
               <tr class="border-t">
                 <td class="px-5 py-6 text-center text-gray-500" colspan="9">
-                  No pre‑registrations yet for this semester.
+                  No pre-registrations yet for this semester.
                 </td>
               </tr>
             {% endif %}
-
           </tbody>
         </table>
       </div>
 
-      <!-- Footer actions -->
+      <!-- Footer -->
       <div class="flex items-center justify-between px-5 py-4">
         <div class="text-sm">
-          Staged P/F changes: <span id="stagedCount" class="font-semibold">0</span>
+          Staged changes: <span id="stagedCount" class="font-semibold">0</span>
         </div>
         <div class="flex gap-3">
-    <a href="{% url 'students_dashboard' %}" 
-      class="px-5 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700">
-        Home
-      </a>
-      <button id="applyBtn" type="button"
-              class="px-5 py-2 rounded-lg bg-gray-800 text-white hover:bg-black disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled>
-        Update
-      </button>
-    </div>
+          <a href="{% url 'students_dashboard' %}" class="px-5 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700">Home</a>
+          <button id="applyBtn" type="button"
+                  class="px-5 py-2 rounded-lg bg-gray-800 text-white hover:bg-black disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled>
+            Apply Changes
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -164,16 +162,16 @@
   <!-- Confirmation Modal -->
   <div id="confirmModal" class="fixed inset-0 hidden justify-center items-center bg-black/60 z-50 pointer-events-none">
     <div class="bg-white rounded-2xl shadow-lg w-[520px] p-6 pointer-events-auto">
-      <h2 class="text-xl font-bold mb-2">Confirm Update</h2>
+      <h2 class="text-xl font-bold mb-2">Confirm Mode Update</h2>
       <p class="text-red-600 text-sm mb-4">
-        Pass/Fail updates can’t be undone. Proceed to apply the staged changes?
+        Changes to course mode (Regular / Pass-Fail / Audit) cannot be undone. Proceed?
       </p>
       <div class="border rounded bg-gray-50 p-3 text-sm mb-4 max-h-56 overflow-auto">
         <div id="changeList"></div>
       </div>
       <div class="flex justify-between">
         <button id="cancelModal" type="button" class="px-4 py-2 rounded bg-gray-300 text-gray-800 hover:bg-gray-400">Back</button>
-        <form id="applyForm" method="post" action="{% url 'apply_pf_changes' %}">
+        <form id="applyForm" method="post" action="{% url 'apply_mode_changes' %}">
           {% csrf_token %}
           <input type="hidden" name="payload" id="changesPayload">
           <button type="submit" class="px-5 py-2 rounded bg-green-600 text-white hover:bg-green-700">Apply</button>
@@ -184,125 +182,56 @@
 
   <script>
     const modal = document.getElementById("confirmModal");
-    let pfUsed = parseInt(document.getElementById("pfUsed").textContent || "0", 10) || 0;
     const staged = {};
+    let pfUsed = parseInt(document.getElementById("pfUsed").textContent || "0", 10) || 0;
 
-    function setBtnStyle(btn, variant) {
-      btn.className = "w-full px-3 py-1 rounded inline-flex items-center justify-center border focus:outline-none focus:ring-2 focus:ring-offset-1 transition";
-      if (variant === "disabled") {
-        btn.classList.add("bg-gray-300","text-gray-600","border-gray-300","cursor-not-allowed");
-      } else if (variant === "on") {
-        btn.classList.add("bg-purple-600","text-white","border-purple-600","hover:bg-purple-700","focus:ring-purple-400");
-      } else {
-        btn.classList.add("bg-gray-800","text-white","border-gray-800","hover:bg-black","focus:ring-gray-400");
-      }
-    }
-
-    function syncRow(row) {
-      const btn = row.querySelector('[data-action="toggle-pf"]');
-      const hint = row.querySelector('[data-pf-hint]');
-      const approved = row.getAttribute("data-approved") === "1";
-      const currentPF = row.getAttribute("data-current-pf") === "1";
-      const scId = row.getAttribute("data-sc-id");
-      const credits = parseInt(row.getAttribute("data-credits") || "0", 10) || 0;
-
-      const stagedEntry = staged[scId];
-      const effectivePF = stagedEntry ? stagedEntry.toPF : currentPF;
-
-      if (approved) {
-        btn.textContent = effectivePF ? "Unset P/F" : "Set P/F";
-        setBtnStyle(btn, "disabled");
-        if (hint) hint.textContent = "Approved; P/F cannot be changed.";
-        return;
-      }
-
-      let preview = pfUsed;
-      if (!currentPF && effectivePF) preview += credits;
-      if (currentPF && !effectivePF) preview -= credits;
-
-      if (effectivePF) {
-        btn.textContent = "Unset P/F";
-        setBtnStyle(btn, "on");
-      } else {
-        btn.textContent = "Set P/F";
-        setBtnStyle(btn, "off");
-      }
-
-      if (hint) {
-        hint.textContent = (!effectivePF && preview > 9) ? `Would exceed 9 credits (→ ${preview}).` : "";
-      }
-    }
-
-    function refreshAll() {
-      document.querySelectorAll("tbody tr[data-sc-id]").forEach(syncRow);
+    function refreshStatus() {
       const count = Object.keys(staged).length;
       document.getElementById("stagedCount").textContent = count;
       document.getElementById("applyBtn").disabled = count === 0;
     }
 
-    document.querySelectorAll('tbody tr[data-sc-id] [data-action="toggle-pf"]').forEach(btn => {
-      btn.addEventListener("click", (e) => {
-        const row = e.currentTarget.closest("tr[data-sc-id]");
-        const scId = row.getAttribute("data-sc-id");
-        const approved = row.getAttribute("data-approved") === "1";
-        if (approved) return;
+    document.querySelectorAll(".mode-dropdown").forEach(sel => {
+      sel.addEventListener("change", e => {
+        const scId = e.target.getAttribute("data-sc-id");
+        const credits = parseInt(e.target.getAttribute("data-credits") || "0", 10);
+        const approved = e.target.getAttribute("data-approved") === "1";
+        const row = e.target.closest("tr[data-sc-id]");
+        const hint = row.querySelector("[data-mode-hint]");
+        const newMode = e.target.value;
 
-        const currentPF = row.getAttribute("data-current-pf") === "1";
-        const credits = parseInt(row.getAttribute("data-credits") || "0", 10) || 0;
-
-        const stagedEntry = staged[scId];
-        const effectivePF = stagedEntry ? stagedEntry.toPF : currentPF;
-        const nextPF = !effectivePF;
-
-        let preview = pfUsed;
-        if (stagedEntry) {
-          if (!currentPF && stagedEntry.toPF) preview -= credits;
-          if (currentPF && !stagedEntry.toPF) preview += credits;
-        }
-        if (!currentPF && nextPF) preview += credits;
-        if (currentPF && !nextPF) preview -= credits;
-
-        if (!currentPF && nextPF && preview > 9) {
-          const hint = row.querySelector('[data-pf-hint]');
-          if (hint) hint.textContent = `Cannot exceed 9 P/F credits (→ ${preview}).`;
+        if (approved) {
+          e.target.value = "REG";
+          if (hint) hint.textContent = "Approved; cannot change mode.";
           return;
         }
 
-        if (nextPF === currentPF) {
-          delete staged[scId];
-        } else {
-          staged[scId] = { toPF: nextPF, credits: credits, code: row.children[0].textContent.trim() };
-        }
-
-        refreshAll();
+        staged[scId] = { new_mode: newMode, credits: credits, code: row.children[0].textContent.trim() };
+        refreshStatus();
       });
     });
 
     document.getElementById("applyBtn").addEventListener("click", () => {
       const entries = Object.entries(staged);
-      if (entries.length === 0) return;
+      if (!entries.length) return;
 
       const list = document.getElementById("changeList");
       list.innerHTML = "";
 
-      let preview = pfUsed;
+      let pfPreview = pfUsed;
       entries.forEach(([scId, info]) => {
-        const row = document.querySelector(`tr[data-sc-id="${scId}"]`);
-        const currentPF = row.getAttribute("data-current-pf") === "1";
-        if (!currentPF && info.toPF) preview += info.credits;
-        if (currentPF && !info.toPF) preview -= info.credits;
-
         const div = document.createElement("div");
-        div.textContent = `${info.code}: ${currentPF ? 'Unset' : 'Set'} P/F`;
+        div.textContent = `${info.code}: → ${info.new_mode}`;
         list.appendChild(div);
+        if (info.new_mode === "PF") pfPreview += info.credits;
       });
 
       const totalLine = document.createElement("div");
       totalLine.className = "mt-2 text-gray-700";
-      totalLine.textContent = `P/F total after update: ${preview} / 9`;
+      totalLine.textContent = `Pass/Fail total after update: ${pfPreview} / 9`;
       list.appendChild(totalLine);
 
-      const payload = entries.map(([scId, info]) => ({ sc_id: scId, to_pf: info.toPF }));
+      const payload = entries.map(([scId, info]) => ({ sc_id: scId, new_mode: info.new_mode }));
       document.getElementById("changesPayload").value = JSON.stringify({ changes: payload });
 
       modal.classList.remove("hidden");
@@ -314,8 +243,6 @@
       modal.classList.add("hidden");
       modal.classList.add("pointer-events-none");
     });
-
-    refreshAll();
   </script>
 </body>
 </html>
