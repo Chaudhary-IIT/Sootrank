@@ -1,205 +1,387 @@
 {% load static %}
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Instructor Approvals</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
-</head>
-<body class="min-h-screen bg-gray-100 flex items-start justify-center py-10">
-  <div class="w-[1200px]">
-    {% if messages %}
+  <head>
+    <meta charset="UTF-8" />
+    <title>Instructor Approvals</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- Tailwind (utility classes) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Bootstrap CSS (for alerts styling) -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="min-h-screen bg-gray-100 flex items-start justify-center py-10">
+    <div class="w-[1200px]">
+      {% if messages %}
       <div class="mb-3">
         {% for message in messages %}
-          <div class="alert alert-{{ message.tags }} mb-2" role="alert">{{ message }}</div>
+        <div class="alert alert-{{ message.tags }} mb-2" role="alert">
+          {{ message }}
+        </div>
         {% endfor %}
       </div>
-    {% endif %}
-    <div class="mb-5 flex items-center justify-between">
-      <h1 class="text-3xl font-bold">Pre‑Registration Requests</h1>
-      <div class="text-sm text-gray-600">Logged in as: {{ instructor.first_name }} {{ instructor.last_name }}</div>
-    </div>
+      {% endif %}
 
-    <!-- Filters -->
-    <form method="get" class="mb-4 flex items-center gap-3 flex-wrap">
-      <label class="text-sm text-gray-700">Status</label>
-      <select name="status" class="bg-white border border-gray-300 text-sm rounded-lg p-2">
-        <option value="PND" {% if status_filter == "PND" %}selected{% endif %}>Pending</option>
-        <option value="INS" {% if status_filter == "INS" %}selected{% endif %}>Instructor OK</option>
-        <option value="ENR" {% if status_filter == "ENR" %}selected{% endif %}>Enrolled</option>
-        <option value="DRP" {% if status_filter == "DRP" %}selected{% endif %}>Rejected</option>
-      </select>
+      <div class="mb-5 flex items-center justify-between">
+        <h1 class="text-3xl font-bold">Pre-Registration Requests</h1>
+        <div class="text-sm text-gray-600">
+          Logged in as: {{ instructor.first_name }} {{ instructor.last_name }}
+        </div>
+      </div>
 
-      <label class="text-sm text-gray-700">Course</label>
-      <select name="course" class="bg-white border border-gray-300 text-sm rounded-lg p-2">
-        <option value="">All</option>
-        {% for code,name,slot in my_courses %}
-          <option value="{{ code }}" {% if course_code == code %}selected{% endif %}>{{ code }} — {{ name }}</option>
-        {% endfor %}
-      </select>
+      <form method="get" class="mb-4 flex items-center gap-3 flex-wrap">
+        <label class="text-sm text-gray-700">Status</label>
+        <select
+          name="status"
+          class="bg-white border border-gray-300 text-sm rounded-lg p-2"
+        >
+          <option value="PND" {% if status_filter == "PND" %}selected{% endif %}>
+            Pending
+          </option>
+          <option value="INS" {% if status_filter == "INS" %}selected{% endif %}>
+            Instructor OK
+          </option>
+          <option value="ENR" {% if status_filter == "ENR" %}selected{% endif %}>
+            Enrolled
+          </option>
+          <option value="DRP" {% if status_filter == "DRP" %}selected{% endif %}>
+            Rejected
+          </option>
+        </select>
 
-      <label class="text-sm text-gray-700">Slot</label>
-      <select name="slot" class="bg-white border border-gray-300 text-sm rounded-lg p-2">
-        <option value="">All</option>
-        {% for s in slots %}
-          <option value="{{ s }}" {% if slot_filter == s %}selected{% endif %}>{{ s }}</option>
-        {% endfor %}
-      </select>
+        <label class="text-sm text-gray-700">Course</label>
+        <select
+          name="course"
+          class="bg-white border border-gray-300 text-sm rounded-lg p-2"
+        >
+          <option value="">All</option>
+          {% for code,name,slot in my_courses %}
+          <option value="{{ code }}" {% if course_code == code %}selected{% endif %}>
+            {{ code }} — {{ name }}
+          </option>
+          {% endfor %}
+        </select>
 
-      <button class="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-black">Apply</button>
-    </form>
+        <label class="text-sm text-gray-700">Slot</label>
+        <select
+          name="slot"
+          class="bg-white border border-gray-300 text-sm rounded-lg p-2"
+        >
+          <option value="">All</option>
+          {% for s in slots %}
+          <option value="{{ s }}" {% if slot_filter == s %}selected{% endif %}>
+            {{ s }}
+          </option>
+          {% endfor %}
+        </select>
 
-    <!-- Table -->
-    <div class="bg-white rounded-2xl shadow">
-      <div class="overflow-x-auto rounded-2xl">
-        <table class="w-full text-left border-collapse">
-          <thead>
-            <tr class="bg-gray-50 text-gray-700">
-              <th class="px-5 py-3">
-                <input type="checkbox" id="checkAll">
-              </th>
-              <th class="px-5 py-3 text-sm font-semibold">Student</th>
-              <th class="px-5 py-3 text-sm font-semibold">Roll No</th>
-              <th class="px-5 py-3 text-sm font-semibold">Course</th>
-              <th class="px-5 py-3 text-sm font-semibold">Slot</th>
-              <th class="px-5 py-3 text-sm font-semibold">Credits</th>
-              <th class="px-5 py-3 text-sm font-semibold">Pass/Fail</th>
-              <th class="px-5 py-3 text-sm font-semibold">Status</th>
-              <th class="px-5 py-3 text-sm font-semibold">Actions</th>
-            </tr>
-          </thead>
-          <tbody class="text-gray-900">
-            {% if requests %}
-              {% for sc in requests %}
-                <tr class="{% cycle '' 'bg-gray-50' %} border-t">
-                  <td class="px-5 py-3">
-                    {% if sc.status == "PND" %}
-                      <input type="checkbox" class="row-check" data-id="{{ sc.id }}">
-                    {% endif %}
-                  </td>
+        <button class="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-black">
+          Apply
+        </button>
+      </form>
 
-                  <td class="px-5 py-3">{{ sc.student.first_name }}{% if sc.student.last_name %} {{ sc.student.last_name }}{% endif %}</td>
-                  <td class="px-5 py-3 whitespace-nowrap">{{ sc.student.roll_no }}</td>
+      <div class="flex items-center gap-4 mb-3 text-sm text-gray-700">
+        <span class="inline-flex items-center gap-1">
+          <span class="inline-block w-3 h-3 rounded-full bg-blue-500"></span>
+          Regular
+        </span>
+        <span class="inline-flex items-center gap-1">
+          <span class="inline-block w-3 h-3 rounded-full bg-cyan-500"></span>
+          Pass/Fail
+        </span>
+        <span class="inline-flex items-center gap-1">
+          <span class="inline-block w-3 h-3 rounded-full bg-amber-500"></span>
+          Audit
+        </span>
+      </div>
 
-                  <td class="px-5 py-3 whitespace-normal break-words">
-                    {{ sc.course.code }} — {{ sc.course.name }}
-                  </td>
-
-                  <td class="px-5 py-3 whitespace-nowrap">{{ sc.course.slot }}</td>
-                  <td class="px-5 py-3 whitespace-nowrap">{{ sc.course.credits }}</td>
-
-                  <!-- Pass/Fail Column with explicit check -->
-                  <td class="px-5 py-3">
-                    {% if sc.is_pass_fail == True %}
-                      <span class="inline-flex items-center rounded-full bg-purple-100 text-purple-800 text-xs font-medium px-3 py-1">
-                        Yes
-                      </span>
-                    {% else %}
-                      <span class="inline-flex items-center rounded-full bg-blue-100 text-blue-800 text-xs font-medium px-3 py-1">
-                        No
-                      </span>
-                    {% endif %}
-                  </td>
-
-                  <td class="px-5 py-3">
-                    {% if sc.status == "PND" %}
-                      <span class="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-xs font-medium px-3 py-1">Pending</span>
-                    {% elif sc.status == "ENR" %}
-                      <span class="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1">Enrolled</span>
-                    {% elif sc.status == "DRP" %}
-                      <span class="inline-flex items-center rounded-full bg-red-100 text-red-700 text-xs font-medium px-3 py-1">Rejected</span>
-                    {% else %}
-                      <span class="inline-flex items-center rounded-full bg-gray-100 text-gray-700 text-xs font-medium px-3 py-1">{{ sc.get_status_display }}</span>
-                    {% endif %}
-                  </td>
-
-                  <td class="px-5 py-3">
-                    {% if sc.status == "PND" %}
-                      <div class="flex items-center gap-2 flex-nowrap">
-                        <form method="post" action="{% url 'instructor_request_action' %}" class="inline">
-                          {% csrf_token %}
-                          <input type="hidden" name="sc_id" value="{{ sc.id }}">
-                          <button type="submit" name="action" value="approve"
-                                  class="px-3 py-1 rounded bg-green-600 text-white hover:bg-green-700 whitespace-nowrap">
-                            Approve
-                          </button>
-                        </form>
-                        <form method="post" action="{% url 'instructor_request_action' %}" class="inline">
-                          {% csrf_token %}
-                          <input type="hidden" name="sc_id" value="{{ sc.id }}">
-                          <button type="submit" name="action" value="reject"
-                                  class="px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700 whitespace-nowrap">
-                            Reject
-                          </button>
-                        </form>
-                      </div>
-                    {% else %}
-                      <span class="text-gray-500 text-sm">No actions</span>
-                    {% endif %}
-                  </td>
-                </tr>
-              {% endfor %}
-            {% else %}
-              <tr class="border-t">
-                <td class="px-5 py-6 text-center text-gray-500" colspan="9">No requests found.</td>
+      <div class="bg-white rounded-2xl shadow">
+        <div class="overflow-x-auto rounded-2xl">
+          <table class="w-full text-left border-collapse align-middle">
+            <thead>
+              <tr class="bg-gray-50 text-gray-700">
+                <th class="px-5 py-3">
+                  <input type="checkbox" id="checkAll" />
+                </th>
+                <th class="px-5 py-3 text-sm font-semibold">Student</th>
+                <th class="px-5 py-3 text-sm font-semibold">Course</th>
+                <th class="px-5 py-3 text-sm font-semibold">Course Mode</th>
+                <th class="px-5 py-3 text-sm font-semibold">Status</th>
+                <th class="px-5 py-3 text-sm font-semibold">Actions</th>
               </tr>
-            {% endif %}
-          </tbody>
-        </table>
+            </thead>
+            <tbody class="text-gray-900">
+              {% if requests %}
+              {% for sc in requests %}
+              <tr class="{% cycle '' 'bg-gray-50' %} border-t">
+                <td class="px-5 py-3">
+                  {% if sc.status == "PND" %}
+                  <input
+                    type="checkbox"
+                    class="row-check"
+                    data-id="{{ sc.id }}"
+                  />
+                  {% endif %}
+                </td>
+
+                <td class="px-5 py-3">
+                  <div class="text-gray-900">
+                    {{ sc.student.first_name }}{% if sc.student.last_name %} {{ sc.student.last_name }}{% endif %}
+                  </div>
+                  <div class="text-sm text-gray-600">
+                    {{ sc.student.roll_no }}
+                  </div>
+                </td>
+
+                <td class="px-5 py-3 max-w-sm">
+                  <div class="text-gray-900">
+                    {{ sc.course.code }} — {{ sc.course.name }}
+                  </div>
+                  <div class="text-sm text-gray-600">
+                    Slot: {{ sc.course.slot }} | Credits: {{ sc.course.credits }}
+                  </div>
+                </td>
+
+                <td class="px-5 py-3">
+                  {% if sc.course_mode == "REG" %}
+                  <span
+                    class="inline-flex items-center rounded-full bg-blue-100 text-blue-800 text-xs font-medium px-3 py-1"
+                    >Regular</span
+                  >
+                  {% elif sc.course_mode == "PF" %}
+                  <span
+                    class="inline-flex items-center rounded-full bg-cyan-100 text-cyan-800 text-xs font-medium px-3 py-1"
+                    >Pass/Fail</span
+                  >
+                  {% elif sc.course_mode == "AUD" %}
+                  <span
+                    class="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-xs font-medium px-3 py-1"
+                    >Audit</span
+                  >
+                  {% else %}
+                  <span
+                    class="inline-flex items-center rounded-full bg-gray-100 text-gray-700 text-xs font-medium px-3 py-1"
+                    >—</span
+                  >
+                  {% endif %}
+                </td>
+
+                <td class="px-5 py-3">
+                  {% if sc.status == "PND" %}
+                  <span
+                    class="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-xs font-medium px-3 py-1"
+                    >Pending</span
+                  >
+                  {% elif sc.status == "ENR" %}
+                  <span
+                    class="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1"
+                    >Enrolled</span
+                  >
+                  {% elif sc.status == "DRP" %}
+                  <span
+                    class="inline-flex items-center rounded-full bg-red-100 text-red-700 text-xs font-medium px-3 py-1"
+                    >Rejected</span
+                  >
+                  {% else %}
+                  <span
+                    class="inline-flex items-center rounded-full bg-gray-100 text-gray-700 text-xs font-medium px-3 py-1"
+                    >{{ sc.get_status_display }}</span
+                  >
+                  {% endif %}
+                </td>
+
+                <td class="px-5 py-3">
+                  {% if sc.status == "PND" %}
+                  <div class="flex items-center gap-3 flex-nowrap">
+                    <form
+                      method="post"
+                      action="{% url 'instructor_request_action' %}"
+                      class="inline"
+                    >
+                      {% csrf_token %}
+                      <input type="hidden" name="sc_id" value="{{ sc.id }}" />
+                      <button
+                        type="submit"
+                        name="action"
+                        value="approve"
+                        class="px-3 py-1 rounded bg-green-600 text-white hover:bg-green-700 whitespace-nowrap text-xs font-medium shadow-sm transition-colors"
+                      >
+                        Approve
+                      </button>
+                    </form>
+
+                    <form
+                      method="post"
+                      action="{% url 'instructor_request_action' %}"
+                      class="inline"
+                    >
+                      {% csrf_token %}
+                      <input type="hidden" name="sc_id" value="{{ sc.id }}" />
+                      <button
+                        type="submit"
+                        name="action"
+                        value="reject"
+                        class="px-3 py-1 rounded text-red-600 hover:bg-red-100 hover:text-red-700 whitespace-nowrap text-xs font-medium transition-colors"
+                      >
+                        Reject
+                      </button>
+                    </form>
+                  </div>
+                  {% else %}
+                  <span class="text-gray-500 text-sm">No actions</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+              {% else %}
+              <tr class="border-t">
+                <td class="px-5 py-6 text-center text-gray-500" colspan="6">
+                  No requests found.
+                </td>
+              </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
       </div>
+
+      <form
+        method="post"
+        action="{% url 'instructor_bulk_action' %}"
+        class="mt-4 bg-white rounded-2xl shadow px-5 py-4 flex items-center justify-between"
+      >
+        {% csrf_token %}
+        <div class="flex items-center gap-2 flex-wrap" id="bulkBox">
+          {% for sc in requests %} {% if sc.status == "PND" %}
+          <input
+            type="checkbox"
+            name="sc_ids"
+            value="{{ sc.id }}"
+            class="hidden"
+            id="bulk-{{ sc.id }}"
+          />
+          {% endif %} {% endfor %}
+
+          <span class="text-sm font-medium text-gray-900" id="bulk-count-text"
+            >0</span
+          >
+          <span class="text-sm text-gray-600" id="bulk-count-label"
+            >students selected</span
+          >
+        </div>
+
+        <div class="flex items-center gap-3">
+          <button
+            name="action"
+            value="reject"
+            id="bulk-reject-btn"
+            class="px-4 py-2 rounded bg-white text-red-700 border border-red-600 hover:bg-red-50 font-medium transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Reject Selected
+          </button>
+          <button
+            name="action"
+            value="approve"
+            id="bulk-approve-btn"
+            class="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 font-medium transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Approve Selected
+          </button>
+        </div>
+      </form>
     </div>
 
-    <!-- Bulk form -->
-    <form method="post" action="{% url 'instructor_bulk_action' %}" class="mt-4 bg-white rounded-2xl shadow px-5 py-4 flex items-center justify-between">
-      {% csrf_token %}
-      <div class="flex items-center gap-3 flex-wrap" id="bulkBox">
-        {% for sc in requests %}
-          {% if sc.status == "PND" %}
-            <input type="checkbox" name="sc_ids" value="{{ sc.id }}" class="hidden" id="bulk-{{ sc.id }}">
-          {% endif %}
-        {% endfor %}
-        <span class="text-sm text-gray-600">Use the row checkboxes or "Select all" to build the bulk list.</span>
-      </div>
-      <div class="flex items-center gap-3">
-        <button name="action" value="approve" class="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700">
-          Approve Selected
-        </button>
-        <button name="action" value="reject" class="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700">
-          Reject Selected
-        </button>
-      </div>
-    </form>
-  </div>
+    <!-- (Optional) Bootstrap JS for dismissible alerts used below -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" defer></script>
 
-  <script>
-    const checkAll = document.getElementById('checkAll');
-    const rowChecks = Array.from(document.querySelectorAll('.row-check'));
-    const bulkMap = {};
-    rowChecks.forEach(cb => {
-      const id = cb.dataset.id;
-      bulkMap[id] = document.getElementById('bulk-' + id);
-      cb.addEventListener('change', () => {
-        if (bulkMap[id]) bulkMap[id].checked = cb.checked;
-        if (!cb.checked && checkAll) checkAll.checked = false;
+    <script>
+      // --- Element Selections ---
+      const checkAll = document.getElementById('checkAll');
+      const rowChecks = Array.from(document.querySelectorAll('.row-check'));
+      const bulkApproveBtn = document.getElementById('bulk-approve-btn');
+      const bulkRejectBtn = document.getElementById('bulk-reject-btn');
+      const bulkCountText = document.getElementById('bulk-count-text');
+      const bulkCountLabel = document.getElementById('bulk-count-label');
+
+      // Map for syncing row checks to hidden bulk checks
+      const bulkMap = {};
+      rowChecks.forEach((cb) => {
+        const id = cb.dataset.id;
+        const bulkCheckbox = document.getElementById('bulk-' + id);
+        if (bulkCheckbox) {
+          bulkMap[id] = bulkCheckbox;
+        }
       });
-    });
-    if (checkAll) {
-      checkAll.addEventListener('change', () => {
-        rowChecks.forEach(cb => {
-          cb.checked = checkAll.checked;
-          const bulk = bulkMap[cb.dataset.id];
-          if (bulk) bulk.checked = checkAll.checked;
+
+      // --- Core Logic Function ---
+      function updateBulkState() {
+        let count = 0;
+
+        // 1. Sync row checks to hidden checks and count
+        rowChecks.forEach((cb) => {
+          const id = cb.dataset.id;
+          if (bulkMap[id]) {
+            bulkMap[id].checked = cb.checked;
+            if (cb.checked) count++;
+          }
+        });
+
+        // 2. Update count text
+        if (bulkCountText) bulkCountText.textContent = count;
+        if (bulkCountLabel)
+          bulkCountLabel.textContent =
+            count === 1 ? 'student selected' : 'students selected';
+
+        // 3. Enable/Disable buttons
+        const hasSelection = count > 0;
+        if (bulkApproveBtn) bulkApproveBtn.disabled = !hasSelection;
+        if (bulkRejectBtn) bulkRejectBtn.disabled = !hasSelection;
+      }
+
+      // --- Event Listeners ---
+
+      // Listener for individual row checkboxes
+      rowChecks.forEach((cb) => {
+        cb.addEventListener('change', () => {
+          if (!cb.checked && checkAll) {
+            // Uncheck "all" if one is unchecked
+            checkAll.checked = false;
+          }
+          updateBulkState();
         });
       });
-    }
-    setTimeout(function () {
-        document.querySelectorAll('.alert').forEach(function (alert) {
-            var bsAlert = new bootstrap.Alert(alert);
+
+      // Listener for the "Check All" checkbox
+      if (checkAll) {
+        checkAll.addEventListener('change', () => {
+          rowChecks.forEach((cb) => {
+            cb.checked = checkAll.checked;
+          });
+          updateBulkState();
+        });
+      }
+
+      // Auto-close alerts
+      setTimeout(() => {
+        document.querySelectorAll('.alert').forEach((alert) => {
+          try {
+            const bsAlert = new bootstrap.Alert(alert);
             bsAlert.close();
+          } catch (e) {
+            // Fallback if bootstrap isn't loaded
+            alert.style.display = 'none';
+          }
         });
-    }, 4000);
-  </script>
-</body>
+      }, 4000);
+
+      // --- Initial State ---
+      // Run once on load to set the initial disabled state
+      updateBulkState();
+    </script>
+  </body>
 </html>

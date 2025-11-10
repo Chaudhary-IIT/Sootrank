@@ -162,89 +162,144 @@ class Student(models.Model):
 
     def calculate_semester_metrics(self, semester):
         """
-        - RCR: All attempted (registered) credits including pass/fail
-        - ECR: Pass/fail courses count only if passed, regular require passing grade
-        - STCR: Only regular, Pass/Fail counted as 0
-        - SGPA: STCR / (RCR - pass/fail credits)
+        Semester metrics with new course_mode logic:
+        - RCR: Registered credits for the semester (includes PF, excludes AUD)
+        - ECR: Earned credits (credits of courses with outcome PAS; includes PF when PAS; excludes AUD)
+        - STCR: Sum(grade_points * credits) ONLY for regular courses (REG)
+        - SGPA: STCR / (sum of REGULAR credits)  (PF and AUD excluded from denominator)
         """
-        enrollments = self.enrollments.filter(semester=semester, status__in=['ENR', 'CMP'])
-
-        rcr = ecr = stcr = 0
-        pf_credits = 0  # Total Pass/Fail credits for the semester
+        enrollments = self.enrollments.filter(semester=semester, status__in=['ENR', 'CMP']).select_related("course")
+        
+        rcr = 0               # registered credits (includes PF; excludes AUD)
+        ecr = 0               # earned credits (passed credits; includes PF passed; excludes AUD)
+        stcr = 0              # sum of (grade_points * credits) from REG only
+        regular_credits = 0   # sum of credits from REG only
+        pf_credits = 0        # sum of credits from PF (for clarity)
 
         for enr in enrollments:
-            credits = enr.course.credits or 0
-            if enr.is_pass_fail:
+            credits = (enr.course.credits or 0)
+            mode = (getattr(enr, "course_mode", None) or "").upper()
+
+            # AUD courses are ignored for metric calculations
+            if mode == "AUD":
+                continue
+
+            # Pass/Fail courses: contribute to registered & earned (if passed) but not grade points
+            if mode == "PF":
                 rcr += credits
                 pf_credits += credits
-                if (enr.outcome or '').upper() == "PAS":
+                if (enr.outcome or "").upper() == "PAS":
                     ecr += credits
-                # No addition to stcr for PF
-            else:
-                rcr += credits
-                points = GRADE_POINTS.get(enr.grade, 0)
-                stcr += points * credits
-                if (enr.outcome or '').upper() == "PAS" and points > 0:
-                    ecr += credits
+                continue
 
-        # SGPA denominator is only regular credits
-        regular_rcr = rcr - pf_credits
-        sgpa = round(stcr / regular_rcr, 2) if regular_rcr else 0
+            # Regular courses
+            # Add to registered credits
+            rcr += credits
+            # Add to STCR (grade points * credits)
+            grade = (enr.grade or "")
+            points = GRADE_POINTS.get(grade, 0)
+            stcr += points * credits
+            # Add to regular credit pool (denominator for SGPA)
+            regular_credits += credits
+            # Earned credits if passed
+            if (enr.outcome or "").upper() == "PAS":
+                ecr += credits
+
+        # Compute SGPA: STCR / regular_credits (avoid division by zero)
+        sgpa = round((stcr / regular_credits), 2) if regular_credits else 0.0
+
         return {"RCR": rcr, "ECR": ecr, "STCR": stcr, "SGPA": sgpa}
 
 
     def calculate_cumulative_metrics(self):
         """
-        - TRCR: All attempted credits including pass/fail
-        - TECR: Passed courses (including passed P/F)
-        - TSTCR: Only regular, Pass/Fail counted as 0
-        - CGPA: TSTCR / (TRCR - pass/fail credits)
-        Handles latest attempt logic as before.
+        Cumulative metrics across all enrollments:
+        - TRCR: Total registered credits (includes PF, excludes AUD)
+        - TECR: Total earned credits (passed credits across all enrollments; includes PF passed; excludes AUD)
+        - TSTCR: Total sum(grade_points * credits) for REG only (used for CGPA)
+        - CGPA: TSTCR / (sum of REG credits across latest attempts)  (PF and AUD excluded from denominator)
+
+        Latest-attempt wins: if a student has multiple enrollments for same course code,
+        we subtract the previous contribution and add the current one so final totals reflect
+        the *latest* attempt.
         """
-        enrollments = self.enrollments.filter(status__in=['ENR', 'CMP']).order_by('semester', 'id')
-        trcr = tecr = tstcr = 0
-        latest_course = {}
-        pf_credits = 0
+        enrollments = self.enrollments.filter(status__in=['ENR', 'CMP']).select_related("course").order_by('semester', 'id')
+
+        # Totals we'll maintain
+        trcr = 0         # includes PF, excludes AUD
+        tecr = 0
+        tstcr = 0        # sum grade_points * credits for REG
+        # map course_code -> stored entry (so we can remove previous contributions when replaced)
+        latest = {}
 
         for enr in enrollments:
             course_code = enr.course.code
-            credits = enr.course.credits or 0
+            credits = (enr.course.credits or 0)
+            mode = (getattr(enr, "course_mode", None) or "").upper()
+            outcome = (enr.outcome or "").upper()
+            grade = (enr.grade or "")
+            gp = GRADE_POINTS.get(grade, 0)
 
-            if enr.is_pass_fail:
-                trcr += credits
-                pf_credits += credits
-                if (enr.outcome or '').upper() == "PAS":
-                    tecr += credits
+            # AUD courses do not affect cumulative metrics at all
+            if mode == "AUD":
+                # If previously we had a non-AUD attempt for this course, replacing with AUD should
+                # remove previous contributions (since latest attempt is AUD and AUD doesn't count).
+                prev = latest.get(course_code)
+                if prev:
+                    # subtract previous contributions
+                    if prev['mode'] == 'PF':
+                        trcr -= prev['credits']
+                        if prev['outcome'] == 'PAS':
+                            tecr -= prev['credits']
+                    elif prev['mode'] == 'REG':
+                        trcr -= prev['credits']
+                        if prev['outcome'] == 'PAS':
+                            tecr -= prev['credits']
+                        tstcr -= prev['grade_points'] * prev['credits']
+                    # store the AUD attempt (so future attempts can replace it)
+                    latest[course_code] = {'mode': 'AUD', 'credits': credits, 'grade_points': 0, 'outcome': outcome}
+                else:
+                    # no previous attempt — simply record AUD so it blocks earlier attempts from counting if later
+                    latest[course_code] = {'mode': 'AUD', 'credits': credits, 'grade_points': 0, 'outcome': outcome}
+                # AUD -> skip adding to totals
                 continue
 
-            grade_points = GRADE_POINTS.get(enr.grade, 0)
-            prev = latest_course.get(course_code)
-
-            if prev is None:
-                latest_course[course_code] = {
-                    'grade_points': grade_points,
-                    'credits': credits,
-                    'outcome': (enr.outcome or '').upper(),
-                }
-                trcr += credits
-                if (enr.outcome or '').upper() == "PAS":
-                    tecr += credits
-                tstcr += grade_points * credits
-            else:
-                if prev['grade_points'] == 0 and grade_points > 0:
+            # If there is a previous record for this course, remove its contribution (we will replace it)
+            prev = latest.get(course_code)
+            if prev:
+                if prev['mode'] == 'PF':
                     trcr -= prev['credits']
-                    latest_course[course_code] = {
-                        'grade_points': grade_points,
-                        'credits': credits,
-                        'outcome': (enr.outcome or '').upper(),
-                    }
-                    trcr += credits
-                    if (enr.outcome or '').upper() == "PAS":
-                        tecr += credits
-                    tstcr += grade_points * credits
+                    if prev['outcome'] == 'PAS':
+                        tecr -= prev['credits']
+                elif prev['mode'] == 'REG':
+                    trcr -= prev['credits']
+                    if prev['outcome'] == 'PAS':
+                        tecr -= prev['credits']
+                    tstcr -= prev['grade_points'] * prev['credits']
+                # if prev was AUD, nothing to subtract
 
+            # store current attempt as latest
+            latest[course_code] = {'mode': mode, 'credits': credits, 'grade_points': gp, 'outcome': outcome}
+
+            # Add current attempt contribution
+            if mode == 'PF':
+                trcr += credits
+                if outcome == 'PAS':
+                    tecr += credits
+            else:  # REG
+                trcr += credits
+                if outcome == 'PAS':
+                    tecr += credits
+                tstcr += gp * credits
+
+        # Compute total PF credits from latest map (for denominator calculation)
+        pf_credits = sum(v['credits'] for v in latest.values() if v['mode'] == 'PF')
+
+        # regular_trcr is the credits that contribute to grade calculation (exclude PF & AUD)
         regular_trcr = trcr - pf_credits
-        cgpa = round(tstcr / regular_trcr, 2) if regular_trcr else 0
+
+        cgpa = round((tstcr / regular_trcr), 2) if regular_trcr else 0.0
+
         return {"TRCR": trcr, "TECR": tecr, "TSTCR": tstcr, "CGPA": cgpa}
 
 
@@ -285,16 +340,6 @@ class Admins(models.Model):
             self.password = make_password(self.password)
         super().save(*args, **kwargs)
 
-CORE_ELECTIVE_CHOICES = [
-        ("DC", "Disciplinary Core (DC)"),
-        ("DE", "Disciplinary Elective (DE)"),
-        ("IC","Institute Core (IC)"),
-        ("HSS","Humanities and Social Science (HSS)"),
-        ("FE","Free Elective (FE)"),
-        ("IKS","Indian Knowledge System (IKS)"),
-        ("ISTP","Interactive Socio-Technical Practicum (ISTP)"),
-        ("MTP","Major Technical Project (MTP)"),
-    ]
 
 class Category(models.Model):
     code = models.CharField(max_length=10, unique=True)  # "DC", "DE", "IC", "HSS", ...
@@ -351,7 +396,7 @@ class StudentCourse(models.Model):
     semester = models.IntegerField(null=True)
     type = models.CharField(max_length=10, null=True, blank=True)
     course_mode = models.CharField(max_length=3, choices=COURSE_MODE, default="REG")
-
+    is_active_pre_reg = models.BooleanField(default=True)
     class Meta:
         unique_together = ("student", "course", "semester")
 

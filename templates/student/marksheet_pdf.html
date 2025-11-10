@@ -39,6 +39,7 @@
             border: 1px solid #000;
             padding: 6px 8px;
             text-align: center;
+            word-wrap: break-word;
         }
         th {
             background-color: #f2f2f2;
@@ -66,9 +67,14 @@
             padding-top: 40px;
             font-size: 14px;
         }
+        .audit-text {
+            color: #555;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
+    <!-- Header -->
     <div class="header">
         <h2>भारतीय प्रौद्योगिकी संस्थान मंडी</h2>
         <h2>Indian Institute of Technology Mandi</h2>
@@ -77,19 +83,22 @@
         <h3>ODD SEMESTER {{ academic_year }}</h3>
     </div>
 
+    <!-- Student Info -->
     <div class="info">
         <p><strong>ROLL NO. :</strong> {{ student.roll_no }} &nbsp;&nbsp;&nbsp; <strong>SEMESTER :</strong> {{ semester }}</p>
         <p><strong>NAME :</strong> {{ student.first_name }} {{ student.last_name }}</p>
         <p><strong>PROGRAMME :</strong> Bachelor of Technology in {{ student.branch }}</p>
     </div>
 
+    <!-- Grades Table -->
     <table>
         <thead>
             <tr>
                 <th>SUBJECT CODE</th>
                 <th>COURSE TITLE</th>
                 <th>CREDITS</th>
-                <th>GRADE OBTAINED</th>
+                <th>GRADE</th>
+                <th>OUTCOME</th>
             </tr>
         </thead>
         <tbody>
@@ -98,12 +107,26 @@
                 <td>{{ r.course_code }}</td>
                 <td class="course-name">{{ r.course_name }}</td>
                 <td>{{ r.credits }}</td>
-                <td>{{ r.grade }}</td>
+                <td>
+                    {% if r.grade == "-" %}
+                        —
+                    {% else %}
+                        {{ r.grade }}
+                    {% endif %}
+                </td>
+                <td>
+                    {% if "(Audit)" in r.outcome_display or "(Pass/Fail)" in r.outcome_display %}
+                        <span class="audit-text">{{ r.outcome_display }}</span>
+                    {% else %}
+                        {{ r.outcome_display }}
+                    {% endif %}
+                </td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
 
+    <!-- Metrics Footer -->
     <div class="footer">
         <p><strong>REGISTERED CREDITS IN SEMESTER :</strong> {{ metrics.RCR }}</p>
         <p><strong>TOTAL REGISTERED CREDITS SO FAR :</strong> {{ cg_metrics.TRCR }}</p>
@@ -113,10 +136,17 @@
         <p><strong>C.G.P.A :</strong> {{ cg_metrics.CGPA|floatformat:2 }}</p>
     </div>
 
+    <!-- Date -->
     <div class="note">
-        <p>Date : 29/10/2025</p>
+        <p><strong>Date :</strong> {{ generated_on }}</p>
     </div>
 
-    
+    <!-- Signatures -->
+    <table class="signatures">
+        <tr>
+            <td>_________________________<br><strong>Assistant Registrar (Academics)</strong></td>
+            <td>_________________________<br><strong>Dean of Academic Affairs</strong></td>
+        </tr>
+    </table>
 </body>
 </html>

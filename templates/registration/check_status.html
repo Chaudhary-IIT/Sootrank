@@ -11,12 +11,15 @@
 <body class="min-h-screen bg-gray-100 flex items-start justify-center py-10">
   <div class="w-[1150px]">
     {% if messages %}
-      <div class="mb-3">
-        {% for message in messages %}
-          <div class="alert alert-{{ message.tags }} mb-2" role="alert">{{ message }}</div>
-        {% endfor %}
+  <div class="container mt-3" style="max-width:700px;">
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
       </div>
-    {% endif %}
+    {% endfor %}
+  </div>
+{% endif %}
 
     <!-- Header -->
     <div class="mb-5 flex items-center justify-between">
@@ -133,8 +136,8 @@
               {% endfor %}
             {% else %}
               <tr class="border-t">
-                <td class="px-5 py-6 text-center text-gray-500" colspan="9">
-                  No pre-registrations yet for this semester.
+                <td class="px-5 py-6 text-center text-red-500" colspan="9">
+                  No pre-registrations yet for this semester. Please Register first.
                 </td>
               </tr>
             {% endif %}
@@ -181,6 +184,12 @@
   </div>
 
   <script>
+    setTimeout(function () {
+            document.querySelectorAll('.alert').forEach(function (alert) {
+                var bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close();
+            });
+        }, 4000);
     const modal = document.getElementById("confirmModal");
     const staged = {};
     let pfUsed = parseInt(document.getElementById("pfUsed").textContent || "0", 10) || 0;

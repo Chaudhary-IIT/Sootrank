@@ -53,6 +53,7 @@ urlpatterns = [
     path("custom-admin/prereg/reports/", views.admin_prereg_reports, name="admin_prereg_reports"),
     path("custom-admin/prereg/reports/<str:code>/excel/", views.export_course_excel, name="export_course_excel"),
     path("custom-admin/prereg/reports/<str:code>/pdf/", views.export_course_pdf, name="export_course_pdf"),
+    path("custom-admin/reset-pre-registration/", views.admin_reset_pre_registration, name="admin_reset_pre_registration"),
     # other urls
     path('',views.login),
     path('login/', views.login, name='login'),
@@ -124,9 +125,6 @@ urlpatterns = [
     path("fees/pay/<int:fee_id>/", views.mock_payment, name="mock_payment"),
     path("fees/receipt/<int:fee_id>/", views.download_fee_receipt, name="download_fee_receipt"),
     #---demo----    
-    path("fees/pay/<int:fee_id>/", views.initiate_fee_payment, name="initiate_fee_payment"),
-    path("fees/payment/success/", views.payment_success, name="payment_success"),  # frontend POST verification
-    path("razorpay/webhook/", views.razorpay_webhook, name="razorpay_webhook"),    # optional webhook
     path("fees/receipt/<int:fee_id>/pdf/", views.fee_receipt_pdf, name="fee_receipt_pdf"),
     path("custom-admin/fees/", views.admin_fee_dashboard, name="admin_fee_dashboard"),
     path("custom-admin/fees/add/", views.admin_fee_add, name="admin_fee_add"),
