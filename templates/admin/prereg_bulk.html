@@ -8,7 +8,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Sootrank | Bulk Pre-Registration</title>
 
-    <!-- Bootstrap + Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
 
@@ -102,7 +101,7 @@
         }
         .table thead th{
             background:#eef6ff;
-            border-bottom:1px solid var(--border) !important;
+            border-bottom:1px solid var(--border) !imporCTant;
             color:#1f2856;
             font-weight:700;
         }
@@ -114,7 +113,6 @@
 </head>
 
 <body>
-    <!-- Standard Sootrank Admin Navbar -->
     <nav class="navbar navbar-expand-lg navbar-dark shadow-sm">
         <div class="container">
             <a class="navbar-brand fw-bold" href="{% url 'custom_admin_home' %}">
@@ -148,7 +146,7 @@
             <form method="post" enctype="multipart/form-data" class="mt-2">
                 {% csrf_token %}
 
-                <div class="row g-4 align-items-end">
+                <div class="row g-4">
                     <div class="col-md-4">
                         <label class="form-label fw-semibold">Upload CSV/Excel File</label>
                         <input type="file" name="file" accept=".csv,.xlsx,.xls" class="form-control">
@@ -164,6 +162,7 @@
                     </div>
 
                     <div class="col-md-4">
+                        <label class="form-label fw-semibold invisible">&nbsp;</label>
                         <button type="submit" name="preview" class="btn btn-outline-primary w-100 btn-lg">
                             <i class="fa-solid fa-eye me-1"></i> Preview
                         </button>
@@ -226,7 +225,6 @@ b24002,CS101,MA102,,,,,,"></textarea>
         </div>
     </div>
 
-    <!-- Bootstrap JS (no functionality changed) -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         setTimeout(function () {

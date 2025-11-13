@@ -42,7 +42,7 @@
     <h2 class="fs-5 fw-semibold mb-3">📝 Result Entry & Processing</h2>
     <div class="d-flex gap-3 flex-wrap">
       <a class="btn btn-primary" href="{% url 'faculty_marks_courses' faculty.id %}">Enter Marks</a>
-      <a class="btn btn-secondary" href="{% url 'grading_courses' faculty.id %}">Calculate Grades</a>
+      <a class="btn btn-secondary" href="{% url 'grading_courses' faculty.id %}">Grades Overview</a>
       <a class="btn btn-outline-primary" href="{% url 'faculty_view_courses_for_grades' faculty.id %}">View Results</a>
     </div>
   </div>
@@ -69,7 +69,7 @@
         </a>
       </div>
       <div class="col-12 col-md-6">
-        <a class="btn btn-secondary w-100" href="#">
+        <a class="btn btn-primary w-100" href="{% url 'faculty_course_report' %}">
           <i class="fa-solid fa-chart-line me-1"></i> Reports & Analytics
         </a>
       </div>

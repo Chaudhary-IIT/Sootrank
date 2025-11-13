@@ -1,72 +1,67 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>My Courses — Enter Marks</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
-  <style>
-    .course-slot { font-size:.8rem; padding:.15rem .4rem; border:1px solid #0d6efd22; border-radius:.25rem; }
-  </style>
-</head>
-<body class="bg-light">
-  <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-    <div class="container">
-      <span class="navbar-brand">Faculty Dashboard</span>
-    </div>
-  </nav>
+{% extends "faculty_base.html" %}
 
-  <main class="container py-4">
-    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-      <div>
-        <h1 class="h4 mb-1">My Courses</h1>
-        <div class="text-muted small">
-          Faculty: {{ faculty.first_name }} {{ faculty.last_name|default_if_none:"" }}
-        </div>
-      </div>
-      <a class="btn btn-outline-secondary btn-sm" href="{% url 'faculty_dashboard' %}">Home</a>
-    </div>
+{% block title %}My Courses — Enter Marks{% endblock %}
 
-    {% if courses %}
-      <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3">
-        {% for c in courses %}
-          <div class="col">
-            <div class="card h-100 shadow-sm">
-              <div class="card-body d-flex flex-column">
-                <div class="d-flex justify-content-between align-items-start mb-2">
-                  <h5 class="card-title mb-0">{{ c.code }}</h5>
-                  <span class="course-slot text-primary">Slot {{ c.slot }}</span>
-                </div>
-                <p class="card-text mb-2">{{ c.name }}</p>
-                <div class="text-muted small mb-3">
-                  Credits: {{ c.credits }} · LTPC: {{ c.LTPC }}
-                </div>
-                <div class="mt-auto d-flex gap-2">
-                  <a class="btn btn-primary btn-sm"
-                     href="{% url 'enter_marks' c.id %}?faculty_id={{ faculty.id }}">
-                     Enter marks
-                  </a>
-                  <a class="btn btn-outline-secondary btn-sm" href="{% url 'course_marks_overview' c.id %}">View All Marks</a>
-                </div>
-              </div>
-              <div class="card-footer bg-white">
-                <div class="small text-muted">
-                  Branches:
-                  {% for b in c.branches.all %}
-                    {{ b.name }}{% if not forloop.last %}, {% endif %}
-                  {% empty %}
-                    —
-                  {% endfor %}
-                </div>
-              </div>
+{% block nav_results_active %} active{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <div>
+    <h1 class="fs-3 fw-bold mb-1">My Courses</h1>
+    <div class="text-muted small">
+      Select a course to enter marks
+    </div>
+  </div>
+</div>
+
+{% if courses %}
+  <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-4">
+    {% for c in courses %}
+      <div class="col">
+        <div class="card h-100">
+          <div class="card-body d-flex flex-column">
+            
+            <div class="d-flex justify-content-between align-items-start mb-2">
+              <h5 class="card-title mb-0">{{ c.code }}</h5>
+              <span class="badge bg-primary-subtle text-primary-emphasis rounded-pill">Slot {{ c.slot }}</span>
+            </div>
+            
+            <p class="card-text mb-2">{{ c.name }}</p>
+            
+            <div class="text-muted small mb-3">
+              Credits: {{ c.credits }} · LTPC: {{ c.LTPC }}
+            </div>
+            
+            <div class="mt-auto d-flex gap-2">
+              <a class="btn btn-primary btn-sm"
+                 href="{% url 'enter_marks' c.id %}?faculty_id={{ faculty.id }}">
+                 <i class="fa-solid fa-keyboard me-1"></i> Enter marks
+              </a>
+              <a class="btn btn-outline-secondary btn-sm" href="{% url 'course_marks_overview' c.id %}">
+                View All
+              </a>
             </div>
           </div>
-        {% endfor %}
+          
+          <div class="card-footer">
+            <div class="small text-muted">
+              <strong>Branches:</strong>
+              {% for b in c.branches.all %}
+                {{ b.name }}{% if not forloop.last %}, {% endif %}
+              {% empty %}
+                —
+              {% endfor %}
+            </div>
+          </div>
+        </div>
       </div>
-    {% else %}
-      <div class="alert alert-info">No courses assigned to this faculty.</div>
-    {% endif %}
-  </main>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="card">
+    <div class="card-body text-center text-muted p-5">
+      No courses assigned to you for marks entry.
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,182 @@
+{% extends "faculty_base.html" %}
+{% load static %}
+
+{% block title %}Assign Grading Policy — {{ course.code }}{% endblock %}
+{% block nav_results_active %} active{% endblock %}
+
+{% block content %}
+<div class="text-center mb-4">
+  <h1 class="fs-3 fw-bold mb-1">Assign Grading Policy</h1>
+  <p class="text-muted small mb-0">{{ course.code }} — {{ course.name }}</p>
+</div>
+
+<!-- Assessment Scheme -->
+<div class="bg-white p-4 p-md-5 mb-4 rounded shadow-sm">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <h2 class="fs-5 fw-semibold">Assessment Scheme</h2>
+    {% if total_weight is not None %}
+      <span class="text-muted small">
+        Total: <span class="fw-medium">{{ total_weight }}%</span>
+      </span>
+    {% endif %}
+  </div>
+
+  <div class="table-responsive mt-3">
+    <table class="table align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Component</th>
+          <th>Weight (%)</th>
+          <th>Max Marks</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for comp in components %}
+          <tr>
+            <td>{{ comp.name }}</td>
+            <td>{{ comp.weight }}</td>
+            <td>{{ comp.max_marks }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="3" class="text-center text-muted">No components defined.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<form method="post">
+  {% csrf_token %}
+
+  <!-- Grading Mode -->
+  <div class="bg-white p-4 p-md-5 mb-4 rounded shadow-sm">
+    <label for="mode" class="form-label fw-medium mb-2">Grading Mode</label>
+    <select name="mode" id="mode" class="form-select" onchange="togglePolicySections()" {% if force_absolute %}disabled{% endif %}>
+      <option value="ABS" {% if policy.mode == 'ABS' %}selected{% endif %}>Absolute (fixed cutoffs)</option>
+      <option value="REL" {% if policy.mode == 'REL' %}selected{% endif %} {% if force_absolute %}disabled{% endif %}>
+        Relative (percentile buckets)
+      </option>
+    </select>
+
+    {% if force_absolute %}
+      <p class="text-danger small mt-2">
+        ⚠️ Only <strong>{{ num_enrolled }}</strong> student{{ num_enrolled|pluralize }} enrolled.<br>
+        Relative grading is available only when there are <strong>25 or more</strong> students.<br>
+      </p>
+    {% else %}
+      <p class="text-muted small mt-2">
+        Relative grading can be applied when student count ≥ 25.
+      </p>
+    {% endif %}
+  </div>
+
+  <!-- Absolute Grading Section -->
+  <div id="absSection" class="bg-white p-4 p-md-5 mb-4 rounded shadow-sm">
+    <h3 class="fs-6 fw-semibold mb-3">Absolute Cutoffs (percent)</h3>
+    <div class="row g-3">
+      <div class="col-6 col-sm-2">
+        <label class="form-label small mb-1">A ≥</label>
+        <input name="abs_A" type="number" value="{{ abs_cutoffs_safe.A }}" class="form-control form-control-sm">
+      </div>
+      <div class="col-6 col-sm-2">
+        <label class="form-label small mb-1">A− ≥</label>
+        <input name="abs_B" type="number" value="{{ abs_cutoffs_safe.A_minus }}" class="form-control form-control-sm">
+      </div>
+      <div class="col-6 col-sm-2">
+        <label class="form-label small mb-1">B ≥</label>
+        <input name="abs_C" type="number" value="{{ abs_cutoffs_safe.B }}" class="form-control form-control-sm">
+      </div>
+      <div class="col-6 col-sm-2">
+        <label class="form-label small mb-1">B− ≥</label>
+        <input name="abs_D" type="number" value="{{ abs_cutoffs_safe.B_minus }}" class="form-control form-control-sm">
+      </div>
+      <div class="col-6 col-sm-2">
+        <label class="form-label small mb-1">C ≥</label>
+        <input name="abs_E" type="number" value="{{ abs_cutoffs_safe.C }}" class="form-control form-control-sm">
+      </div>
+      <div class="col-6 col-sm-2">
+        <label class="form-label small mb-1">Pass ≥</label>
+        <input name="pass_min_percent" type="number" value="{{ abs_cutoffs_safe.Pass }}" class="form-control form-control-sm">
+      </div>
+    </div>
+    <p class="form-text small text-muted mt-2">Ensure A ≥ A− ≥ B ≥ B− ≥ C ≥ Pass.</p>
+  </div>
+
+  <!-- Relative Grading Section -->
+  <div id="relSection" class="bg-white p-4 p-md-5 mb-4 rounded shadow-sm {% if force_absolute %}d-none{% endif %}">
+    <h3 class="fs-6 fw-semibold mb-3">Relative Buckets (percent → grade points)</h3>
+    <div class="row g-3">
+      <div class="col-6 col-sm-3">
+        <label class="form-label small mb-1">Top 10%</label>
+        <input name="top10" type="number" value="{{ rel_buckets_safe.top10 }}" class="form-control form-control-sm">
+      </div>
+      <div class="col-6 col-sm-3">
+        <label class="form-label small mb-1">Next 15%</label>
+        <input name="next15" type="number" value="{{ rel_buckets_safe.next15 }}" class="form-control form-control-sm">
+      </div>
+      <div class="col-6 col-sm-3">
+        <label class="form-label small mb-1">Next 25%</label>
+        <input name="next25" type="number" value="{{ rel_buckets_safe.next25 }}" class="form-control form-control-sm">
+      </div>
+      <div class="col-6 col-sm-3">
+        <label class="form-label small mb-1">Next 25%</label>
+        <input name="next25b" type="number" value="{{ rel_buckets_safe.next25b }}" class="form-control form-control-sm">
+      </div>
+      <div class="col-6 col-sm-3">
+        <label class="form-label small mb-1">Next 15%</label>
+        <input name="next15b" type="number" value="{{ rel_buckets_safe.next15b }}" class="form-control form-control-sm">
+      </div>
+      <div class="col-6 col-sm-3">
+        <label class="form-label small mb-1">Next 10%</label>
+        <input name="next10" type="number" value="{{ rel_buckets_safe.next10 }}" class="form-control form-control-sm">
+      </div>
+      <div class="col-6 col-sm-3">
+        <label class="form-label small mb-1">Minimum Grade (rest)</label>
+        <input name="rest_min" type="number" value="{{ rel_buckets_safe.rest_min }}" class="form-control form-control-sm">
+      </div>
+    </div>
+    <p class="form-text small text-muted mt-2">
+      The relative policy divides the class percentile into performance bands.
+    </p>
+  </div>
+
+  <!-- Submit Buttons -->
+  <div class="bg-white p-4 p-md-5 rounded shadow-sm text-end">
+    <button type="submit" class="btn btn-primary">
+      <i class="fa-solid fa-save me-1"></i> Save Grading Policy
+    </button>
+    <a href="{% url 'faculty_dashboard' %}" class="btn btn-outline-secondary ms-2">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function togglePolicySections() {
+  const modeSel = document.getElementById('mode');
+  const absSec = document.getElementById('absSection');
+  const relSec = document.getElementById('relSection');
+
+  // Always keep relative hidden when force_absolute
+  const forceAbs = {{ force_absolute|yesno:"true,false" }};
+  if (forceAbs) {
+    absSec.classList.remove('d-none');
+    relSec.classList.add('d-none');
+    modeSel.value = 'ABS';
+    return;
+  }
+
+  if (modeSel.value === 'REL') {
+    absSec.classList.add('d-none');
+    relSec.classList.remove('d-none');
+  } else {
+    relSec.classList.add('d-none');
+    absSec.classList.remove('d-none');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', togglePolicySections);
+</script>
+{% endblock %}

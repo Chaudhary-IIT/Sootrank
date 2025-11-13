@@ -74,7 +74,6 @@
     </style>
 </head>
 <body>
-    <!-- Header -->
     <div class="header">
         <h2>भारतीय प्रौद्योगिकी संस्थान मंडी</h2>
         <h2>Indian Institute of Technology Mandi</h2>
@@ -83,14 +82,12 @@
         <h3>ODD SEMESTER {{ academic_year }}</h3>
     </div>
 
-    <!-- Student Info -->
     <div class="info">
         <p><strong>ROLL NO. :</strong> {{ student.roll_no }} &nbsp;&nbsp;&nbsp; <strong>SEMESTER :</strong> {{ semester }}</p>
-        <p><strong>NAME :</strong> {{ student.first_name }} {{ student.last_name }}</p>
+        <p><strong>NAME :</strong> {{ student.first_name }} {{ student.last_name|default:"" }}</p>
         <p><strong>PROGRAMME :</strong> Bachelor of Technology in {{ student.branch }}</p>
     </div>
 
-    <!-- Grades Table -->
     <table>
         <thead>
             <tr>
@@ -126,7 +123,6 @@
         </tbody>
     </table>
 
-    <!-- Metrics Footer -->
     <div class="footer">
         <p><strong>REGISTERED CREDITS IN SEMESTER :</strong> {{ metrics.RCR }}</p>
         <p><strong>TOTAL REGISTERED CREDITS SO FAR :</strong> {{ cg_metrics.TRCR }}</p>
@@ -136,12 +132,10 @@
         <p><strong>C.G.P.A :</strong> {{ cg_metrics.CGPA|floatformat:2 }}</p>
     </div>
 
-    <!-- Date -->
     <div class="note">
         <p><strong>Date :</strong> {{ generated_on }}</p>
     </div>
 
-    <!-- Signatures -->
     <table class="signatures">
         <tr>
             <td>_________________________<br><strong>Assistant Registrar (Academics)</strong></td>

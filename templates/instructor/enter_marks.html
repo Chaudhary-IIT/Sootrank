@@ -1,97 +1,76 @@
+{% extends "faculty_base.html" %}
+
 {% load dict_extras %}
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>Enter Marks — {{ course.code }}</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
-  <style>
-    .table thead th { vertical-align: bottom; }
-    .sticky-actions { position: sticky; bottom: 0; z-index: 5; }
-    .cell-w { min-width: 140px; }
-    .help-hint { font-size: .875rem; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
-    .roll-badge { font-weight: 600; letter-spacing: .5px; }
-  </style>
-</head>
-<body class="bg-light">
+{% block title %}Enter Marks — {{ course.code }}{% endblock %}
 
-<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-  <div class="container">
-    <a class="navbar-brand" href="#">Enter Marks</a>
-    <div class="ms-auto d-flex gap-2">
-      <a class="btn btn-warning btn-sm" href="{% url 'course_marks_overview' course.id %}">
-        View Marks Overview
-      </a>
-      {% if faculty %}
-      <a class="btn btn-outline-light btn-sm" href="{% url 'faculty_marks_courses' faculty.id %}">Back to courses</a>
-      {% endif %}
+{% block nav_results_active %} active{% endblock %}
+
+{% block content %}
+
+<div class="text-center mb-4">
+  <h1 class="fs-3 fw-bold mb-1">Enter Marks</h1>
+  <p class="text-muted small mb-0">{{ course.code }} — {{ course.name }}</p>
+</div>
+
+<div class="bg-white p-4 p-md-5 mb-4" style="border-radius: var(--radius); box-shadow: var(--shadow-subtle);">
+  <h2 class="fs-5 fw-semibold">Upload CSV/Excel Per Component</h2>
+  <p class="small text-muted mb-3">
+    Accepted: <code class="small">.csv, .xls, .xlsx</code> · Columns: <code class="small">roll_no, marks</code>
+  </p>
+  
+  <form method="post" enctype="multipart/form-data" class="row g-3">
+    {% csrf_token %}
+    {% for comp in components %}
+      <div class="col-12 col-md-6 col-lg-4">
+        <label class="form-label small fw-medium">{{ comp.name }} (Max {{ comp.max_marks }})</label>
+        <input class="form-control" type="file" name="component_csv_{{ comp.id }}"
+               accept=".csv, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+      </div>
+    {% endfor %}
+    <div class="col-12 mt-4">
+      <button type="submit" name="upload_component" value="1" class="btn btn-success">
+        <i class="fa-solid fa-upload me-1"></i> Upload Selected Components
+      </button>
     </div>
-  </div>
-</nav>
+  </form>
+</div>
 
-<main class="container py-4">
-  <div class="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
-    <div>
-      <h1 class="h4 mb-1">{{ course.code }} — {{ course.name }}</h1>
-      <div class="text-muted">Upload files or edit marks below; use Overview to review results</div>
+<div class="bg-white p-4 p-md-5 mb-4" style="border-radius: var(--radius); box-shadow: var(--shadow-subtle);">
+  <h2 class="fs-5 fw-semibold">Upload a Single File for All Components</h2>
+  <p class="small text-muted mb-3">
+    Include <code class="small">roll_no</code> and one column per component name (case-insensitive match).
+  </p>
+  
+  <form method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
+    {% csrf_token %}
+    <div class="col-12 col-md-8 col-lg-6">
+      <label class="form-label small fw-medium" for="bulkFileId">Select Marks File (.csv / .xlsx)</label>
+      <input class="form-control" type="file" name="bulk_file" id="bulkFileId"
+             accept=".csv, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required />
     </div>
-  </div>
-
-  <!-- Per-component upload -->
-  <div class="card shadow-sm mb-4">
-    <div class="card-body">
-      <h2 class="h6">Upload CSV/Excel per component</h2>
-      <p class="text-muted help-hint mb-2">
-        Accepted: <span class="mono">.csv, .xls, .xlsx</span> · Columns: <span class="mono">roll_no, marks</span>
-      </p>
-      <form method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
-        {% csrf_token %}
-        {% for comp in components %}
-          <div class="col-12 col-md-6 col-lg-4">
-            <label class="form-label">{{ comp.name }} (Max {{ comp.max_marks }})</label>
-            <div class="input-group">
-              <input class="form-control" type="file" name="component_csv_{{ comp.id }}"
-                     accept=".csv, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
-              <span class="input-group-text">File</span>
-            </div>
-          </div>
-        {% endfor %}
-        <div class="col-12">
-          <button type="submit" name="upload_component" value="1" class="btn btn-success">Upload selected components</button>
-        </div>
-      </form>
+    <div class="col-auto">
+      <button type="submit" name="upload_all" value="1" class="btn btn-primary">
+        <i class="fa-solid fa-file-arrow-up me-1"></i> Upload All Marks
+      </button>
     </div>
-  </div>
+  </form>
+</div>
 
-  <!-- Bulk upload -->
-  <div class="card shadow-sm mb-4">
-    <div class="card-body">
-      <h2 class="h6">Upload a single file for all components</h2>
-      <p class="text-muted help-hint mb-2">
-        Include <span class="mono">roll_no</span> and one column per component name (case-insensitive match).
-      </p>
-      <form method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
-        {% csrf_token %}
-        <div class="col-12 col-md-8 col-lg-6">
-          <div class="input-group">
-            <input class="form-control" type="file" name="bulk_file"
-                   accept=".csv, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
-            <span class="input-group-text">File</span>
-          </div>
-        </div>
-        <div class="col-12">
-          <button type="submit" name="upload_all" value="1" class="btn btn-warning">Upload all marks</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</main>
+<div class="text-center">
+  <a class="btn btn-outline-secondary" href="{% url 'course_marks_overview' course.id %}">
+    <i class="fa-solid fa-chart-bar me-1"></i> View Marks Overview
+  </a>
+</div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+{% endblock %}
+
+
+{% block extra_js %}
 <script>
+// This script seems to be from a different version of the page
+// (it mentions #marksTable), but I'm keeping it in case
+// you're using it elsewhere or plan to add the table back.
 document.addEventListener("DOMContentLoaded", function() {
   function updateRowTotal(row){
     let sum = 0;
@@ -103,14 +82,15 @@ document.addEventListener("DOMContentLoaded", function() {
     if(tc) tc.textContent = sum.toFixed(2);
   }
 
-  document.querySelectorAll("#marksTable tbody tr").forEach(row => {
-    updateRowTotal(row);
-    row.querySelectorAll(".mark-input").forEach(input => {
-      input.addEventListener("input", () => updateRowTotal(row));
+  const marksTable = document.getElementById("marksTable");
+  if (marksTable) {
+    marksTable.querySelectorAll("tbody tr").forEach(row => {
+      updateRowTotal(row);
+      row.querySelectorAll(".mark-input").forEach(input => {
+        input.addEventListener("input", () => updateRowTotal(row));
+      });
     });
-  });
+  }
 });
 </script>
-
-</body>
-</html>
+{% endblock %}

@@ -13,7 +13,7 @@
 <div class="d-flex justify-content-between align-items-center mb-2">
   <h3 class="mb-0">Registered Courses</h3>
   <span class="text-muted">
-    Student: {{ student.first_name }} {{ student.last_name }} ({{ student.roll_no }})
+    Student: {{ student.first_name }} {{ student.last_name|default:"" }} ({{ student.roll_no }})
   </span>
 </div>
 

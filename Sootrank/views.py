@@ -18,7 +18,7 @@ from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpRespo
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from openpyxl import Workbook
-from Registration.models import Branch, Category, Course, CourseBranch, Department, ProgramRequirement, Student, Faculty, Admins, StudentCourse, AssessmentComponent,AssessmentScore, Attendance, Timetable,FeeRecord
+from Registration.models import Branch, Category, Course, CourseBranch, Department, ProgramRequirement, Student, Faculty, Admins, StudentCourse, AssessmentComponent,AssessmentScore, Attendance, Timetable,FeeRecord,GradingPolicy
 from django.contrib.auth import authenticate , login as auth_login
 from django.contrib.auth.hashers import make_password,check_password
 from django.db.models import Count, Q, OuterRef, Exists ,Max
@@ -101,20 +101,6 @@ GRADE_POINTS = {
     "F": 0,
     "FS": 0,
 }
-
-def _compute_semester_from_roll_and_today(roll_no: str, today=None) -> int:
-    if today is None:
-        today = timezone.now().date()
-    try:
-        yr2 = int(roll_no[1:3])
-        admit_year = 2000 + yr2
-    except Exception:
-        # Fallback to student.semester or 1
-        return 1
-    years_delta = max(0, today.year - admit_year)
-    term_index = 1 if today.month >= 7 else 2
-    sem = years_delta * 2 + term_index
-    return max(1, sem)
 
 CATEGORY_PRIORITY = {
     "IC": 1,
@@ -930,9 +916,8 @@ def student_edit_profile(request):
     return render(request, "student_edit_profile.html", context)
 
 
-
 def faculty_edit_profile(request):
-    email_id = request.session.get("email_id")  #
+    email_id = request.session.get("email_id")
     if not email_id:
         login_url = getattr(settings, "LOGIN_URL", "/login/")
         return redirect(f"{login_url}?next={request.path}")
@@ -940,14 +925,35 @@ def faculty_edit_profile(request):
     faculty = get_object_or_404(Faculty, email_id=email_id)
 
     if request.method == "POST":
-        form = FacultyEditForm(request.POST, request.FILES, instance=faculty)
-        if form.is_valid():
-            form.save()
-            return redirect(reverse("faculty_profile")) 
-    else:
-        form = FacultyEditForm(instance=faculty)
+        # Handle mobile number safely
+        mobile_no = request.POST.get("mobile_no", "").strip()
+        if mobile_no:
+            try:
+                faculty.mobile_no = int(mobile_no)
+            except ValueError:
+                # Ignore if not numeric (user error)
+                pass
+        else:
+            faculty.mobile_no = None  # Allow clearing mobile number
 
-    return render(request, "instructor/edit_profile.html", {"form": form, "faculty": faculty})
+        # Handle image upload
+        if "profile_image" in request.FILES:
+            faculty.profile_image = request.FILES["profile_image"]
+
+        # Handle image removal
+        elif "remove_image" in request.POST:
+            if faculty.profile_image:
+                faculty.profile_image.delete(save=False)
+            faculty.profile_image = None
+
+        faculty.save()
+        return redirect(reverse("faculty_profile"))
+
+    # For a GET request, just pass the faculty object to the template
+    context = {"faculty": faculty}
+    return render(request, "instructor/edit_profile.html", context)
+
+
 
 def custom_admin_home(request):
     return render(request, "admin/custom_admin_home.html")
@@ -2215,18 +2221,6 @@ def advisor_request_action(request):
     return redirect("custom_admin_home")
 
 
-def _compute_semester_from_roll_and_today(roll_no: str, today=None) -> int:
-    if today is None:
-        today = timezone.now().date()
-    try:
-        yr2 = int(roll_no[1:3])
-        admit_year = 2000 + yr2
-    except Exception:
-        return 1
-    years_delta = max(0, today.year - admit_year)
-    term_index = 1 if today.month >= 7 else 2
-    return max(1, years_delta * 2 + term_index)
-
 def instructor_requests(request):
     email_id = request.session.get("email_id")
     if not email_id:
@@ -2235,16 +2229,16 @@ def instructor_requests(request):
 
     instructor = get_object_or_404(Faculty, email_id=email_id)
 
-    # Filters from GET
-    status_filter = request.GET.get("status", "PND")
+    # Filters
+    status_filter = request.GET.get("status", "").upper() or "PND"
     course_code = (request.GET.get("course") or "").strip().upper()
     slot = (request.GET.get("slot") or "").strip().upper()
 
-    # ✅ Only fetch current active pre-registration records
+    # ✅ Fetch only active prereg data
     qs = (
         StudentCourse.objects.filter(
             course__faculties__email_id=email_id,
-            is_active_pre_reg=True  # 👈 crucial filter to hide archived data
+            is_active_pre_reg=True,
         )
         .select_related("course", "student")
         .prefetch_related("course__faculties")
@@ -2252,9 +2246,18 @@ def instructor_requests(request):
         .distinct()
     )
 
-    # Apply additional filters
-    if status_filter:
-        qs = qs.filter(status=status_filter)
+    # ✅ Fix: default filter should exclude already enrolled
+    if status_filter == "PND":
+        qs = qs.filter(status="PND")
+    elif status_filter == "INS":
+        qs = qs.filter(status="INS")
+    elif status_filter == "ENR":
+        # Faculty can view ENR if they explicitly select it
+        qs = qs.filter(status="ENR")
+    elif status_filter == "DRP":
+        qs = qs.filter(status="DRP")
+
+    # Optional filters
     if course_code:
         qs = qs.filter(course__code=course_code)
     if slot:
@@ -2274,6 +2277,8 @@ def instructor_requests(request):
 
     context = {
         "instructor": instructor,
+        "faculty":instructor,
+
         "requests": qs,
         "status_filter": status_filter,
         "course_code": course_code,
@@ -2281,6 +2286,14 @@ def instructor_requests(request):
         "slots": slots,
         "my_courses": my_courses,
     }
+
+    # 🟢 UX improvement: If all ENR, show helpful message
+    if not qs.exists() and status_filter == "PND":
+        messages.info(
+            request,
+            "No pending requests. All your students may already be enrolled or none have preregistered yet.",
+        )
+
     return render(request, "instructor/instructor_requests.html", context)
 
 
@@ -2372,8 +2385,6 @@ def instructor_courses(request):
 
     instructor = get_object_or_404(Faculty, email_id=email_id)
 
-    # Current semester (for display only)
-    current_sem = _compute_semester_from_roll_and_today(instructor.email_id)
 
     # ✅ Show only current active pre-registration enrollments
     courses = (
@@ -2390,13 +2401,14 @@ def instructor_courses(request):
 
     context = {
         "instructor": instructor,
+        "faculty": instructor,
         "courses": courses,
-        "default_semester": str(current_sem),
     }
     return render(request, "instructor/view_courses.html", context)
 
-def course_roster(request, course_code, semester=None):
-    # Auth
+
+def course_roster(request, course_code):
+    # --- Auth check ---
     email_id = request.session.get("email_id")
     if not email_id:
         login_url = getattr(settings, "LOGIN_URL", "/login/")
@@ -2404,20 +2416,23 @@ def course_roster(request, course_code, semester=None):
 
     instructor = get_object_or_404(Faculty, email_id=email_id)
 
-    # Verify course ownership
+    # --- Verify ownership of course ---
     course = get_object_or_404(Course.objects.prefetch_related("faculties"), code=course_code)
     if not course.faculties.filter(id=instructor.id).exists():
+        messages.error(request, "You do not have permission to view this course.")
         return redirect("instructor_courses")
 
     q = (request.GET.get("q") or request.POST.get("q") or "").strip()
 
-    # POST actions: add/remove student
+    # ==========================
+    # Handle POST actions
+    # ==========================
     if request.method == "POST":
         action = (request.POST.get("action") or "").lower()
 
+        # --- Add student ---
         if action == "add_student":
             roll_no = (request.POST.get("roll_no") or "").strip().upper()
-            raw_sem = (request.POST.get("add_semester") or "").strip()
 
             if not roll_no:
                 messages.error(request, "Roll number is required.")
@@ -2428,7 +2443,7 @@ def course_roster(request, course_code, semester=None):
                 messages.error(request, "Student not found.")
                 return redirect(f"{request.path}{'?q='+q if q else ''}")
 
-            # Prevent adding students who already completed course
+            # Prevent adding if student has already passed the course
             completed = StudentCourse.objects.filter(
                 student=student, course=course
             ).filter(Q(outcome__iexact="PAS") | Q(status="CMP")).exists()
@@ -2436,22 +2451,15 @@ def course_roster(request, course_code, semester=None):
                 messages.error(request, f"{roll_no} has already completed {course.code}.")
                 return redirect(f"{request.path}{'?q='+q if q else ''}")
 
-            try:
-                sem_val = int(raw_sem) if raw_sem else _compute_semester_from_roll_and_today(student.roll_no)
-            except Exception:
-                sem_val = 1
-
             with transaction.atomic():
                 obj, created = StudentCourse.objects.get_or_create(
                     student=student,
                     course=course,
-                    semester=sem_val,
                     defaults={
                         "status": "ENR",
-                        "is_active_pre_reg": True,  # ✅ mark as current cycle
+                        "is_active_pre_reg": True,
                     },
                 )
-
                 if created:
                     messages.success(request, f"Enrolled {student.roll_no} in {course.code}.")
                 else:
@@ -2462,20 +2470,20 @@ def course_roster(request, course_code, semester=None):
                         messages.info(request, f"Reactivated {roll_no} in {course.code}.")
                     else:
                         messages.info(request, f"{roll_no} is already active in {course.code}.")
-
             return redirect(f"{request.path}{'?q='+q if q else ''}")
 
-        if action == "remove_student":
+        # --- Remove student ---
+        elif action == "remove_student":
             sc_id = request.POST.get("sc_id")
             try:
                 sc_id_int = int(sc_id)
             except (TypeError, ValueError):
                 sc_id_int = None
+
             if not sc_id_int:
                 messages.error(request, "Invalid selection.")
             else:
                 with transaction.atomic():
-                    # ✅ remove only active-cycle enrollments
                     sc = StudentCourse.objects.filter(
                         id=sc_id_int, course=course, status="ENR", is_active_pre_reg=True
                     ).first()
@@ -2487,38 +2495,43 @@ def course_roster(request, course_code, semester=None):
                         messages.success(request, f"Removed {rid} from {course.code}.")
             return redirect(f"{request.path}{'?q='+q if q else ''}")
 
-        messages.error(request, "Unknown action.")
-        return redirect(f"{request.path}{'?q='+q if q else ''}")
+        # --- Unknown action ---
+        else:
+            messages.error(request, "Unknown action.")
+            return redirect(f"{request.path}{'?q='+q if q else ''}")
 
-    # ✅ GET: only current active ENR enrollments
+    # ==========================
+    # GET: active enrollments
+    # ==========================
     enrollments_qs = (
         StudentCourse.objects
         .filter(course__code=course_code, status="ENR", is_active_pre_reg=True)
         .select_related("student", "course")
+        .order_by("student__roll_no")
     )
 
     if q:
         enrollments_qs = enrollments_qs.filter(
-            Q(student__roll_no__icontains=q) |
-            Q(student__first_name__icontains=q) |
-            Q(student__last_name__icontains=q)
+            Q(student__roll_no__icontains=q)
+            | Q(student__first_name__icontains=q)
+            | Q(student__last_name__icontains=q)
         )
 
-    enrollments_qs = enrollments_qs.order_by("student__roll_no")
-
-    # Compute live semester display (optional)
+    # Optional computed info
     enrollments = []
     for sc in enrollments_qs:
-        sc.computed_semester = _compute_semester_from_roll_and_today(sc.student.roll_no)
+        sc.computed_semester = sc.student.calculate_current_semester()
         enrollments.append(sc)
 
     context = {
         "instructor": instructor,
+        "faculty": instructor,
         "course": course,
         "enrollments": enrollments,
         "q": q,
     }
     return render(request, "instructor/course_roster.html", context)
+
 
 
 def custom_admin_preregistration(request):
@@ -2777,7 +2790,7 @@ def admin_prereg_swap(request):
 
     if sem is None:
         try:
-            sem = _compute_semester_from_roll_and_today(student.roll_no)
+            sem = student.calculate_current_semester()
         except Exception:
             sem = 1
 
@@ -3028,6 +3041,7 @@ def instructor_schema_courses(request):
     return render(request, "instructor/schema_courses.html", {
         "instructor": instructor,
         "courses": courses,
+        "faculty":instructor,
     })
 
 
@@ -3090,6 +3104,7 @@ def edit_assessment_scheme(request, course_code):
     return render(request, "instructor/edit_assessment_schema.html", {
         "course": course,
         "formset": formset,
+        "faculty":faculty,
         "sample_headers": ["roll_no", "email"] + [c.name for c in qs],
     })
 
@@ -3162,7 +3177,7 @@ def mark_field_name(student_id, comp_id):
 def enter_marks(request, course_id):
     course = get_object_or_404(Course, id=course_id)
 
-    # Identify Faculty (for back button)
+    # Identify Faculty (for back button and ownership)
     faculty = None
     fid = request.GET.get('faculty_id')
     if fid:
@@ -3170,79 +3185,259 @@ def enter_marks(request, course_id):
     if faculty is None:
         faculty = course.faculties.first()
 
-    # Assessment components
+    # --- Fetch Assessment Components ---
     components = list(
         AssessmentComponent.objects.filter(course=course).order_by('id')
     )
 
-    # Enrollments (only ENR — valid after prereg reset)
+    # ✅ Only current active enrollments (after pre-reg reset)
     enrollments_qs = (
-        StudentCourse.objects.filter(course=course, status='ENR')
+        StudentCourse.objects.filter(
+            course=course,
+            status='ENR',
+            is_active_pre_reg=True  # <-- ensures only active-cycle students are shown
+        )
         .select_related('student')
         .order_by('student__roll_no')
     )
     enrollments = list(enrollments_qs)
     students = [e.student for e in enrollments]
 
-    # 🧹 Clean orphaned AssessmentScore rows (if prereg reset removed StudentCourse)
-    AssessmentScore.objects.filter(course=course).exclude(student__in=students).delete()
-
-    # Existing marks map (only for enrolled students)
+    # --- Existing marks map (for prefill) ---
     existing = {}
     if students and components:
         for s in AssessmentScore.objects.filter(
-            course=course, student__in=students, component__in=components
+            course=course,
+            student__in=students,
+            component__in=components
         ):
             existing[(s.student_id, s.component_id)] = s
 
-    # Prefill baseline
+    # --- Prefill baseline from DB ---
     prefill = {
         mark_field_name(stu_id, comp_id): f"{s.marks_obtained}"
         for (stu_id, comp_id), s in existing.items()
     }
 
-    # 🛑 If no students enrolled (likely after prereg reset)
-    if not enrollments:
-        messages.warning(
-            request,
-            "No students are currently enrolled in this course. "
-            "This may be due to a recent pre-registration reset by the admin."
-        )
-        return render(request, "instructor/enter_marks.html", {
-            "course": course,
-            "components": components,
-            "enrollments": [],
-            "prefill": {},
-            "cell_errors": [],
-            "faculty": faculty,
-        })
-
-    # ---------------- Existing POST logic unchanged below ----------------
-    if request.method == "POST":
+    if request.method == 'POST':
         cell_errors, to_create, to_update = [], [], []
-        is_upload_all = "upload_all" in request.POST
-        is_upload_component = "upload_component" in request.POST
+        is_upload_all = 'upload_all' in request.POST
+        is_upload_component = 'upload_component' in request.POST
 
         import pandas as pd
-        # ... [keep all your existing bulk/manual upload logic unchanged] ...
-        # only difference is that any missing students (after reset) will now
-        # be gracefully skipped instead of causing issues.
-        # (no other lines need modification)
-        # ---------------------------------------------------------------
 
-    # GET: show current DB values prefilled
+        # ---------------- BULK UPLOAD (one file with all components) ----------------
+        if is_upload_all:
+            file = request.FILES.get('bulk_file')
+            if not file:
+                cell_errors.append(("File Error", "-", "No file provided"))
+            else:
+                try:
+                    df = pd.read_excel(file) if file.name.endswith(('.xls', '.xlsx')) else pd.read_csv(file)
+                    df.columns = [c.strip().lower() for c in df.columns]
+                except Exception as ex:
+                    cell_errors.append(("File Error", "-", f"Failed to parse file: {ex}"))
+                    df = None
+
+                if df is not None:
+                    if 'roll_no' not in df.columns:
+                        cell_errors.append(("File Error", "-", "Missing 'roll_no' column"))
+                    else:
+                        by_roll = {e.student.roll_no.strip().lower(): e.student for e in enrollments}
+                        for _, row in df.iterrows():
+                            roll_key = str(row['roll_no']).strip().lower()
+                            student_obj = by_roll.get(roll_key)
+                            if not student_obj:
+                                cell_errors.append((row.get('roll_no', ''), "N/A", "Not enrolled (inactive or dropped)"))
+                                continue
+                            for comp in components:
+                                cname = comp.name.strip().lower()
+                                if cname not in df.columns:
+                                    continue
+                                val = row[cname]
+                                if pd.isna(val):
+                                    continue
+                                try:
+                                    val = float(val)
+                                except (ValueError, TypeError):
+                                    cell_errors.append((row.get('roll_no', ''), comp.name, "Invalid number"))
+                                    continue
+                                if val < 0 or val > comp.max_marks:
+                                    cell_errors.append((row.get('roll_no', ''), comp.name, f"Must be 0–{comp.max_marks}"))
+                                    continue
+                                obj = existing.get((student_obj.id, comp.id))
+                                if obj:
+                                    obj.marks_obtained = val
+                                    to_update.append(obj)
+                                else:
+                                    to_create.append(AssessmentScore(
+                                        student=student_obj, course=course, component=comp, marks_obtained=val
+                                    ))
+
+            if to_create:
+                AssessmentScore.objects.bulk_create(to_create, batch_size=500)
+                for obj in to_create:
+                    existing[(obj.student_id, obj.component_id)] = obj
+            if to_update:
+                AssessmentScore.objects.bulk_update(to_update, ['marks_obtained'], batch_size=500)
+
+            prefill = {
+                mark_field_name(stu_id, comp_id): f"{s.marks_obtained}"
+                for (stu_id, comp_id), s in existing.items()
+            }
+
+            if cell_errors:
+                return render(request, 'instructor/enter_marks.html', {
+                    'course': course, 'components': components, 'enrollments': enrollments,
+                    'prefill': prefill, 'cell_errors': cell_errors, 'faculty': faculty
+                })
+            url = reverse('enter_marks', kwargs={'course_id': course.id})
+            if faculty:
+                url = f"{url}?faculty_id={faculty.id}"
+            return redirect(url)
+
+        # ---------------- PER COMPONENT UPLOAD ----------------
+        elif is_upload_component:
+            for comp in components:
+                file = request.FILES.get(f'component_csv_{comp.id}')
+                if not file:
+                    continue
+                try:
+                    df = pd.read_excel(file) if file.name.endswith(('.xls', '.xlsx')) else pd.read_csv(file)
+                    df.columns = [c.strip().lower() for c in df.columns]
+                except Exception as ex:
+                    cell_errors.append((comp.name, "-", f"Failed to parse file: {ex}"))
+                    continue
+                if 'roll_no' not in df.columns or 'marks' not in df.columns:
+                    cell_errors.append((comp.name, "-", "Missing roll_no or marks column"))
+                    continue
+
+                by_roll = {e.student.roll_no.strip().lower(): e.student for e in enrollments}
+                for _, row in df.iterrows():
+                    roll_key = str(row['roll_no']).strip().lower()
+                    val = row['marks']
+                    student_obj = by_roll.get(roll_key)
+                    if not student_obj:
+                        cell_errors.append((row.get('roll_no', ''), comp.name, "Not enrolled (inactive or dropped)"))
+                        continue
+                    try:
+                        val = float(val)
+                    except (ValueError, TypeError):
+                        cell_errors.append((row.get('roll_no', ''), comp.name, "Invalid number"))
+                        continue
+                    if val < 0 or val > comp.max_marks:
+                        cell_errors.append((row.get('roll_no', ''), comp.name, f"Must be 0–{comp.max_marks}"))
+                        continue
+                    obj = existing.get((student_obj.id, comp.id))
+                    if obj:
+                        obj.marks_obtained = val
+                        to_update.append(obj)
+                    else:
+                        to_create.append(AssessmentScore(
+                            student=student_obj, course=course, component=comp, marks_obtained=val
+                        ))
+
+            if to_create:
+                AssessmentScore.objects.bulk_create(to_create, batch_size=500)
+                for obj in to_create:
+                    existing[(obj.student_id, obj.component_id)] = obj
+            if to_update:
+                AssessmentScore.objects.bulk_update(to_update, ['marks_obtained'], batch_size=500)
+
+            prefill = {
+                mark_field_name(stu_id, comp_id): f"{s.marks_obtained}"
+                for (stu_id, comp_id), s in existing.items()
+            }
+
+            if cell_errors:
+                return render(request, 'instructor/enter_marks.html', {
+                    'course': course, 'components': components, 'enrollments': enrollments,
+                    'prefill': prefill, 'cell_errors': cell_errors, 'faculty': faculty
+                })
+            url = reverse('enter_marks', kwargs={'course_id': course.id})
+            if faculty:
+                url = f"{url}?faculty_id={faculty.id}"
+            return redirect(url)
+
+        # ---------------- MANUAL ENTRY GRID ----------------
+        else:
+            for e in enrollments:
+                for comp in components:
+                    field = mark_field_name(e.student_id, comp.id)
+                    raw = (request.POST.get(field) or '').strip()
+                    if raw == '':
+                        continue
+                    try:
+                        val = float(raw)
+                    except ValueError:
+                        cell_errors.append((e.student.roll_no, comp.name, "Invalid number"))
+                        continue
+                    if val < 0 or val > comp.max_marks:
+                        cell_errors.append((e.student.roll_no, comp.name, f"Must be 0–{comp.max_marks}"))
+                        continue
+                    obj = existing.get((e.student_id, comp.id))
+                    if obj:
+                        obj.marks_obtained = val
+                        to_update.append(obj)
+                    else:
+                        to_create.append(AssessmentScore(
+                            student=e.student, course=course, component=comp, marks_obtained=val
+                        ))
+
+            if to_create:
+                AssessmentScore.objects.bulk_create(to_create, batch_size=500)
+                for obj in to_create:
+                    existing[(obj.student_id, obj.component_id)] = obj
+            if to_update:
+                AssessmentScore.objects.bulk_update(to_update, ['marks_obtained'], batch_size=500)
+
+            # Prefill again, keeping any manual entries for errors
+            prefill = {
+                mark_field_name(stu_id, comp_id): f"{s.marks_obtained}"
+                for (stu_id, comp_id), s in existing.items()
+            }
+            for e in enrollments:
+                for comp in components:
+                    key = mark_field_name(e.student_id, comp.id)
+                    if key in request.POST:
+                        prefill[key] = request.POST.get(key, '')
+
+            if cell_errors:
+                return render(request, 'instructor/enter_marks.html', {
+                    'course': course, 'components': components, 'enrollments': enrollments,
+                    'prefill': prefill, 'cell_errors': cell_errors, 'faculty': faculty
+                })
+
+            url = reverse('enter_marks', kwargs={'course_id': course.id})
+            if faculty:
+                url = f"{url}?faculty_id={faculty.id}"
+            return redirect(url)
+
+    # --- GET: show marks for current-cycle students only ---
     return render(request, 'instructor/enter_marks.html', {
-        'course': course, 'components': components, 'enrollments': enrollments,
-        'prefill': prefill, 'cell_errors': [], 'faculty': faculty
+        'course': course,
+        'components': components,
+        'enrollments': enrollments,
+        'prefill': prefill,
+        'cell_errors': [],
+        'faculty': faculty,
     })
+
 
 
 def course_marks_overview(request, course_id):
     course = get_object_or_404(Course, id=course_id)
+    email = request.session.get("email_id")
+    if not email:
+        login_url = getattr(settings, "LOGIN_URL", "/login/")
+        return redirect(f"{login_url}?next={request.path}")
 
-    components = list(
-        AssessmentComponent.objects.filter(course=course).order_by('id')
-    )
+    faculty = get_object_or_404(Faculty, email_id=email)
+
+    # ✅ Fetch grading policy if exists
+    policy = GradingPolicy.objects.filter(course=course).first()
+
+    components = list(AssessmentComponent.objects.filter(course=course).order_by('id'))
 
     # ✅ Only current active-cycle enrolled students
     enrollments = (
@@ -3264,45 +3459,39 @@ def course_marks_overview(request, course_id):
             except (InvalidOperation, TypeError):
                 scores[(s.student_id, s.component_id)] = None
 
-    # --- Compute component metadata ---
-    comp_info = []
-    total_weight = Decimal('0')
+    # --- Component metadata ---
+    comp_info, total_weight = [], Decimal("0")
     for c in components:
         max_d = Decimal(str(c.max_marks))
-        w = getattr(c, 'weight', None)
-        weight_d = Decimal(str(w)) if w is not None else Decimal('1')
+        w = getattr(c, "weight", None)
+        weight_d = Decimal(str(w)) if w is not None else Decimal("1")
         comp_info.append((c, max_d, weight_d))
         total_weight += weight_d
 
     # --- Build student rows ---
-    rows = []
-    totals_by_student = {}
-
+    rows, totals_by_student = [], {}
     for e in enrollments:
         stu = e.student
-        pairs = []
-        weighted_total = Decimal('0')
+        pairs, weighted_total = [], Decimal("0")
         for comp, max_d, weight_d in comp_info:
             val = scores.get((stu.id, comp.id))
             if val is not None and max_d > 0:
                 contrib = (val / max_d) * weight_d
                 weighted_total += contrib
             pairs.append({
-                'component': comp,
-                'value': val,
-                'max': comp.max_marks,
-                'component_id': comp.id,
+                "component": comp,
+                "value": val,
+                "max": comp.max_marks,
+                "component_id": comp.id,
             })
 
         totals_by_student[stu.id] = weighted_total
-
-        percentage = (weighted_total / total_weight * Decimal('100')) if total_weight > 0 else None
-
+        percentage = (weighted_total / total_weight * Decimal("100")) if total_weight > 0 else None
         rows.append({
-            'student': stu,
-            'pairs': pairs,
-            'total': weighted_total,
-            'percentage': percentage,
+            "student": stu,
+            "pairs": pairs,
+            "total": weighted_total,
+            "percentage": percentage,
         })
 
     # --- Percentile calculation ---
@@ -3312,7 +3501,7 @@ def course_marks_overview(request, course_id):
 
     def percentile_rank(total_value):
         if n <= 1:
-            return Decimal('100')
+            return Decimal("100")
         lo, hi = 0, n
         while lo < hi:
             mid = (lo + hi) // 2
@@ -3321,18 +3510,56 @@ def course_marks_overview(request, course_id):
             else:
                 hi = mid
         lower = lo
-        return (Decimal(lower) / Decimal(n - 1)) * Decimal('100')
+        return (Decimal(lower) / Decimal(n - 1)) * Decimal("100")
 
     for r in rows:
-        r['percentile'] = percentile_rank(r['total']) if r['total'] is not None else None
+        r["percentile"] = percentile_rank(r["total"]) if r["total"] is not None else None
+
+    # ✅ --- Apply GradingPolicy (if available) ---
+    grade_letters = {10: "A", 9: "A-", 8: "B", 7: "B-", 6: "C", 5: "C-", 4: "D", 0: "F"}
+
+    for r in rows:
+        pct = r["percentage"] or Decimal("0")
+        grade, outcome = None, None
+
+        if policy and policy.mode == "REL":
+            # relative grading based on percentile
+            perc = r["percentile"] or Decimal("0")
+            rel = policy.rel_buckets or {}
+            if perc <= Decimal(rel.get("top10", 10)): grade = "A"
+            elif perc <= Decimal(rel.get("top10", 10)) + Decimal(rel.get("next15", 15)): grade = "A-"
+            elif perc <= Decimal("50"): grade = "B"
+            elif perc <= Decimal("75"): grade = "B-"
+            elif perc <= Decimal("90"): grade = "C"
+            else: grade = "D"
+            outcome = "PAS" if grade != "F" else "FAI"
+
+        else:
+            # absolute grading
+            abs_cutoffs = (policy.abs_cutoffs if policy else None) or {
+                "A": 85, "A-": 75, "B": 65, "B-": 55, "C": 45, "Pass": 45
+            }
+            if pct >= abs_cutoffs["A"]: grade = "A"
+            elif pct >= abs_cutoffs["A-"]: grade = "A-"
+            elif pct >= abs_cutoffs["B"]: grade = "B"
+            elif pct >= abs_cutoffs["B-"]: grade = "B-"
+            elif pct >= abs_cutoffs["C"]: grade = "C"
+            elif pct >= abs_cutoffs["Pass"]: grade = "D"
+            else: grade = "F"
+            outcome = "PAS" if grade != "F" else "FAI"
+
+        r["grade"] = grade
+        r["outcome"] = outcome
 
     max_total_display = total_weight
 
-    return render(request, 'instructor/course_marks_overview.html', {
-        'course': course,
-        'components': components,
-        'rows': rows,
-        'max_total': max_total_display,
+    return render(request, "instructor/course_marks_overview.html", {
+        "course": course,
+        "faculty": faculty,
+        "components": components,
+        "rows": rows,
+        "max_total": max_total_display,
+        "policy": policy,
     })
 
 @require_POST
@@ -3340,31 +3567,37 @@ def update_mark_cell(request, course_id):
     try:
         student_id = int(request.POST.get('student_id'))
         component_id = int(request.POST.get('component_id'))
-        raw_val = (request.POST.get('value') or '').strip()
+        raw_val = (request.POST.get('value') or '').trim()
     except (TypeError, ValueError):
         return HttpResponseBadRequest("Invalid parameters")
 
     course = get_object_or_404(Course, id=course_id)
     comp = get_object_or_404(AssessmentComponent, id=component_id, course=course)
 
-    # ✅ Validate that this student is in current active cycle
-    enrolled = StudentCourse.objects.filter(
-        course=course,
-        status='ENR',
-        is_active_pre_reg=True,
-        student_id=student_id
-    ).exists()
+    # Ensure active enrollment
+    enr = StudentCourse.objects.filter(
+        course=course, student_id=student_id,
+        status='ENR', is_active_pre_reg=True
+    ).first()
 
-    if not enrolled:
-        return JsonResponse({'ok': False, 'error': 'Student not enrolled (inactive or archived)'}, status=400)
+    if not enr:
+        return JsonResponse({'ok': False, 'error': 'Student not enrolled in active cycle'}, status=400)
 
-    if raw_val == '':
+    # ======= DELETE MARK =======
+    if raw_val == "":
         with transaction.atomic():
             AssessmentScore.objects.filter(
-                course=course, student_id=student_id, component_id=component_id
+                student_id=student_id,
+                course=course,
+                component=comp
             ).delete()
-        return JsonResponse({'ok': True, 'value': ''})
+        # Also clear grade/outcome for incomplete data
+        enr.grade = None
+        enr.outcome = None
+        enr.save(update_fields=["grade", "outcome"])
+        return JsonResponse({'ok': True, 'value': '', 'grade': '—', 'outcome': '—'})
 
+    # ======= SAVE MARK =======
     try:
         val = Decimal(raw_val)
     except InvalidOperation:
@@ -3375,8 +3608,8 @@ def update_mark_cell(request, course_id):
 
     with transaction.atomic():
         obj, created = AssessmentScore.objects.select_for_update().get_or_create(
-            course=course,
             student_id=student_id,
+            course=course,
             component=comp,
             defaults={'marks_obtained': val}
         )
@@ -3384,9 +3617,101 @@ def update_mark_cell(request, course_id):
             obj.marks_obtained = val
             obj.save(update_fields=['marks_obtained'])
 
-    return JsonResponse({'ok': True, 'value': str(val)})
+    # ======= NOW RECALCULATE TOTAL, % , GRADE =======
+    # Fetch all required components for the course
+    components = AssessmentComponent.objects.filter(course=course)
+    scores = AssessmentScore.objects.filter(student_id=student_id, course=course)
 
+    # Compute weighted total
+    total_weight = Decimal("0")
+    weighted_sum = Decimal("0")
 
+    comp_map = {c.id: c for c in components}
+    score_map = {s.component_id: s.marks_obtained for s in scores}
+
+    for c in components:
+        max_m = Decimal(str(c.max_marks))
+        w = Decimal(str(c.weight or 1))
+        total_weight += w
+
+        if c.id in score_map:
+            weighted_sum += (score_map[c.id] / max_m) * w
+
+    # If marks incomplete → clear grade
+    if len(score_map) != len(components):
+        enr.grade = None
+        enr.outcome = None
+        enr.save(update_fields=["grade", "outcome"])
+        return JsonResponse({'ok': True, 'value': str(val), 'grade': '—', 'outcome': '—'})
+
+    # ---- Compute percentage ----
+    percentage = float(weighted_sum / total_weight * 100)
+
+    # ---- Apply grading policy ----
+    policy = GradingPolicy.objects.filter(course=course).first()
+
+    # Absolute mode
+    grade = 'F'
+    outcome = 'FAI'
+
+    if policy and policy.mode == "ABS":
+        cutoff = policy.abs_cutoffs
+        if percentage >= cutoff["A"]: grade = "A"
+        elif percentage >= cutoff["A-"]: grade = "A-"
+        elif percentage >= cutoff["B"]: grade = "B"
+        elif percentage >= cutoff["B-"]: grade = "B-"
+        elif percentage >= cutoff["C"]: grade = "C"
+        elif percentage >= cutoff["Pass"]: grade = "D"
+        else: grade = "F"
+
+        outcome = "PAS" if grade != "F" else "FAI"
+
+    # Relative mode
+    elif policy and policy.mode == "REL":
+        # compute percentile
+        all_scores = []
+        all_enrs = StudentCourse.objects.filter(course=course, status='ENR', is_active_pre_reg=True)
+
+        for e in all_enrs:
+            sc = AssessmentScore.objects.filter(student=e.student, course=course)
+            st_weight = Decimal("0")
+            st_sum = Decimal("0")
+            ok = True
+            for c in components:
+                try:
+                    m = sc.get(component=c).marks_obtained
+                except:
+                    ok = False
+                    break
+                st_sum += (m / Decimal(str(c.max_marks))) * Decimal(str(c.weight or 1))
+                st_weight += Decimal(str(c.weight or 1))
+            if ok:
+                all_scores.append(float(st_sum / st_weight * 100))
+
+        all_scores = sorted(all_scores)
+        idx = all_scores.index(percentage)
+        percentile = (idx / (len(all_scores) - 1)) * 100 if len(all_scores) > 1 else 100
+
+        rel = policy.rel_buckets
+        if percentile <= rel.get("top10", 10): grade = "A"
+        elif percentile <= 10 + rel.get("next15", 15): grade = "A-"
+        elif percentile <= 50: grade = "B"
+        elif percentile <= 75: grade = "B-"
+        elif percentile <= 90: grade = "C"
+        else: grade = "D"
+        outcome = "PAS"
+
+    # Save to StudentCourse
+    enr.grade = grade
+    enr.outcome = outcome
+    enr.save(update_fields=["grade", "outcome"])
+
+    return JsonResponse({
+        'ok': True,
+        'value': str(val),
+        'grade': grade,
+        'outcome': outcome
+    })
 
 
 def _canon(s: str) -> str:
@@ -3464,214 +3789,96 @@ def all_courses(request, faculty_id):
 
 
 
-def assign_grades_csv(request, course_code):
-    NUM_TO_LETTER_GRADE = {
-        10: "A", 9: "A-", 8: "B", 7: "B-", 6: "C", 5: "C-", 4: "D", 0: "F"
-    }
-
-    # Auth and course
+def assign_grading_policy(request, course_code):
+    """View for instructors to define or edit grading policy for a course."""
     email = request.session.get("email_id")
     faculty = get_object_or_404(Faculty, email_id=email)
     course = get_object_or_404(Course, code=course_code, faculties=faculty)
 
-    # Components (no semester on model)
     components = list(AssessmentComponent.objects.filter(course=course))
-    comp_by_key = {_canon(c.name): c for c in components}
+    total_weight = sum([float(c.weight or 0) for c in components]) if components else None
 
-    # ENR students
-    affected_qs = StudentCourse.objects.filter(course=course, status='ENR',is_active_pre_reg=True).select_related("student")
-    num_enr_students = affected_qs.count()
-    force_absolute = num_enr_students <= 25
+    # ✅ Count enrolled students (active ENR)
+    num_enrolled = StudentCourse.objects.filter(
+        course=course, status="ENR", is_active_pre_reg=True
+    ).count()
 
+    # Fetch or create policy
+    policy, _ = GradingPolicy.objects.get_or_create(course=course)
+
+    # --- Handle POST ---
     if request.method == "POST":
-        f_scores = request.FILES.get("csv_file")
-        if not f_scores:
-            messages.error(request, "Please choose a CSV or Excel file to upload.")
-            return redirect(request.path)
+        mode = (request.POST.get("mode") or "ABS").upper()
+        # ✅ Force absolute if less than 25 students
+        if num_enrolled < 25:
+            mode = "ABS"
 
-        # Grading mode and parameters
-        policy_mode = (request.POST.get("mode") or "ABS").upper()
-        if force_absolute:
-            policy_mode = "ABS"
-
-        # Helper casting
-        def _as_int(v, d):  
-            try: return int(v)
-            except (TypeError, ValueError): return d
-        def _as_float(v, d):
-            try: return float(v)
-            except (TypeError, ValueError): return d
-
-        abs_thresholds = {
-            "A": _as_int(request.POST.get("abs_A"), 85),
-            "A_minus": _as_int(request.POST.get("abs_B"), 75),
-            "B": _as_int(request.POST.get("abs_C"), 65),
-            "B_minus": _as_int(request.POST.get("abs_D"), 55),
-            "C": _as_int(request.POST.get("abs_E"), 45),
-            "C_minus": _as_int(request.POST.get("abs_C_minus"), 40),
-            "D": _as_int(request.POST.get("abs_D_grade"), 35),
+        abs_cutoffs = {
+            "A": int(request.POST.get("abs_A") or 85),
+            "A-": int(request.POST.get("abs_B") or 75),
+            "B": int(request.POST.get("abs_C") or 65),
+            "B-": int(request.POST.get("abs_D") or 55),
+            "C": int(request.POST.get("abs_E") or 45),
+            "Pass": int(request.POST.get("pass_min_percent") or 45),
         }
-        try:
-            pass_min = Decimal(request.POST.get("pass_min_percent") or 45)
-        except (InvalidOperation, TypeError):
-            pass_min = Decimal("45")
 
         rel_buckets = {
-            "top10": _as_float(request.POST.get("top10"), 10),
-            "next15": _as_float(request.POST.get("next15"), 15),
-            "next25": _as_float(request.POST.get("next25"), 25),
-            "next25b": _as_float(request.POST.get("next25b"), 25),
-            "next15b": _as_float(request.POST.get("next15b"), 15),
-            "next10": _as_float(request.POST.get("next10"), 10),
-            "rest_min": _as_int(request.POST.get("rest_min"), 4),
+            "top10": float(request.POST.get("top10") or 10),
+            "next15": float(request.POST.get("next15") or 15),
+            "next25": float(request.POST.get("next25") or 25),
+            "next25b": float(request.POST.get("next25b") or 25),
+            "next15b": float(request.POST.get("next15b") or 15),
+            "next10": float(request.POST.get("next10") or 10),
+            "rest_min": float(request.POST.get("rest_min") or 4),
         }
 
-        # Read uploaded rows
-        rows_list = list(_iter_rows_as_dicts(f_scores))
-        if not rows_list:
-            messages.error(request, "No rows found in the uploaded file.")
-            return redirect(request.path)
-        headers = list(rows_list[0].keys())
-        roll_aliases = {"roll", "rollno", "rollnumber", "roll_no", "roll no"}
-        has_roll = any(_canon(h) in roll_aliases for h in headers)
-        if not has_roll:
-            messages.error(request, "File must contain a roll_no column.")
-            return redirect(request.path)
-        comp_headers = [h for h in headers if _canon(h) in comp_by_key]
-        if not comp_headers:
-            messages.error(request, "File must contain at least one component matching the scheme.")
-            return redirect(request.path)
-
-        updated_scores, missing_students, invalid_marks = 0, [], []
-
         with transaction.atomic():
-            for row in rows_list:
-                ident = (row.get("roll_no") or row.get("roll") or row.get("Roll No") or row.get("ROLL_NO") or "")
-                ident = str(ident).strip()
-                if not ident:
-                    missing_students.append("(blank)")
-                    continue
-                student = Student.objects.filter(roll_no__iexact=ident).first()
-                if not student:
-                    missing_students.append(ident)
-                    continue
-                sc = StudentCourse.objects.filter(student=student, course=course, status='ENR',is_active_pre_reg=True).first()
-                if not sc:
-                    continue
-                for raw_h, val in row.items():
-                    key = _canon(raw_h)
-                    comp = comp_by_key.get(key)
-                    if not comp or val is None or str(val).strip() == "":
-                        continue
-                    try:
-                        m = Decimal(str(val))
-                    except InvalidOperation:
-                        invalid_marks.append((ident, raw_h, val))
-                        continue
-                    try:
-                        max_d = Decimal(str(comp.max_marks))
-                    except (InvalidOperation, TypeError):
-                        max_d = Decimal("0")
-                    if m < 0 or m > max_d:
-                        invalid_marks.append((ident, raw_h, val))
-                        continue
-                    AssessmentScore.objects.update_or_create(
-                        student=student,
-                        course=course,
-                        component=comp,
-                        defaults={"marks_obtained": m}
-                    )
-                    updated_scores += 1
+            policy.mode = mode
+            policy.abs_cutoffs = abs_cutoffs
+            policy.rel_buckets = rel_buckets
+            policy.save()
 
-        # Grading: process only non-P/F students
-        totals_per_student, totals_dict = [], {}
-        for sc in affected_qs:
-            if getattr(sc, "pass_fail", False):
-                continue
-            total_percent = Decimal("0")
-            for comp in components:
-                s = AssessmentScore.objects.filter(student=sc.student, course=course, component=comp).first()
-                if s and comp.max_marks and comp.weight:
-                    try:
-                        total_percent += (Decimal(str(s.marks_obtained)) / Decimal(str(comp.max_marks))) * Decimal(str(comp.weight))
-                    except (InvalidOperation, TypeError):
-                        continue
-            totals_per_student.append((sc.student_id, total_percent))
-            totals_dict[sc.student_id] = total_percent
+        messages.success(request, f"Grading policy for {course.code} updated successfully.")
+        return redirect("faculty_dashboard")
 
-        # Absolute or Relative Assign
-        if policy_mode == "REL":
-            cohort = sorted(totals_per_student, key=lambda x: x[1], reverse=True)
-            n = len(cohort)
-            seq = [("top10", 10), ("next15", 9), ("next25", 8), ("next25b", 7), ("next15b", 6), ("next10", 5)]
-            counts, remaining = [], n
-            for key, _cg in seq:
-                pct = float(rel_buckets.get(key, 0))
-                c = int(round((pct / 100.0) * n))
-                c = max(0, min(c, remaining))
-                counts.append(c)
-                remaining -= c
-            rest_min = int(rel_buckets.get("rest_min", 4))
-            cg_map, idx = {}, 0
-            for (count, (_key, cg)) in zip(counts, seq):
-                for _ in range(count):
-                    if idx < n:
-                        sid, _ = cohort[idx]
-                        cg_map[sid] = cg
-                        idx += 1
-            for i in range(idx, n):
-                sid, _ = cohort[i]
-                cg_map[sid] = rest_min
+    # --- Defaults & safe keys ---
+    abs_defaults = {"A": 85, "A-": 75, "B": 65, "B-": 55, "C": 45, "Pass": 45}
+    rel_defaults = {
+        "top10": 10, "next15": 15, "next25": 25, "next25b": 25,
+        "next15b": 15, "next10": 10, "rest_min": 4,
+    }
 
-            for sc in affected_qs:
-                if getattr(sc, "pass_fail", False):
-                    continue
-                cg = cg_map.get(sc.student_id)
-                if cg is not None:
-                    letter_grade = NUM_TO_LETTER_GRADE.get(int(cg), "F")
-                    sc.grade = letter_grade
-                    sc.outcome = "PAS" if cg >= 4 else "FAI"
-                    sc.status = "CMP"
-                    sc.save(update_fields=["grade", "outcome", "status"])
-        else:
-            def cg_from_abs(pct: Decimal) -> int:
-                if pct >= abs_thresholds["A"]: return 10
-                if pct >= abs_thresholds["A_minus"]: return 9
-                if pct >= abs_thresholds["B"]: return 8
-                if pct >= abs_thresholds["B_minus"]: return 7
-                if pct >= abs_thresholds["C"]: return 6
-                if pct >= abs_thresholds["C_minus"]: return 5
-                if pct >= abs_thresholds["D"]: return 4
-                return 0
+    abs_cutoffs = {**abs_defaults, **(policy.abs_cutoffs or {})}
+    rel_buckets = {**rel_defaults, **(policy.rel_buckets or {})}
 
-            for sc in affected_qs:
-                if getattr(sc, "pass_fail", False):
-                    continue
-                pct = totals_dict.get(sc.student_id, Decimal("0"))
-                cg = cg_from_abs(pct)
-                letter_grade = NUM_TO_LETTER_GRADE.get(cg, "F")
-                sc.grade = letter_grade
-                sc.outcome = "PAS" if pct >= pass_min and cg >= 4 else "FAI"
-                sc.status = "CMP"
-                sc.save(update_fields=["grade", "outcome", "status"])
+    abs_cutoffs_safe = {
+        "A": abs_cutoffs.get("A"),
+        "A_minus": abs_cutoffs.get("A-"),
+        "B": abs_cutoffs.get("B"),
+        "B_minus": abs_cutoffs.get("B-"),
+        "C": abs_cutoffs.get("C"),
+        "Pass": abs_cutoffs.get("Pass"),
+    }
+    rel_buckets_safe = {k: rel_buckets.get(k) for k in rel_defaults.keys()}
 
-        # Messages on upload status
-        if updated_scores: messages.success(request, f"Uploaded {updated_scores} scores and assigned grades.")
-        if missing_students: messages.warning(request, f"{len(missing_students)} rows had missing or unknown roll_no.")
-        if invalid_marks: messages.warning(request, f"{len(invalid_marks)} invalid marks skipped.")
+    # ✅ Add student count & flag
+    force_absolute = num_enrolled < 25
 
-        return redirect(f"{reverse('grade_results', args=[course.code])}")
-
-    # GET: Render
-    return render(request, "instructor/assign_grades.html", {
+    return render(request, "instructor/assign_grading.html", {
         "course": course,
         "faculty": faculty,
         "components": components,
-        "total_weight": sum([float(c.weight or 0) for c in components]) if components else None,
-        "sample_headers": ["roll_no"] + [c.name for c in components],
+        "total_weight": total_weight,
+        "policy": policy,
+        "abs_cutoffs_safe": abs_cutoffs_safe,
+        "rel_buckets_safe": rel_buckets_safe,
+        "num_enrolled": num_enrolled,
         "force_absolute": force_absolute,
-        "num_enr_students": num_enr_students,
     })
+
+
+
+
 
 
 def grade_results(request, course_code):
@@ -3768,63 +3975,85 @@ def grade_results(request, course_code):
 def student_result_semester_list(request, roll_no):
     student = get_object_or_404(Student, roll_no=roll_no)
     admin = Admins.objects.first()
-
     results_visible = admin.is_results_visible() if admin else False
+
+    # Current semester (for highlighting)
     current_sem = student.calculate_current_semester()
 
+    # ✅ Include all semesters that have at least one completed/enrolled course
     semesters = (
-        student.enrollments
-        .filter(status__in=['ENR', 'CMP'])
-        .values_list('semester', flat=True)
+        StudentCourse.objects
+        .filter(student=student)
+        .exclude(status__in=["PND", "INS", "DRP"])  # skip pending, in-progress, or dropped
+        .values_list("semester", flat=True)
         .distinct()
-        .order_by('semester')
+        .order_by("semester")
     )
+
+    # ✅ Handle missing surname safely
+    full_name = student.first_name
+    if getattr(student, "last_name", None):
+        full_name += f" {student.last_name}"
 
     context = {
         "student": student,
         "semesters": semesters,
         "current_sem": current_sem,
         "results_visible": results_visible,
+        "full_name": full_name.strip(),
     }
     return render(request, "student/result_semester_list.html", context)
 
 def student_view_results(request, student_id, semester):
     student = get_object_or_404(Student, id=student_id)
-    
-    # Fetch semester enrollments
+
+    # ✅ Fetch all valid enrollments for the semester
     enrollments = (
         StudentCourse.objects
-        .filter(student=student, semester=semester, status__in=['ENR', 'CMP'])
-        .select_related('course')
+        .filter(student=student, semester=semester)
+        .exclude(status__in=["PND", "INS", "DRP"])  # skip pending/unapproved/dropped
+        .select_related("course")
+        .order_by("course__code")
     )
 
+    # ✅ Prepare result list for template
     results = []
     for enr in enrollments:
         course = enr.course
-        grade = enr.grade or ''
+        grade = enr.grade or "—"
         points = GRADE_POINTS.get(grade, 0)
+
+        # Display "FS" explicitly as "Fail (Short Attendance)" in table
+        display_grade = "FS" if grade == "FS" else grade
+
         results.append({
             "course_code": course.code,
             "course_name": course.name,
             "credits": course.credits,
-            "grade": grade,
+            "grade": display_grade,
             "points": points if enr.course_mode == "REG" else "—",
-            "outcome": enr.outcome,
-            "course_mode": enr.course_mode,
+            "outcome": enr.outcome or "UNK",
+            "course_mode": enr.course_mode or "REG",
         })
 
-    # ✅ Use updated model-level logic directly (no overrides)
-    metrics = student.calculate_semester_metrics(semester)
-    cg_metrics = student.calculate_cumulative_metrics()
+    # ✅ Compute metrics directly using Student model helpers
+    sem_metrics = student.calculate_semester_metrics(semester)
+    cum_metrics = student.calculate_cumulative_metrics()
 
+    # ✅ Handle full name properly
+    full_name = student.first_name
+    if getattr(student, "last_name", None):
+        full_name += f" {student.last_name}"
+
+    # ✅ Render the results page
     return render(request, "student/result_semester_view.html", {
         "student": student,
         "semester": semester,
         "results": results,
-        "metrics": metrics,
-        "cg_metrics": cg_metrics,
+        "metrics": sem_metrics,
+        "cg_metrics": cum_metrics,
+        "full_name": full_name.strip(),
     })
-
 
 def student_result_pdf(request, student_id, semester):
     student = get_object_or_404(Student, id=student_id)
@@ -4018,6 +4247,151 @@ def admin_save_grades(request, course_code):
 
     messages.success(request, f'Successfully updated grades for {updated_count} student(s) in {course.code}.')
     return redirect('admin_assign_grades', course_code=course_code)
+
+def admin_upload_results(request):
+    """
+    Admin bulk result upload view.
+    Uploads CSV/Excel or pasted data (roll_no, course_code, grade, outcome).
+    - Case-insensitive for both roll_no and course_code
+    - Lenient: skips invalid entries but logs clear reasons
+    """
+
+    context = {
+        "columns": ["roll_no", "course_code", "grade", "outcome"],
+        "preview_data": None,
+        "summary": None,
+        "selected_semester": None,
+        "default_semester": 1,
+    }
+
+    if request.method == "POST":
+        file = request.FILES.get("file")
+        text_data = request.POST.get("csv_text", "").strip()
+        semester = int(request.POST.get("semester") or 1)
+        context["selected_semester"] = semester
+
+        # --- STEP 1: Read file or pasted text ---
+        try:
+            if file:
+                if file.name.endswith(".csv"):
+                    df = pd.read_csv(file)
+                elif file.name.endswith((".xls", ".xlsx")):
+                    df = pd.read_excel(file)
+                else:
+                    messages.error(request, "❌ Please upload a CSV or Excel file.")
+                    return redirect("admin_upload_results")
+            elif text_data:
+                df = pd.read_csv(io.StringIO(text_data))
+            else:
+                messages.error(request, "❌ Please upload a file or paste CSV data.")
+                return redirect("admin_upload_results")
+        except Exception as e:
+            messages.error(request, f"Error reading file: {e}")
+            return redirect("admin_upload_results")
+
+        df.columns = df.columns.str.lower()
+        required_cols = {"roll_no", "course_code", "grade"}
+        missing = required_cols - set(df.columns)
+        if missing:
+            messages.error(request, f"Missing required columns: {', '.join(missing)}")
+            return redirect("admin_upload_results")
+
+        if "outcome" not in df.columns:
+            df["outcome"] = "PAS"
+        df = df.fillna("")
+        parsed_data = df.to_dict(orient="records")
+
+        # --- STEP 2: Preview Mode ---
+        if "preview" in request.POST:
+            context["preview_data"] = parsed_data
+            messages.info(request, f"👀 Preview loaded for Semester {semester}. Review before submitting.")
+            return render(request, "admin/admin_upload_results.html", context)
+
+        # --- STEP 3: Final Upload ---
+        created, updated, skipped = 0, 0, 0
+        errors = []
+        success_details = []
+
+        with transaction.atomic():
+            for row in parsed_data:
+                roll = str(row.get("roll_no", "")).strip().lower()
+                code = str(row.get("course_code", "")).strip().upper()
+                grade = str(row.get("grade", "")).strip().upper()
+                outcome = str(row.get("outcome", "")).strip().upper() or "PAS"
+
+                if not roll or not code or not grade:
+                    skipped += 1
+                    errors.append(f"❌ Missing data → roll:{roll or '-'}, course:{code or '-'}, grade:{grade or '-'}")
+                    continue
+
+                # case-insensitive lookups
+                student = Student.objects.filter(roll_no__iexact=roll).first()
+                course = Course.objects.filter(code__iexact=code).first()
+
+                if not student:
+                    skipped += 1
+                    errors.append(f"❌ Roll number not found: {roll}")
+                    continue
+                if not course:
+                    skipped += 1
+                    errors.append(f"❌ Course not found: {code}")
+                    continue
+
+                # create or update StudentCourse record
+                sc, created_now = StudentCourse.objects.update_or_create(
+                    student=student,
+                    course=course,
+                    semester=semester,
+                    defaults={
+                        "grade": grade,
+                        "outcome": outcome,
+                        "status": "PAS" if outcome == "PAS" else "DRP",
+                    },
+                )
+
+                if created_now:
+                    created += 1
+                    success_details.append(f"✅ Added → {student.roll_no} - {course.code} ({grade})")
+                else:
+                    updated += 1
+                    success_details.append(f"🔁 Updated → {student.roll_no} - {course.code} ({grade})")
+
+        # --- STEP 4: Summary in context ---
+        context["summary"] = {
+            "created": created,
+            "updated": updated,
+            "skipped": skipped,
+            "errors": errors,  # full list visible
+            "success_details": success_details[:5],  # only show first 5 success for brevity
+        }
+
+        # --- STEP 5: Messages for user ---
+        if created or updated:
+            messages.success(
+                request,
+                f"✅ Upload complete for Semester {semester}: "
+                f"{created} created, {updated} updated, {skipped} skipped."
+            )
+        else:
+            messages.warning(request, "⚠️ No new results were added or updated.")
+
+        if errors:
+            messages.warning(request, f"{len(errors)} issue(s) found. Check below for details 👇")
+
+        return render(request, "admin/admin_upload_results.html", context)
+
+    return render(request, "admin/admin_upload_results.html", context)
+
+def result_management_home(request):
+    return render(request, "admin/result_module.html")
+
+
+
+
+
+
+
+
 
 # For Excel export
 import openpyxl
@@ -4861,45 +5235,117 @@ def faculty_view_courses_for_grades(request, faculty_id):
 def faculty_view_course_grades(request, faculty_id, course_code):
     faculty = get_object_or_404(Faculty, id=faculty_id)
     course = get_object_or_404(Course, code=course_code, faculties=faculty)
+    policy = GradingPolicy.objects.filter(course=course).first()
 
     # ✅ Only current active enrollments
     enrollments = (
         StudentCourse.objects
-        .filter(
-            course=course,
-            status__in=['ENR', 'CMP'],
-            is_active_pre_reg=True  # ✅ Added
-        )
+        .filter(course=course, status__in=['ENR', 'CMP'], is_active_pre_reg=True)
         .select_related('student')
         .order_by('student__roll_no')
     )
+
+    # Handle optional sort query param (?sort=asc/desc)
+    sort_order = request.GET.get('sort', 'asc').lower()
+    grade_order = {"A": 1, "A-": 2, "B": 3, "B-": 4, "C": 5, "C-": 6, "D": 7, "F": 8}
+    reverse = sort_order == "desc"
 
     results = []
     for enr in enrollments:
         grade = enr.grade or ""
         outcome = enr.outcome or ""
-        is_pf = enr.is_pass_fail
+        course_mode = (enr.course_mode or "").upper()
 
-        # Handle Pass/Fail display cleanly
-        if is_pf:
+        if course_mode == "PF":
             display_grade = "Pass/Fail Mode"
-            display_outcome = "Pass" if outcome.upper() == "PAS" else "Fail"
+            display_outcome = "Pass" if outcome.upper() in ["PAS", "PASS"] else "Fail"
         else:
-            display_grade = grade
-            display_outcome = outcome
+            display_grade = grade or "—"
+            display_outcome = "Pass" if outcome.upper() in ["PAS", "PASS"] else "Fail"
 
         results.append({
-            'student': enr.student,
-            'grade': display_grade,
-            'outcome': display_outcome,
+            "student": enr.student,
+            "grade": display_grade,
+            "outcome": display_outcome,
+            "mode": course_mode,
         })
 
-    return render(request, 'instructor/faculty_course_grades.html', {
-        'faculty': faculty,
-        'course': course,
-        'results': results,
+    # Sort by grade order if possible
+    def grade_sort_key(r):
+        g = r["grade"]
+        return grade_order.get(g, 999)  # Fallback for non-standard grades
+
+    results.sort(key=grade_sort_key, reverse=reverse)
+
+    return render(request, "instructor/faculty_course_grades.html", {
+        "faculty": faculty,
+        "course": course,
+        "results": results,
+        "policy": policy,
+        "sort_order": sort_order,
     })
 
+@require_POST
+@transaction.atomic
+def update_student_grade(request, course_code):
+    """
+    AJAX endpoint to update either grade or outcome of a student in a course.
+    Handles both Absolute/Relative and Pass/Fail (PF) modes.
+    """
+    student_id = request.POST.get("student_id")
+    new_grade = request.POST.get("grade", "").strip()
+    new_outcome = request.POST.get("outcome", "").strip()
+
+    # --- Validation ---
+    if not student_id:
+        return JsonResponse({"ok": False, "error": "Missing student ID"}, status=400)
+    if not new_grade and not new_outcome:
+        return JsonResponse({"ok": False, "error": "Missing parameters"}, status=400)
+
+    # --- Fetch student-course enrollment ---
+    course = get_object_or_404(Course, code=course_code)
+    enr = StudentCourse.objects.filter(student_id=student_id, course=course).first()
+    if not enr:
+        return JsonResponse({"ok": False, "error": "Enrollment not found"}, status=404)
+
+    policy = GradingPolicy.objects.filter(course=course).first()
+    course_mode = (enr.course_mode or "").upper()
+
+    # --- Handle different update types ---
+    if new_grade:  # ✅ Grade field updated
+        enr.grade = new_grade
+        # If the grading policy is Pass/Fail, then outcome should follow automatically
+        if course_mode == "PF":
+            enr.outcome = "PAS" if new_grade.lower().startswith("p") else "FAI"
+        enr.save(update_fields=["grade", "outcome"])
+
+        return JsonResponse({
+            "ok": True,
+            "grade": new_grade,
+            "outcome": enr.outcome,
+        })
+
+    elif new_outcome:  # ✅ Outcome dropdown changed
+        outcome_map = {
+            "pass": "PAS",
+            "fail": "FAI",
+            "fs": "FS",  # Fail by short attendance
+        }
+        outcome_code = outcome_map.get(new_outcome.lower(), "FAI")
+        enr.outcome = outcome_code
+
+        # If the course mode is Pass/Fail, set grade to P/F automatically
+        if course_mode == "PF":
+            enr.grade = "P" if outcome_code == "PAS" else "F"
+
+        enr.save(update_fields=["outcome", "grade"])
+        return JsonResponse({
+            "ok": True,
+            "grade": enr.grade,
+            "outcome": new_outcome.title(),
+        })
+
+    return JsonResponse({"ok": False, "error": "Invalid request"}, status=400)
 
 
 def bulk_preregistration(request):
@@ -4968,7 +5414,8 @@ def bulk_preregistration(request):
                         skipped += 1
                         continue
 
-                    semester = compute_sem(roll_no)
+                    semester = student.calculate_current_semester()
+
 
                     for slot in SLOTS:
                         code = str(row.get(f"slot_{slot}", "")).strip().upper()
@@ -4984,7 +5431,7 @@ def bulk_preregistration(request):
                             student=student,
                             course=course,
                             semester=semester,
-                            defaults={"status": enroll_mode, "is_pass_fail": False},
+                            defaults={"status": enroll_mode, "course_mode": "REG"},
                         )
                         if created_now:
                             created += 1
@@ -5167,7 +5614,7 @@ def faculty_timetable_manage(request, course_id):
     return render(
         request,
         "instructor/timetable_manage.html",
-        {"course": course, "timetable": timetable, "days": days},
+        {"course": course,"faculty":faculty, "timetable": timetable, "days": days},
     )
 
 
@@ -5192,7 +5639,6 @@ def student_attendance(request):
 
     return render(request, "attendance.html", {"attendance_data": attendance_data, "student": student})
 
-
 def faculty_attendance(request, course_id):
     email_id = request.session.get("email_id")
     if not email_id:
@@ -5202,7 +5648,67 @@ def faculty_attendance(request, course_id):
     course = get_object_or_404(Course, id=course_id, faculties=faculty)
     enrollments = StudentCourse.objects.filter(course=course, status="ENR").select_related("student")
 
-    if request.method == "POST":
+    # --- CSV Upload Handling ---
+    if request.method == "POST" and "attendance_file" in request.FILES:
+        file = request.FILES["attendance_file"]
+        try:
+            df = pd.read_csv(file)
+        except Exception as e:
+            messages.error(request, f"Failed to read CSV file: {e}")
+            return redirect("faculty_attendance", course_id=course.id)
+
+        with transaction.atomic():
+            if "roll no" in [c.lower() for c in df.columns]:
+                # ✅ Case 1: matrix-style
+                df.columns = [c.strip().lower() for c in df.columns]
+                roll_col = "roll no"
+                date_cols = [c for c in df.columns if c != roll_col]
+                roll_map = {e.student.roll_no.lower(): e.student for e in enrollments}
+
+                for _, row in df.iterrows():
+                    roll = str(row[roll_col]).strip().lower()
+                    student = roll_map.get(roll)
+                    if not student:
+                        continue
+
+                    total_classes = len(date_cols)
+                    attended = sum(int(row[c]) for c in date_cols if str(row[c]).strip() in ["1", "P", "p"])
+                    obj, _ = Attendance.objects.get_or_create(student=student, course=course)
+                    obj.total_classes = total_classes
+                    obj.attended_classes = attended
+                    obj.save()
+
+                messages.success(request, f"Attendance imported successfully for {len(df)} students.")
+
+            elif "date" in [c.lower() for c in df.columns] and "roll nos present" in [c.lower() for c in df.columns]:
+                # ✅ Case 2: date + roll list
+                roll_map = {e.student.roll_no.lower(): e.student for e in enrollments}
+                attendance_count = {s.student.roll_no.lower(): 0 for s in enrollments}
+                total_dates = len(df)
+
+                for _, row in df.iterrows():
+                    present_rolls = [r.strip().lower() for r in str(row["Roll Nos Present"]).split(",")]
+                    for roll in present_rolls:
+                        if roll in attendance_count:
+                            attendance_count[roll] += 1
+
+                for roll, attended in attendance_count.items():
+                    student = roll_map.get(roll)
+                    if not student:
+                        continue
+                    obj, _ = Attendance.objects.get_or_create(student=student, course=course)
+                    obj.total_classes = total_dates
+                    obj.attended_classes = attended
+                    obj.save()
+
+                messages.success(request, f"Attendance uploaded for {total_dates} dates.")
+
+            else:
+                messages.error(request, "Unrecognized CSV format. Check column names.")
+        return redirect("faculty_attendance", course_id=course.id)
+
+    # --- Manual Form Submission ---
+    elif request.method == "POST":
         for enr in enrollments:
             total = request.POST.get(f"total_{enr.student.id}", 0)
             attended = request.POST.get(f"attended_{enr.student.id}", 0)
@@ -5215,18 +5721,19 @@ def faculty_attendance(request, course_id):
         messages.success(request, "Attendance updated successfully!")
         return redirect("faculty_attendance", course_id=course.id)
 
+    # --- GET View ---
     data = []
     for enr in enrollments:
         att = Attendance.objects.filter(student=enr.student, course=course).first()
         data.append({
             "student": enr.student,
+            "faculty": faculty,
             "attended": att.attended_classes if att else 0,
             "total": att.total_classes if att else 0,
             "percent": att.attendance_percent if att else 0,
         })
 
-    return render(request, "instructor/attendance_manage.html", {"course": course, "data": data})
-
+    return render(request, "instructor/attendance_manage.html", {"course": course, "faculty": faculty, "data": data})
 
 
 
@@ -5708,3 +6215,103 @@ def admin_course_attendance(request, course_id):
         "records": records
     })
 
+def faculty_course_report(request):
+    """Show all courses taught by the logged-in faculty with export options."""
+    email_id = request.session.get("email_id")
+    if not email_id:
+        return redirect("login")
+
+    faculty = get_object_or_404(Faculty, email_id=email_id)
+    courses = Course.objects.filter(faculties=faculty).order_by("code")
+
+    report_data = []
+    for course in courses:
+        count = StudentCourse.objects.filter(course=course, status="ENR").count()
+        report_data.append({
+            "course": course,
+            "count": count,
+        })
+
+    return render(request, "instructor/faculty_report.html", {
+        "faculty": faculty,
+        "courses": report_data,
+    })
+
+
+# ---------------------- EXCEL EXPORT ----------------------
+def export_course_enrollments_excel(request, course_id):
+    course = get_object_or_404(Course, id=course_id)
+    enrollments = (
+        StudentCourse.objects.filter(course=course, status="ENR")
+        .select_related("student")
+        .order_by("student__roll_no")
+    )
+
+    data = [
+        {
+            "Roll No": e.student.roll_no,
+            "Name": f"{e.student.first_name} {e.student.last_name or ''}",
+            "Email": e.student.email_id,
+            "Branch": e.student.branch.name if e.student.branch else "",
+            "Status": e.status,
+        }
+        for e in enrollments
+    ]
+    df = pd.DataFrame(data)
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False, sheet_name="Enrollments")
+
+    output.seek(0)
+    response = HttpResponse(
+        output,
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    filename = f"{course.code}_enrollments.xlsx"
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+# ---------------------- PDF EXPORT ----------------------
+def export_course_enrollments_pdf(request, course_id):
+    course = get_object_or_404(Course, id=course_id)
+    enrollments = (
+        StudentCourse.objects.filter(course=course, status="ENR")
+        .select_related("student")
+        .order_by("student__roll_no")
+    )
+
+    response = HttpResponse(content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{course.code}_enrollments.pdf"'
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+
+    width, height = A4
+    y = height - 50
+    pdf.setFont("Helvetica-Bold", 14)
+    pdf.drawString(50, y, f"Course Enrollment Report: {course.code} — {course.name}")
+    y -= 30
+    pdf.setFont("Helvetica", 11)
+    pdf.drawString(50, y, f"Total Enrolled Students: {enrollments.count()}")
+    y -= 40
+    pdf.setFont("Helvetica-Bold", 10)
+    pdf.drawString(50, y, "Roll No")
+    pdf.drawString(150, y, "Name")
+    pdf.drawString(350, y, "Branch")
+    pdf.setFont("Helvetica", 10)
+    y -= 20
+
+    for e in enrollments:
+        if y < 60:
+            pdf.showPage()
+            y = height - 50
+        pdf.drawString(50, y, e.student.roll_no)
+        pdf.drawString(150, y, f"{e.student.first_name} {e.student.last_name or ''}")
+        pdf.drawString(350, y, e.student.branch.name if e.student.branch else "")
+        y -= 20
+
+    pdf.save()
+    pdf_data = buffer.getvalue()
+    buffer.close()
+    response.write(pdf_data)
+    return response

@@ -14,17 +14,15 @@
   {% endif %}
 
   <!-- Print-only header -->
-  <div class="d-none d-print-block mb-3">
-    <div class="text-center">
-      <h2 class="mb-1">Results — Semester {{ semester }}</h2>
-      <div class="small text-muted">
-        {{ student.first_name }} {{ student.last_name }} &nbsp;•&nbsp; Roll: {{ student.roll_no }}
-        {% if cg_metrics and cg_metrics.CGPA %}
-          &nbsp;•&nbsp; CGPA: {{ cg_metrics.CGPA|floatformat:2 }}
-        {% endif %}
-      </div>
-      <hr class="my-2" />
+  <div class="d-none d-print-block mb-3 text-center">
+    <h2 class="mb-1">Results — Semester {{ semester }}</h2>
+    <div class="small text-muted">
+      {{ full_name }} &nbsp;•&nbsp; Roll: {{ student.roll_no }}
+      {% if cg_metrics and cg_metrics.CGPA %}
+        &nbsp;•&nbsp; CGPA: {{ cg_metrics.CGPA|floatformat:2 }}
+      {% endif %}
     </div>
+    <hr class="my-2" />
   </div>
 
   <!-- Header -->
@@ -59,7 +57,7 @@
       <div class="col-12 col-lg-8 mb-4 mb-lg-0">
         <div class="d-flex align-items-center justify-content-between mb-3">
           <div>
-            <h2 class="h6 fw-semibold mb-0">Results for {{ student.first_name }} {{ student.last_name }}</h2>
+            <h2 class="h6 fw-semibold mb-0">Results for {{ full_name }}</h2>
             <p class="small text-muted mb-0">Roll No: <strong>{{ student.roll_no }}</strong></p>
           </div>
           <div class="d-flex gap-2 no-print">
@@ -68,15 +66,16 @@
                target="_blank"
                class="btn btn-dark btn-sm"
                title="Open semester PDF in a new tab">
-              Download PDF
+              <i class="fa-solid fa-file-pdf me-1"></i> Download PDF
             </a>
+            
           </div>
         </div>
 
         <div class="table-responsive">
           <table class="table table-sm table-borderless align-middle">
             <thead>
-              <tr class="small text-muted">
+              <tr class="small text-muted border-bottom">
                 <th>Course Code</th>
                 <th>Course Name</th>
                 <th class="text-center">Credits</th>
@@ -87,7 +86,7 @@
             </thead>
             <tbody>
               {% for r in results %}
-              <tr class="align-middle">
+              <tr class="align-middle border-bottom">
                 <td class="fw-medium">{{ r.course_code }}</td>
                 <td class="text-truncate" style="max-width:320px;">{{ r.course_name }}</td>
                 <td class="text-center">{{ r.credits }}</td>
@@ -99,7 +98,11 @@
                   {% elif r.course_mode == "AUD" %}
                     <span class="badge bg-warning text-dark">Audit</span>
                   {% else %}
-                    {{ r.grade|default:"—" }}
+                    {% if r.grade == "FS" %}
+                      <span class="badge bg-danger bg-opacity-75">FS</span>
+                    {% else %}
+                      {{ r.grade|default:"—" }}
+                    {% endif %}
                   {% endif %}
                 </td>
 
@@ -114,7 +117,9 @@
 
                 <!-- Outcome -->
                 <td class="text-center">
-                  {% if r.outcome == "PAS" %}
+                  {% if r.grade == "FS" %}
+                    <span class="badge bg-danger bg-opacity-75">Short Attendance</span>
+                  {% elif r.outcome == "PAS" %}
                     <span class="badge bg-success">Pass</span>
                   {% elif r.outcome == "FAI" %}
                     <span class="badge bg-danger">Fail</span>
@@ -145,15 +150,15 @@
           <ul class="list-unstyled mb-3 small">
             <li class="d-flex justify-content-between mb-2">
               <span class="text-muted">Registered Credits (RCR)</span>
-              <strong>{{ metrics.RCR }}</strong>
+              <strong>{{ metrics.RCR|default:"0" }}</strong>
             </li>
             <li class="d-flex justify-content-between mb-2">
               <span class="text-muted">Earned Credits (ECR)</span>
-              <strong>{{ metrics.ECR }}</strong>
+              <strong>{{ metrics.ECR|default:"0" }}</strong>
             </li>
             <li class="d-flex justify-content-between mb-2">
               <span class="text-muted">Total Grade Points (STCR)</span>
-              <strong>{{ metrics.STCR }}</strong>
+              <strong>{{ metrics.STCR|default:"0" }}</strong>
             </li>
             <li class="d-flex justify-content-between align-items-baseline mt-3">
               <span class="text-muted">SGPA</span>
@@ -167,15 +172,15 @@
           <ul class="list-unstyled small mb-3">
             <li class="d-flex justify-content-between mb-2">
               <span class="text-muted">Cumulative Registered (TRCR)</span>
-              <strong>{{ cg_metrics.TRCR }}</strong>
+              <strong>{{ cg_metrics.TRCR|default:"0" }}</strong>
             </li>
             <li class="d-flex justify-content-between mb-2">
               <span class="text-muted">Cumulative Earned (TECR)</span>
-              <strong>{{ cg_metrics.TECR }}</strong>
+              <strong>{{ cg_metrics.TECR|default:"0" }}</strong>
             </li>
             <li class="d-flex justify-content-between mb-2">
               <span class="text-muted">Cumulative Grade Points (TSTCR)</span>
-              <strong>{{ cg_metrics.TSTCR }}</strong>
+              <strong>{{ cg_metrics.TSTCR|default:"0" }}</strong>
             </li>
             <li class="d-flex justify-content-between align-items-baseline mt-3">
               <span class="text-muted">CGPA</span>
@@ -185,9 +190,11 @@
 
           <div class="d-grid gap-2">
             <a href="{% url 'student_result_semester_list' student.roll_no %}" class="btn btn-outline-secondary btn-sm">
-              Back to Semesters
+              <i class="fa-solid fa-arrow-left me-1"></i> Back to Semesters
             </a>
-            <a href="{% url 'students_dashboard' %}" class="btn btn-success btn-sm">Home</a>
+            <a href="{% url 'students_dashboard' %}" class="btn btn-success btn-sm">
+              <i class="fa-solid fa-home me-1"></i> Home
+            </a>
           </div>
 
           <p class="text-muted small mt-3 mb-0">

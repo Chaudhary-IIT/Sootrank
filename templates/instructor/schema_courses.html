@@ -1,70 +1,57 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>Assessment Schemes — My Courses</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
-  <style>
-    .course-slot {
-      font-size: 0.8rem;
-      padding: 0.15rem 0.4rem;
-      border: 1px solid #0d6efd22;
-      border-radius: 0.25rem;
-    }
-  </style>
-</head>
-<body class="bg-light">
+{% extends "faculty_base.html" %}
 
-  <!-- Navbar -->
-  <nav class="navbar navbar-dark bg-primary">
-    <div class="container">
-      <span class="navbar-brand">Instructor · Schemes</span>
+{% block title %}Assessment Schemes — My Courses{% endblock %}
+
+{% block nav_courses_active %} active{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <div>
+    <h1 class="fs-3 fw-bold mb-1">My Courses</h1>
+    <div class="text-muted small">
+      Update assessment schemes for your courses
     </div>
-    <a href="{% url 'faculty_dashboard' %}" class="btn btn-outline-light btn-sm me-5">Home</a>
-  </nav>
+  </div>
+</div>
 
-  <!-- Main content -->
-  <main class="container py-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <div>
-        <h1 class="h4 mb-1">My Courses</h1>
-        <div class="text-muted small">{{ instructor.first_name }} {{ instructor.last_name|default_if_none:"" }}</div>
-      </div>
-    </div>
-
-    {% if courses %}
-      <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3">
-        {% for c in courses %}
-          <div class="col">
-            <div class="card h-100 shadow-sm">
-              <div class="card-body d-flex flex-column">
-                <div class="d-flex justify-content-between align-items-start mb-1">
-                  <h5 class="card-title mb-0">{{ c.code }}</h5>
-                </div>
-                <p class="card-text mb-2">{{ c.name }}</p>
-                <div class="text-muted small mb-3">
-                  Credits: {{ c.credits }} · LTPC: {{ c.LTPC }}
-                </div>
-                <div class="mt-auto d-flex gap-2">
-                  <a class="btn btn-primary btn-sm" href="{% url 'edit_assessment_scheme' c.code %}">Edit scheme</a>
-                  <a class="btn btn-outline-primary btn-sm" href="{% url 'enter_marks' c.id %}">Upload grades</a>
-                </div>
-              </div>
-              <div class="card-footer bg-white">
-                <div class="small text-muted">
-                  Enrolled: {{ c.total_enrolled|default:0 }}
-                </div>
-              </div>
+{% if courses %}
+  <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-4">
+    {% for c in courses %}
+      <div class="col">
+        <div class="card h-100">
+          <div class="card-body d-flex flex-column">
+            
+            <h5 class="card-title mb-1">{{ c.code }}</h5>
+            <p class="card-text mb-2">{{ c.name }}</p>
+            
+            <div class="text-muted small mb-3">
+              Credits: {{ c.credits }} · LTPC: {{ c.LTPC }}
+            </div>
+            
+            <div class="mt-auto d-flex gap-2">
+              <a class="btn btn-primary btn-sm" href="{% url 'edit_assessment_scheme' c.code %}">
+                <i class="fa-solid fa-pen-to-square me-1"></i> Edit Scheme
+              </a>
+              <a class="btn btn-outline-secondary btn-sm" href="{% url 'enter_marks' c.id %}">
+                Upload Grades
+              </a>
             </div>
           </div>
-        {% endfor %}
+          
+          <div class="card-footer">
+            <div class="small text-muted">
+              <strong>Enrolled:</strong> {{ c.total_enrolled|default:0 }}
+            </div>
+          </div>
+        </div>
       </div>
-    {% else %}
-      <div class="alert alert-info">No courses assigned.</div>
-    {% endif %}
-  </main>
-
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="card">
+    <div class="card-body text-center text-muted p-5">
+      No courses assigned to you.
+    </div>
+  </div>
+{% endif %}
+{% endblock %}
