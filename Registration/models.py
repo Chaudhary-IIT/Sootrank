@@ -151,91 +151,115 @@ class Student(models.Model):
         return self.enrollments.filter(semester=semester, status__in=['ENR', 'CMP'])
 
     def calculate_semester_metrics(self, semester):
-        """
-        Calculates RCR, ECR, STCR, and SGPA for a given semester.
-        - RCR: Registered credits (includes PF; excludes AUD)
-        - ECR: Earned credits (passed; includes PF passed; excludes AUD)
-        - STCR: Σ(grade_points × credits) for REG courses
-        - SGPA: STCR / Σ(regular course credits)
-        """
-        enrollments = self.enrollments.filter(semester__iexact=str(semester), status__in=['ENR', 'CMP']).select_related("course")
+        enrollments = self.enrollments.filter(
+            semester=semester,
+            status__in=['ENR', 'CMP']
+        ).select_related("course")
 
-        rcr = ecr = stcr = regular_credits = 0
+        rcr = 0  # Registered Credits (ALL course types)
+        ecr = 0  # Earned Credits
+        stcr = 0  # Σ (grade_points × credits) for REG courses only
+        reg_earned_credits = 0  # For SGPA denominator
 
         for enr in enrollments:
             credits = enr.course.credits or 0
             mode = (enr.course_mode or "").upper()
             outcome = (enr.outcome or "").upper()
-            grade = (enr.grade or "")
-            points = GRADE_POINTS.get(grade, 0)
+            grade = enr.grade or ""
+            gp = GRADE_POINTS.get(grade, 0)
 
-            if mode == "AUD":
-                continue
-
+            # RCR MUST count every enrolled course
             rcr += credits
 
-            if mode == "PF":
+            # ECR (Earned Credits)
+            if mode == "REG":
                 if outcome == "PAS":
                     ecr += credits
-                continue
+                    reg_earned_credits += credits
+                # REG contributes to STCR always
+                stcr += gp * credits
 
-            # Regular course logic
-            stcr += points * credits
-            regular_credits += credits
-            if outcome == "PAS":
-                ecr += credits
+            elif mode == "PF":
+                # PF courses: ECR if PAS, but no STCR
+                if outcome == "PAS":
+                    ecr += credits
 
-        sgpa = round(stcr / regular_credits, 2) if regular_credits else 0.0
-        return {"RCR": rcr, "ECR": ecr, "STCR": stcr, "SGPA": sgpa}
+            elif mode == "AUD":
+                # AUD: never contributes to ECR or STCR
+                pass
+            
+        # SGPA = (Σ GP × Credits) / (Σ Earned REG Credits)
+        # PF and AUD never included in SGPA denominator
+        
+        sgpa = round(stcr / reg_earned_credits, 2) if reg_earned_credits else 0.0
+
+        return {
+            "RCR": rcr,              # Every course
+            "ECR": ecr,              # Earned credits
+            "STCR": stcr,            # Weighted grade points
+            "SGPA": sgpa,            # Semester GPA
+        }
+
 
     def calculate_cumulative_metrics(self):
         """
-        Calculates cumulative totals across all semesters:
-        - TRCR: Total registered credits (includes PF, excludes AUD)
-        - TECR: Total earned credits (includes PF passed, excludes AUD)
-        - TSTCR: Total grade points sum (for REG courses)
-        - CGPA: TSTCR / (Σ regular course credits across latest attempts)
+        Cumulative metrics using latest attempt only:
+        - TRCR: all credits (REG + PF + AUD)
+        - TECR: REG(PAS) + PF(PAS); AUD never added
+        - TSTCR: REG grade_points * credits
+        - CGPA = TSTCR / sum(REG credits where PAS)
         """
-        enrollments = self.enrollments.filter(status__in=['ENR', 'CMP']).select_related("course").order_by('semester', 'id')
 
-        trcr = tecr = tstcr = 0
+        enrollments = self.enrollments.filter(
+            status__in=['ENR', 'CMP']
+        ).select_related("course").order_by('semester', 'id')
+
         latest = {}
 
         for enr in enrollments:
             course_code = enr.course.code
+            latest[course_code] = enr  # latest attempt wins
+
+        trcr = 0
+        tecr = 0
+        tstcr = 0
+        reg_earned_credits = 0
+
+        for enr in latest.values():
             credits = enr.course.credits or 0
             mode = (enr.course_mode or "").upper()
             outcome = (enr.outcome or "").upper()
-            grade = (enr.grade or "")
+            grade = enr.grade or ""
             gp = GRADE_POINTS.get(grade, 0)
 
-            # Remove previous attempt (if exists)
-            if course_code in latest:
-                prev = latest[course_code]
-                if prev['mode'] != 'AUD':
-                    trcr -= prev['credits']
-                    if prev['outcome'] == 'PAS':
-                        tecr -= prev['credits']
-                    if prev['mode'] == 'REG':
-                        tstcr -= prev['grade_points'] * prev['credits']
-
-            # If latest attempt is AUD, ignore it but mark it as latest
-            if mode == "AUD":
-                latest[course_code] = {'mode': 'AUD', 'credits': 0, 'grade_points': 0, 'outcome': outcome}
-                continue
-
-            # Add current attempt
+            # TRCR — add everything
             trcr += credits
-            if outcome == 'PAS':
-                tecr += credits
-            if mode == 'REG':
-                tstcr += gp * credits
 
-            latest[course_code] = {'mode': mode, 'credits': credits, 'grade_points': gp, 'outcome': outcome}
+            # ECR logic
+            if mode == "REG":
+                if outcome == "PAS":
+                    tecr += credits
+                    reg_earned_credits += credits
+                    tstcr += gp * credits
+                else:
+                    # REG but not passed → contributes to STCR but not ECR/denominator
+                    tstcr += gp * credits
+            elif mode == "PF":
+                if outcome == "PAS":
+                    tecr += credits
+            else:
+                # AUD: never contributes to ECR or STCR
+                pass
 
-        regular_trcr = sum(v['credits'] for v in latest.values() if v['mode'] == 'REG')
-        cgpa = round(tstcr / regular_trcr, 2) if regular_trcr else 0.0
-        return {"TRCR": trcr, "TECR": tecr, "TSTCR": tstcr, "CGPA": cgpa}
+        cgpa = round(tstcr / reg_earned_credits, 2) if reg_earned_credits else 0.0
+
+        return {
+            "TRCR": trcr,
+            "TECR": tecr,
+            "TSTCR": tstcr,
+            "CGPA": cgpa,
+        }
+
 
 
 

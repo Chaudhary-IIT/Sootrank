@@ -1,5 +1,7 @@
-# Create virtual environment
+ 1. Clone Repository & Create Virtual Environmen
 
+git clone https://github.com/Chaudhary-IIT/Sootrank
+cd Sootrank
 python -m venv venv
 venv\Scripts\activate
 
@@ -40,6 +42,9 @@ GRANT ALL PRIVILEGES ON DATABASE sootrank_db TO sootrank_user;
 
 -->then apply migrations
 
+(If permission errors:
+    GRANT ALL ON SCHEMA public TO sootrank_user;
+    ALTER USER sootrank_user WITH SUPERUSER )
 ---------------------------------------------------------------------------------------------------------------------
 
 # Create Superuser
@@ -66,3 +71,16 @@ psql -U postgres -d sootrank_db
 GRANT ALL PRIVILEGES ON DATABASE sootrank_db TO sootrank_user;
 GRANT ALL ON SCHEMA public TO sootrank_user;
 ALTER USER sootrank_user WITH SUPERUSER;
+
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+# Backup database to file:
+
+python manage.py dumpdata > backup.json
+
+# Restore:
+
+python manage.py loaddata backup.json
+
+----------------------------------------------------------------------------------------------------------------------------------

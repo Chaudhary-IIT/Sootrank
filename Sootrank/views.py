@@ -5,6 +5,7 @@ import io
 import os
 import razorpay
 from django.forms import modelformset_factory
+from django.utils.safestring import mark_safe
 from django.db.models import Sum
 from django.conf import settings
 from django.core.files.storage import FileSystemStorage
@@ -315,10 +316,12 @@ def faculty_dashboard(request):
 
 def pre_registration(request):
     """
-    Pre-registration page (updated):
-     - preselected_by_slot only comes from APPROVED enrollments (status='ENR')
+    Pre-registration page:
+     - preselected_by_slot comes from APPROVED enrollments (status='ENR') and PND (pending) for prefill.
      - new_cycle flag is True only when the student has no enrollments for current_sem
-     - slot_map & slot_map_json exclude any courses student has already PASSED
+     - slot_map & slot_map_json exclude any courses the student has already PASSED
+     - Mode removed (no course_mode selection here)
+     - Pending (PND) rows count automatically toward total (Option A)
     """
     roll_no = request.session.get("roll_no")
     if not roll_no:
@@ -330,25 +333,25 @@ def pre_registration(request):
     current_sem = student.calculate_current_semester()
     window_open = _deadline_open()
 
-    # --- POST handling (unchanged behaviour) ---
+    # POST handling
     if request.method == "POST":
         if not window_open:
             messages.error(request, "Pre-registration window is closed.")
-            return redirect("prereg_page")
+            return redirect("pre_registration")
 
         raw = request.POST.get("payload", "")
         try:
             payload = json.loads(raw) if raw else {}
         except Exception:
             messages.error(request, "Invalid submission payload.")
-            return redirect("prereg_page")
+            return redirect("pre_registration")
 
         selections = payload.get("selections") or []
         if not isinstance(selections, list):
             messages.error(request, "Invalid selections.")
-            return redirect("prereg_page")
+            return redirect("pre_registration")
 
-        # Build course cache
+        # Build course cache (codes -> Course)
         codes = [ (s.get("course_code") or "").strip().upper() for s in selections if s.get("course_code") ]
         course_map = {c.code.upper(): c for c in Course.objects.filter(code__in=codes)}
 
@@ -363,13 +366,14 @@ def pre_registration(request):
                 if not course or course.slot != slot:
                     continue
 
-                # Remove any non-enrolled existing rows in this slot to avoid duplicates
+                # Remove non-enrolled duplicates for this slot (keep ENR)
                 StudentCourse.objects.filter(
                     student=student, semester=current_sem, course__slot=slot
                 ).exclude(status="ENR").delete()
 
                 chosen_cat = (sel.get("category") or "").upper()
                 if chosen_cat == "ALL":
+                    # Try to pick a primary category if available
                     primary_cat = (
                         CourseBranch.objects
                         .filter(course=course, branch=branch)
@@ -378,7 +382,6 @@ def pre_registration(request):
                     )
                     chosen_cat = (primary_cat or "").upper()
 
-                # create or update PND request (don't overwrite ENR)
                 obj, created_now = StudentCourse.objects.get_or_create(
                     student=student,
                     course=course,
@@ -386,21 +389,17 @@ def pre_registration(request):
                     defaults={
                         "status": "PND",
                         "type": chosen_cat or None,
-                        "course_mode": sel.get("course_mode", "REG")  # if frontend sends mode
                     }
                 )
 
                 if not created_now:
-                    # If existing row is ENR (approved), skip modification
                     if obj.status == "ENR":
                         skipped_locked += 1
                         continue
-
-                    # otherwise update to pending (or update type/mode)
+                    # update pending entry with category if changed
                     obj.status = "PND"
                     obj.type = chosen_cat or obj.type
-                    obj.course_mode = sel.get("course_mode", obj.course_mode)
-                    obj.save(update_fields=["status", "type", "course_mode"])
+                    obj.save(update_fields=["status", "type"])
                     updated += 1
                 else:
                     created += 1
@@ -410,7 +409,7 @@ def pre_registration(request):
         if updated:
             messages.info(request, f"Updated {updated} request(s).")
         if skipped_locked:
-            messages.warning(request, f"{skipped_locked} slot(s) were already approved and not changed.")
+            pass
         return redirect("check_status_page")
 
     # --- GET: build options and prefill ---
@@ -418,8 +417,8 @@ def pre_registration(request):
     # compute passed courses codes (exclude them from future selections)
     passed_codes_qs = StudentCourse.objects.filter(
         student=student,
-        status__in=["CMP"],            # completed rows
-        outcome__iexact="PAS"         # passed
+        status__in=["CMP"],
+        outcome__iexact="PAS"
     ).values_list("course__code", flat=True).distinct()
     passed_codes = set([c.upper() for c in passed_codes_qs])
 
@@ -446,32 +445,28 @@ def pre_registration(request):
                     coursebranch__branch=branch,
                     coursebranch__categories__code=cat,
                 )
-                .exclude(code__in=passed_codes)   # IMPORTANT: exclude passed courses
-                .prefetch_related(
-                    Prefetch(
-                        "coursebranch_set",
-                        queryset=base_cb.prefetch_related("categories"),
-                        to_attr="cb_for_branch",
-                    )
-                ).distinct()
+                .exclude(code__in=passed_codes)
+                .distinct()
             )
             cat_map[cat] = qs
         slot_map[slot] = cat_map
 
-    # Build preselected_by_slot and locked_slots — ONLY from APPROVED (ENR)
-    existing_approved = (
-        StudentCourse.objects
-        .filter(student=student, semester=current_sem, status="ENR")
-        .select_related("course")
-    )
+    # Build preselected_by_slot and locked_slots:
+    # include ENR (locked) and PND (prefill) — user wanted PND to count automatically
+    existing_approved = StudentCourse.objects.filter(
+        student=student, semester=current_sem
+    ).select_related("course")
+
     preselected_by_slot = {}
     locked_slots = set()
     for sc in existing_approved:
         if sc.course and sc.course.slot:
+            # if ENR, lock; if PND, still preselect but not locked
             preselected_by_slot[sc.course.slot] = sc.course.code
-            locked_slots.add(sc.course.slot)
+            if sc.status == "ENR":
+                locked_slots.add(sc.course.slot)
 
-    # JSON-safe slot_map for frontend: exclude passed courses here too
+    # JSON-safe slot_map for frontend
     slot_map_json = {}
     for slot, cat_map in slot_map.items():
         slot_map_json[slot] = {}
@@ -488,18 +483,19 @@ def pre_registration(request):
         "student": student,
         "categories": CATEGORIES,
         "slot_map": slot_map,
-        "slot_map_json": slot_map_json,
+        "slot_map_json": mark_safe(json.dumps(slot_map_json)),
         "slots": SLOTS,
         "min_credit": 12,
         "max_credit": 22,
         "computed_semester": current_sem,
         "window_open": window_open,
         "preselected_by_slot": preselected_by_slot,
+        "preselected_json": mark_safe(json.dumps(preselected_by_slot)),
         "locked_slots": list(locked_slots),
+        "locked_slots_json": mark_safe(json.dumps(list(locked_slots))),
         "new_cycle": new_cycle,
     }
     return render(request, "registration/pre_registration.html", context)
-
 
 @require_POST
 def submit_preregistration(request):
@@ -4250,10 +4246,8 @@ def admin_save_grades(request, course_code):
 
 def admin_upload_results(request):
     """
-    Admin bulk result upload view.
-    Uploads CSV/Excel or pasted data (roll_no, course_code, grade, outcome).
-    - Case-insensitive for both roll_no and course_code
-    - Lenient: skips invalid entries but logs clear reasons
+    Bulk upload of previous-semester results.
+    Uses admin-selected default course_mode (REG / PF / AUD).
     """
 
     context = {
@@ -4261,16 +4255,17 @@ def admin_upload_results(request):
         "preview_data": None,
         "summary": None,
         "selected_semester": None,
-        "default_semester": 1,
     }
 
     if request.method == "POST":
         file = request.FILES.get("file")
         text_data = request.POST.get("csv_text", "").strip()
+
         semester = int(request.POST.get("semester") or 1)
+        default_mode = request.POST.get("default_mode", "REG")  # 🔥 new
         context["selected_semester"] = semester
 
-        # --- STEP 1: Read file or pasted text ---
+        # ------------------ Read Uploaded Data ------------------
         try:
             if file:
                 if file.name.endswith(".csv"):
@@ -4278,109 +4273,117 @@ def admin_upload_results(request):
                 elif file.name.endswith((".xls", ".xlsx")):
                     df = pd.read_excel(file)
                 else:
-                    messages.error(request, "❌ Please upload a CSV or Excel file.")
+                    messages.error(request, "Invalid file format. Use CSV or Excel.")
                     return redirect("admin_upload_results")
             elif text_data:
                 df = pd.read_csv(io.StringIO(text_data))
             else:
-                messages.error(request, "❌ Please upload a file or paste CSV data.")
+                messages.error(request, "Upload a file or paste CSV data.")
                 return redirect("admin_upload_results")
         except Exception as e:
             messages.error(request, f"Error reading file: {e}")
             return redirect("admin_upload_results")
 
         df.columns = df.columns.str.lower()
-        required_cols = {"roll_no", "course_code", "grade"}
-        missing = required_cols - set(df.columns)
+
+        required = {"roll_no", "course_code", "grade"}
+        missing = required - set(df.columns)
         if missing:
             messages.error(request, f"Missing required columns: {', '.join(missing)}")
             return redirect("admin_upload_results")
 
         if "outcome" not in df.columns:
-            df["outcome"] = "PAS"
-        df = df.fillna("")
-        parsed_data = df.to_dict(orient="records")
+            df["outcome"] = ""
 
-        # --- STEP 2: Preview Mode ---
+        df = df.fillna("")
+        rows = df.to_dict(orient="records")
+
+        # ---------------- Preview ----------------
         if "preview" in request.POST:
-            context["preview_data"] = parsed_data
-            messages.info(request, f"👀 Preview loaded for Semester {semester}. Review before submitting.")
+            context["preview_data"] = rows
+            messages.info(request, "Preview loaded.")
             return render(request, "admin/admin_upload_results.html", context)
 
-        # --- STEP 3: Final Upload ---
-        created, updated, skipped = 0, 0, 0
+        # ---------------- Final Upload ----------------
+        created = updated = skipped = 0
         errors = []
-        success_details = []
+        success = []
 
         with transaction.atomic():
-            for row in parsed_data:
-                roll = str(row.get("roll_no", "")).strip().lower()
+            for row in rows:
+                roll = str(row.get("roll_no", "")).strip()
                 code = str(row.get("course_code", "")).strip().upper()
                 grade = str(row.get("grade", "")).strip().upper()
-                outcome = str(row.get("outcome", "")).strip().upper() or "PAS"
+                outcome = str(row.get("outcome", "")).strip().upper()
 
                 if not roll or not code or not grade:
                     skipped += 1
-                    errors.append(f"❌ Missing data → roll:{roll or '-'}, course:{code or '-'}, grade:{grade or '-'}")
+                    errors.append(f"Invalid row: {row}")
                     continue
 
-                # case-insensitive lookups
                 student = Student.objects.filter(roll_no__iexact=roll).first()
                 course = Course.objects.filter(code__iexact=code).first()
 
                 if not student:
                     skipped += 1
-                    errors.append(f"❌ Roll number not found: {roll}")
+                    errors.append(f"Roll not found: {roll}")
                     continue
                 if not course:
                     skipped += 1
-                    errors.append(f"❌ Course not found: {code}")
+                    errors.append(f"Course not found: {code}")
                     continue
 
-                # create or update StudentCourse record
-                sc, created_now = StudentCourse.objects.update_or_create(
+                # ---------------- Determine Course Mode ----------------
+                mode = default_mode  # admin-selected default
+
+                # Override based on grade
+                if grade in ["P", "F"]:
+                    mode = "PF"
+                elif grade == "AUD":
+                    mode = "AUD"
+
+                # ---------------- Determine Outcome ----------------
+                if mode == "AUD":
+                    final_outcome = "PAS"
+                elif grade == "F":
+                    final_outcome = "FAI"
+                else:
+                    final_outcome = "PAS"
+
+                sc, new = StudentCourse.objects.update_or_create(
                     student=student,
                     course=course,
                     semester=semester,
                     defaults={
                         "grade": grade,
-                        "outcome": outcome,
-                        "status": "PAS" if outcome == "PAS" else "DRP",
-                    },
+                        "outcome": final_outcome,
+                        "status": "CMP",
+                        "course_mode": mode,
+                        "is_active_pre_reg": False,
+                    }
                 )
 
-                if created_now:
+                if new:
                     created += 1
-                    success_details.append(f"✅ Added → {student.roll_no} - {course.code} ({grade})")
+                    success.append(f"Added {roll}-{code}")
                 else:
                     updated += 1
-                    success_details.append(f"🔁 Updated → {student.roll_no} - {course.code} ({grade})")
+                    success.append(f"Updated {roll}-{code}")
 
-        # --- STEP 4: Summary in context ---
         context["summary"] = {
             "created": created,
             "updated": updated,
             "skipped": skipped,
-            "errors": errors,  # full list visible
-            "success_details": success_details[:5],  # only show first 5 success for brevity
+            "errors": errors,
+            "success_details": success[:10],
         }
 
-        # --- STEP 5: Messages for user ---
-        if created or updated:
-            messages.success(
-                request,
-                f"✅ Upload complete for Semester {semester}: "
-                f"{created} created, {updated} updated, {skipped} skipped."
-            )
-        else:
-            messages.warning(request, "⚠️ No new results were added or updated.")
-
-        if errors:
-            messages.warning(request, f"{len(errors)} issue(s) found. Check below for details 👇")
-
+        messages.success(request, f"Upload complete: {created} created, {updated} updated, {skipped} skipped.")
         return render(request, "admin/admin_upload_results.html", context)
 
     return render(request, "admin/admin_upload_results.html", context)
+
+
 
 def result_management_home(request):
     return render(request, "admin/result_module.html")
