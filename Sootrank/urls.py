@@ -53,6 +53,7 @@ urlpatterns = [
     path("custom-admin/prereg/reports/", views.admin_prereg_reports, name="admin_prereg_reports"),
     path("custom-admin/prereg/reports/<str:code>/excel/", views.export_course_excel, name="export_course_excel"),
     path("custom-admin/prereg/reports/<str:code>/pdf/", views.export_course_pdf, name="export_course_pdf"),
+    path("custom-admin/reset-pre-registration/", views.admin_reset_pre_registration, name="admin_reset_pre_registration"),
     # other urls
     path('',views.login),
     path('login/', views.login, name='login'),
@@ -73,25 +74,25 @@ urlpatterns = [
     #-----
     path("students_dashboard/registration/status/", views.check_status, name="check_status_page"),    
     path("faculty_dashboard/courses/", views.instructor_courses, name="instructor_courses"),
-    path("faculty_dashboard/courses/<str:course_code>/<str:semester>/", views.course_roster , name="course_roster"),
     path("students_dashboard/registration/apply_pf_changes/", views.apply_mode_changes, name="apply_mode_changes"),
     path("students_dashboard/registered_courses/", views.student_registered_courses, name="registered_courses"),
 
     path("logout/", LogoutView.as_view(next_page="login"), name="logout"),
     path("ajax/branches-json/", views.ajax_branches_json, name="ajax_branches_json"),
     #--------
-    path("instructor/<str:course_code>/roster/<str:semester>/", views.course_roster, name="course_roster"),
+    path("instructor/<str:course_code>/roster/", views.course_roster, name="course_roster"),
     path("instructor/schema/courses/", views.instructor_schema_courses, name="view_schema_courses"),
     path("instructor/<str:course_code>/scheme/", views.edit_assessment_scheme, name="edit_assessment_scheme"),
     path("instructor/<str:course_code>/scheme/<int:component_id>/update/", views.update_component, name="update_component"),
     path("instructor/<str:course_code>/scheme/<int:component_id>/delete/", views.delete_component, name="delete_component"),
     #-----------
     path('instructor/marks/<int:faculty_id>/', views.faculty_marks_courses, name='faculty_marks_courses'),
+    path('instructor/update-grade/<str:course_code>/', views.update_student_grade, name='update_student_grade'),
     path('instructor/marks/course/<int:course_id>/', views.enter_marks, name='enter_marks'),
     path('courses/<int:course_id>/marks/overview/', views.course_marks_overview, name='course_marks_overview'),
     path('courses/<int:course_id>/marks/update/', views.update_mark_cell, name='update_mark_cell'),
     path('faculty/<int:faculty_id>/courses/', views.all_courses, name='grading_courses'),
-    path('courses/<str:course_code>/grades/assign/',views.assign_grades_csv, name='assign_grades_csv'),
+    path('courses/<str:course_code>/grading/assign/',views.assign_grading_policy, name='assign_grades_csv'),
     path('courses/<str:course_code>/grades/results/', views.grade_results, name='grade_results'),
     #------------
     path('student/results/<str:roll_no>/', views.student_result_semester_list, name='student_result_semester_list'),
@@ -101,6 +102,8 @@ urlpatterns = [
     path('custom-admin/grades/', views.admin_grade_management, name='admin_grade_management'),
     path('custom-admin/grades/assign/<str:course_code>/', views.admin_assign_grades, name='admin_assign_grades'),
     path('custom-admin/grades/save/<str:course_code>/', views.admin_save_grades, name='admin_save_grades'),
+    path("custom-admin/upload-results/", views.admin_upload_results, name="admin_upload_results"),
+    path("custom-admin/result-management/", views.result_management_home, name="result_management_home"),
     #-----------(Database Management- Admin)
     path('custom-admin/database/', views.database_management_view, name='database_management'),
     path('custom-admin/database/edit/<str:record_type>/<int:record_id>/', views.edit_database_record, name='edit_database_record'),
@@ -124,9 +127,6 @@ urlpatterns = [
     path("fees/pay/<int:fee_id>/", views.mock_payment, name="mock_payment"),
     path("fees/receipt/<int:fee_id>/", views.download_fee_receipt, name="download_fee_receipt"),
     #---demo----    
-    path("fees/pay/<int:fee_id>/", views.initiate_fee_payment, name="initiate_fee_payment"),
-    path("fees/payment/success/", views.payment_success, name="payment_success"),  # frontend POST verification
-    path("razorpay/webhook/", views.razorpay_webhook, name="razorpay_webhook"),    # optional webhook
     path("fees/receipt/<int:fee_id>/pdf/", views.fee_receipt_pdf, name="fee_receipt_pdf"),
     path("custom-admin/fees/", views.admin_fee_dashboard, name="admin_fee_dashboard"),
     path("custom-admin/fees/add/", views.admin_fee_add, name="admin_fee_add"),
@@ -138,6 +138,10 @@ urlpatterns = [
     path("custom-admin/timetable/edit/<int:timetable_id>/", views.admin_timetable_edit, name="admin_timetable_edit"),
     path("custom-admin/attendance/", views.admin_attendance_dashboard, name="admin_attendance_dashboard"),
     path("custom-admin/attendance/<int:course_id>/", views.admin_course_attendance, name="admin_course_attendance"),
+    path("faculty/report/", views.faculty_course_report, name="faculty_course_report"),
+    path("faculty/report/<int:course_id>/excel/", views.export_course_enrollments_excel, name="export_course_excel"),
+    path("faculty/report/<int:course_id>/pdf/", views.export_course_enrollments_pdf, name="export_course_pdf"),
+
 
 
 

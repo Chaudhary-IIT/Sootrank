@@ -1,158 +1,138 @@
-{% load static %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Timetable | Sootrank</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-  <style>
-    body {
-      background: #f8faff;
-      font-family: 'Inter', sans-serif;
-    }
-    .container {
-      margin-top: 40px;
-    }
-    .page-header {
-      color: #2469f0;
-      text-align: center;
-      font-weight: 700;
-      margin-bottom: 1rem;
-    }
-    table {
-      border-radius: 12px;
-      overflow: hidden;
-      box-shadow: 0 5px 15px rgba(0,0,0,0.08);
-    }
-    th {
-      background-color: #2469f0;
-      color: #fff;
-      text-align: center;
-      vertical-align: middle;
-      font-size: 0.9rem;
-    }
-    td {
-      text-align: center;
-      vertical-align: middle;
-      padding: 0.9rem;
-      font-size: 0.9rem;
-    }
-    .day-header {
-      font-weight: 700;
-      color: #1f2a37;
-      font-size: 1.1rem;
-    }
-    .edit-btn {
-      background: #2469f0;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      padding: 5px 12px;
-      font-size: 0.8rem;
-      transition: 0.3s ease;
-    }
-    .edit-btn:hover {
-      background: #1a52d1;
-      transform: translateY(-1px);
-    }
-    .location {
-      color: #2563eb;
-      font-weight: 600;
-    }
-    .remarks {
-      font-style: italic;
-      color: #64748b;
-      font-size: 0.85rem;
-    }
-  </style>
-</head>
-<body>
+{% extends "student_base.html" %}
 
-<div class="container">
-  <h2 class="page-header">Weekly Timetable</h2>
+{% block title %}Timetable | Sootrank{% endblock %}
+{% block nav_quick_links_active %} active{% endblock %}
 
-  {% if role == "student" %}
-    <p class="text-muted text-center mb-4">Showing your registered (ENR) courses and their scheduled slots</p>
-  {% else %}
-    <p class="text-muted text-center mb-4">Manage class timings, locations, or schedules for your courses</p>
-  {% endif %}
+{% block content %}
 
-  {% if timetable %}
-    {% for day, entries in timetable.items %}
-    <div class="card mb-4 shadow-sm">
-      <div class="card-header bg-white d-flex justify-content-between align-items-center">
-        <span class="day-header">{{ day }}</span>
-        {% if role == "faculty" %}
-        <a href="#" class="btn btn-sm btn-outline-primary">
-          <i class="bi bi-plus-circle"></i> Add Class
-        </a>
-        {% endif %}
-      </div>
+<style>
+  /* Page-specific styles kept local to this page */
+  .page-header {
+    color: #2469f0;
+    text-align: center;
+    font-weight: 700;
+    margin-bottom: 1rem;
+  }
+  .tt-card table {
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+  }
+  .tt-card th {
+    background-color: #2469f0;
+    color: #fff;
+    text-align: center;
+    vertical-align: middle;
+    font-size: 0.9rem;
+  }
+  .tt-card td {
+    text-align: center;
+    vertical-align: middle;
+    padding: 0.9rem;
+    font-size: 0.9rem;
+  }
+  .day-header {
+    font-weight: 700;
+    color: #1f2a37;
+    font-size: 1.1rem;
+  }
+  .edit-btn {
+    background: #2469f0;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 0.8rem;
+    transition: 0.2s ease;
+  }
+  .edit-btn:hover {
+    background: #1a52d1;
+    transform: translateY(-1px);
+  }
+  .location {
+    color: #2563eb;
+    font-weight: 600;
+  }
+</style>
 
-      <div class="table-responsive">
-        <table class="table table-bordered mb-0 align-middle">
-          <thead>
+<h2 class="page-header">Weekly Timetable</h2>
+
+{% if role == "student" %}
+  <p class="text-muted text-center mb-4">Showing your registered (ENR) courses and their scheduled slots</p>
+{% else %}
+  <p class="text-muted text-center mb-4">Manage class timings, locations, or schedules for your courses</p>
+{% endif %}
+
+{% if timetable %}
+  {% for day, entries in timetable.items %}
+  <div class="card mb-4 shadow-sm tt-card">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+      <span class="day-header">{{ day }}</span>
+      {% if role == "faculty" %}
+        <a href="#" class="btn btn-sm btn-outline-primary">+ Add Class</a>
+      {% endif %}
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-bordered mb-0 align-middle">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Course</th>
+            <th>Slot</th>
+            <th>Location</th>
+            {% if role == "faculty" %}
+            <th>Actions</th>
+            {% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% if entries %}
+            {% for entry in entries %}
             <tr>
-              <th>Time</th>
-              <th>Course</th>
-              <th>Slot</th>
-              <th>Location</th>
+              <td>{{ entry.time }}</td>
+              <td>
+                <strong>{{ entry.course }}</strong><br>
+                {% if entry.faculty and role == "student" %}
+                  <span class="text-muted small">By {{ entry.faculty }}</span>
+                {% endif %}
+              </td>
+              <td>{{ entry.slot }}</td>
+              <td class="location">{{ entry.location }}</td>
               {% if role == "faculty" %}
-              <th>Actions</th>
+              <td>
+                <button class="edit-btn" onclick="editSchedule('{{ entry.course|escapejs }}')">
+                  Edit
+                </button>
+              </td>
               {% endif %}
             </tr>
-          </thead>
-          <tbody>
-            {% if entries %}
-              {% for entry in entries %}
-              <tr>
-                <td>{{ entry.time }}</td>
-                <td>
-                  <strong>{{ entry.course }}</strong><br>
-                  {% if entry.faculty and role == "student" %}
-                  <span class="text-muted small">By {{ entry.faculty }}</span>
-                  {% endif %}
-                </td>
-                <td>{{ entry.slot }}</td>
-                <td class="location">{{ entry.location }}</td>
-                {% if role == "faculty" %}
-                <td>
-                  <button class="edit-btn" onclick="editSchedule('{{ entry.course }}')">
-                    <i class="bi bi-pencil-square"></i> Edit
-                  </button>
-                </td>
-                {% endif %}
-              </tr>
-                
-              {% endfor %}
-            {% else %}
-              <tr>
-                <td colspan="{% if role == 'faculty' %}5{% else %}4{% endif %}" class="text-muted text-center">
-                  No classes scheduled for this day
-                </td>
-              </tr>
-            {% endif %}
-          </tbody>
-        </table>
-      </div>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="{% if role == 'faculty' %}5{% else %}4{% endif %}" class="text-muted text-center">
+                No classes scheduled for this day
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
     </div>
-    {% endfor %}
-  {% else %}
-    <div class="alert alert-light border text-center py-4">
-      <i class="bi bi-calendar-x text-primary fs-4"></i><br>
-      <span>No timetable data available yet.</span>
-    </div>
-  {% endif %}
-</div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="alert alert-light border text-center py-4">
+    <div class="fw-semibold mb-1">No timetable data available yet.</div>
+    <div class="text-muted small">Please check back later.</div>
+  </div>
+{% endif %}
 
+{% endblock %}
+
+{% block script %}
 <script>
-function editSchedule(course) {
-  alert("Feature: Faculty can edit schedule for " + course);
-}
+  function editSchedule(course) {
+    alert("Feature: Faculty can edit schedule for " + course);
+  }
 </script>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+{% endblock %}

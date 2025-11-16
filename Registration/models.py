@@ -87,6 +87,7 @@ class Course(models.Model):
     faculties = models.ManyToManyField(Faculty, related_name="courses")
 
 
+
 class Student(models.Model):
     first_name = models.CharField(max_length=255)
     last_name = models.CharField(max_length=255, null=True)
@@ -94,158 +95,172 @@ class Student(models.Model):
     email_id = models.EmailField(max_length=255, unique=True)
     password = models.CharField(max_length=255)
     roll_no = models.CharField(max_length=10, unique=True)
-    department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True)
-    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True)
+    department = models.ForeignKey('Department', on_delete=models.SET_NULL, null=True)
+    branch = models.ForeignKey('Branch', on_delete=models.SET_NULL, null=True)
     semester = models.IntegerField(null=True, default=1)
     mobile_no = models.BigIntegerField(null=True)
-    courses = models.ManyToManyField(Course, through="StudentCourse", related_name="students")
+    courses = models.ManyToManyField('Course', through="StudentCourse", related_name="students")
 
+    def __str__(self):
+        return f"{self.roll_no} - {self.first_name}"
+
+    # ------------------------------
+    # Semester auto-calculation
+    # ------------------------------
     def calculate_current_semester(self):
         """
         Calculate current semester based on roll number and current date.
         Roll number format: b24001 where 24 = admission year (2024)
-        July-December = Odd semesters (1, 3, 5, 7)
-        January-June = Even semesters (2, 4, 6, 8)
+        July–December = Odd semesters (1,3,5,7)
+        January–June = Even semesters (2,4,6,8)
         """
         if not self.roll_no or len(self.roll_no) < 3:
             return 1
-        
         try:
-            # Extract year from roll number (e.g., "b24001" -> "24" -> 2024)
             year_str = self.roll_no[1:3]
             admission_year = 2000 + int(year_str)
-            
-            # Get current date info
             current_date = datetime.now()
-            current_year = current_date.year
-            current_month = current_date.month
-            
-            # Calculate years since admission
-            years_diff = current_year - admission_year
-            
-            # Determine semester within the academic year
-            if current_month >= 7:  # July-December (Odd semester)
-                semester_in_year = 1
-            else:  # January-June (Even semester)
-                semester_in_year = 2
-            
-            # Calculate total semester
+            years_diff = current_date.year - admission_year
+            semester_in_year = 1 if current_date.month >= 7 else 2
             total_semester = (years_diff * 2) + semester_in_year
-            
-            # Cap between 1 and 8
             return max(1, min(total_semester, 8))
-        
         except (ValueError, IndexError):
             return 1
 
     def update_semester(self):
-        """
-        Update the semester field with calculated current semester.
-        Call this method to auto-update semester based on current date.
-        """
         self.semester = self.calculate_current_semester()
         self.save(update_fields=['semester'])
 
+    # ------------------------------
+    # Secure save override
+    # ------------------------------
     def save(self, *args, **kwargs):
-        # Auto-calculate semester if not set or if you want it always updated
-        if not self.semester:
+        if self.semester is None:
             self.semester = self.calculate_current_semester()
-        
-        # Hash password only if it's not already hashed
+        if self.semester > 8:
+            self.semester = 8
         if not self.password.startswith('pbkdf2_sha256$'):
             self.password = make_password(self.password)
-        
         super().save(*args, **kwargs)
-    
+
+    # ------------------------------
+    # Metrics Calculation
+    # ------------------------------
+
     def get_semester_courses(self, semester):
         return self.enrollments.filter(semester=semester, status__in=['ENR', 'CMP'])
 
     def calculate_semester_metrics(self, semester):
-        """
-        - RCR: All attempted (registered) credits including pass/fail
-        - ECR: Pass/fail courses count only if passed, regular require passing grade
-        - STCR: Only regular, Pass/Fail counted as 0
-        - SGPA: STCR / (RCR - pass/fail credits)
-        """
-        enrollments = self.enrollments.filter(semester=semester, status__in=['ENR', 'CMP'])
+        enrollments = self.enrollments.filter(
+            semester=semester,
+            status__in=['ENR', 'CMP']
+        ).select_related("course")
 
-        rcr = ecr = stcr = 0
-        pf_credits = 0  # Total Pass/Fail credits for the semester
+        rcr = 0  # Registered Credits (ALL course types)
+        ecr = 0  # Earned Credits
+        stcr = 0  # Σ (grade_points × credits) for REG courses only
+        reg_earned_credits = 0  # For SGPA denominator
 
         for enr in enrollments:
             credits = enr.course.credits or 0
-            if enr.is_pass_fail:
-                rcr += credits
-                pf_credits += credits
-                if (enr.outcome or '').upper() == "PAS":
+            mode = (enr.course_mode or "").upper()
+            outcome = (enr.outcome or "").upper()
+            grade = enr.grade or ""
+            gp = GRADE_POINTS.get(grade, 0)
+
+            # RCR MUST count every enrolled course
+            rcr += credits
+
+            # ECR (Earned Credits)
+            if mode == "REG":
+                if outcome == "PAS":
                     ecr += credits
-                # No addition to stcr for PF
-            else:
-                rcr += credits
-                points = GRADE_POINTS.get(enr.grade, 0)
-                stcr += points * credits
-                if (enr.outcome or '').upper() == "PAS" and points > 0:
+                    reg_earned_credits += credits
+                # REG contributes to STCR always
+                stcr += gp * credits
+
+            elif mode == "PF":
+                # PF courses: ECR if PAS, but no STCR
+                if outcome == "PAS":
                     ecr += credits
 
-        # SGPA denominator is only regular credits
-        regular_rcr = rcr - pf_credits
-        sgpa = round(stcr / regular_rcr, 2) if regular_rcr else 0
-        return {"RCR": rcr, "ECR": ecr, "STCR": stcr, "SGPA": sgpa}
+            elif mode == "AUD":
+                # AUD: never contributes to ECR or STCR
+                pass
+            
+        # SGPA = (Σ GP × Credits) / (Σ Earned REG Credits)
+        # PF and AUD never included in SGPA denominator
+        
+        sgpa = round(stcr / reg_earned_credits, 2) if reg_earned_credits else 0.0
+
+        return {
+            "RCR": rcr,              # Every course
+            "ECR": ecr,              # Earned credits
+            "STCR": stcr,            # Weighted grade points
+            "SGPA": sgpa,            # Semester GPA
+        }
 
 
     def calculate_cumulative_metrics(self):
         """
-        - TRCR: All attempted credits including pass/fail
-        - TECR: Passed courses (including passed P/F)
-        - TSTCR: Only regular, Pass/Fail counted as 0
-        - CGPA: TSTCR / (TRCR - pass/fail credits)
-        Handles latest attempt logic as before.
+        Cumulative metrics using latest attempt only:
+        - TRCR: all credits (REG + PF + AUD)
+        - TECR: REG(PAS) + PF(PAS); AUD never added
+        - TSTCR: REG grade_points * credits
+        - CGPA = TSTCR / sum(REG credits where PAS)
         """
-        enrollments = self.enrollments.filter(status__in=['ENR', 'CMP']).order_by('semester', 'id')
-        trcr = tecr = tstcr = 0
-        latest_course = {}
-        pf_credits = 0
+
+        enrollments = self.enrollments.filter(
+            status__in=['ENR', 'CMP']
+        ).select_related("course").order_by('semester', 'id')
+
+        latest = {}
 
         for enr in enrollments:
             course_code = enr.course.code
+            latest[course_code] = enr  # latest attempt wins
+
+        trcr = 0
+        tecr = 0
+        tstcr = 0
+        reg_earned_credits = 0
+
+        for enr in latest.values():
             credits = enr.course.credits or 0
+            mode = (enr.course_mode or "").upper()
+            outcome = (enr.outcome or "").upper()
+            grade = enr.grade or ""
+            gp = GRADE_POINTS.get(grade, 0)
 
-            if enr.is_pass_fail:
-                trcr += credits
-                pf_credits += credits
-                if (enr.outcome or '').upper() == "PAS":
+            # TRCR — add everything
+            trcr += credits
+
+            # ECR logic
+            if mode == "REG":
+                if outcome == "PAS":
                     tecr += credits
-                continue
-
-            grade_points = GRADE_POINTS.get(enr.grade, 0)
-            prev = latest_course.get(course_code)
-
-            if prev is None:
-                latest_course[course_code] = {
-                    'grade_points': grade_points,
-                    'credits': credits,
-                    'outcome': (enr.outcome or '').upper(),
-                }
-                trcr += credits
-                if (enr.outcome or '').upper() == "PAS":
+                    reg_earned_credits += credits
+                    tstcr += gp * credits
+                else:
+                    # REG but not passed → contributes to STCR but not ECR/denominator
+                    tstcr += gp * credits
+            elif mode == "PF":
+                if outcome == "PAS":
                     tecr += credits
-                tstcr += grade_points * credits
             else:
-                if prev['grade_points'] == 0 and grade_points > 0:
-                    trcr -= prev['credits']
-                    latest_course[course_code] = {
-                        'grade_points': grade_points,
-                        'credits': credits,
-                        'outcome': (enr.outcome or '').upper(),
-                    }
-                    trcr += credits
-                    if (enr.outcome or '').upper() == "PAS":
-                        tecr += credits
-                    tstcr += grade_points * credits
+                # AUD: never contributes to ECR or STCR
+                pass
 
-        regular_trcr = trcr - pf_credits
-        cgpa = round(tstcr / regular_trcr, 2) if regular_trcr else 0
-        return {"TRCR": trcr, "TECR": tecr, "TSTCR": tstcr, "CGPA": cgpa}
+        cgpa = round(tstcr / reg_earned_credits, 2) if reg_earned_credits else 0.0
+
+        return {
+            "TRCR": trcr,
+            "TECR": tecr,
+            "TSTCR": tstcr,
+            "CGPA": cgpa,
+        }
+
+
 
 
 class Admins(models.Model):
@@ -285,16 +300,6 @@ class Admins(models.Model):
             self.password = make_password(self.password)
         super().save(*args, **kwargs)
 
-CORE_ELECTIVE_CHOICES = [
-        ("DC", "Disciplinary Core (DC)"),
-        ("DE", "Disciplinary Elective (DE)"),
-        ("IC","Institute Core (IC)"),
-        ("HSS","Humanities and Social Science (HSS)"),
-        ("FE","Free Elective (FE)"),
-        ("IKS","Indian Knowledge System (IKS)"),
-        ("ISTP","Interactive Socio-Technical Practicum (ISTP)"),
-        ("MTP","Major Technical Project (MTP)"),
-    ]
 
 class Category(models.Model):
     code = models.CharField(max_length=10, unique=True)  # "DC", "DE", "IC", "HSS", ...
@@ -335,25 +340,28 @@ class StudentCourse(models.Model):
         ("PAS", "Pass"),
         ("FAI", "Fail"),
     ]
-    GRADES = [(g, g) for g in GRADE_POINTS.keys()]
-
     COURSE_MODE = [
         ("REG", "Regular"),
         ("PF", "Pass/Fail"),
         ("AUD", "Audit"),
     ]
+    GRADES = [(g, g) for g in GRADE_POINTS.keys()]
 
-    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="enrollments")
-    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="enrollments")
+    student = models.ForeignKey('Student', on_delete=models.CASCADE, related_name="enrollments")
+    course = models.ForeignKey('Course', on_delete=models.CASCADE, related_name="enrollments")
     status = models.CharField(max_length=3, choices=STATUS, default="PND")
     outcome = models.CharField(max_length=3, choices=OUTCOME, default="UNK")
     grade = models.CharField(max_length=3, null=True, blank=True, choices=GRADES)
     semester = models.IntegerField(null=True)
     type = models.CharField(max_length=10, null=True, blank=True)
     course_mode = models.CharField(max_length=3, choices=COURSE_MODE, default="REG")
+    is_active_pre_reg = models.BooleanField(default=True)
 
     class Meta:
         unique_together = ("student", "course", "semester")
+
+    def __str__(self):
+        return f"{self.student.roll_no} - {self.course.code} (Sem {self.semester})"
 
     def is_pass_fail(self):
         return self.course_mode == "PF"
@@ -472,3 +480,13 @@ class FeeRecord(models.Model):
     def receipt_number(self):
         # Simple receipt id — you can change format
         return f"SR-{self.pk:06d}"
+
+
+
+class GradingPolicy(models.Model):
+    course = models.OneToOneField(Course, on_delete=models.CASCADE, related_name="grading_policy")
+    mode = models.CharField(max_length=3, choices=[("ABS","Absolute"),("REL","Relative")], default="ABS")
+    abs_cutoffs = models.JSONField(default=dict, blank=True)
+    rel_buckets = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)

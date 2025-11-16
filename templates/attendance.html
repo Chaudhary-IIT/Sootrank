@@ -1,24 +1,15 @@
-{% load static %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Attendance | Sootrank</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <style>
-    body { background: #f8faff; font-family: 'Inter', sans-serif; }
-    .container { margin-top: 40px; }
-    .page-title { color: #2469f0; font-weight: 700; text-align: center; margin-bottom: 1rem; }
-    .progress {
-      height: 18px; border-radius: 10px; overflow: hidden;
-    }
-  </style>
-</head>
-<body>
-<div class="container">
-  <h2 class="page-title">Attendance Overview</h2>
-  <div class="card shadow-sm">
-    <div class="card-body">
+{% extends "student_base.html" %}
+
+{% block title %}Attendance | Sootrank{% endblock %}
+{% block nav_quick_links_active %} active{% endblock %}
+
+{% block content %}
+
+<h2 class="text-primary fw-bold text-center mb-3">Attendance Overview</h2>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <div class="table-responsive">
       <table class="table table-bordered align-middle text-center">
         <thead class="table-primary">
           <tr>
@@ -26,25 +17,32 @@
             <th>Course Name</th>
             <th>Attended</th>
             <th>Total</th>
-            <th>Attendance %</th>
+            <th style="min-width: 220px;">Attendance %</th>
           </tr>
         </thead>
         <tbody>
         {% for c in attendance_data %}
+          {% with p=c.percent %}
           <tr>
             <td>{{ c.code }}</td>
-            <td>{{ c.course }}</td>
+            <td class="text-start">{{ c.course }}</td>
             <td>{{ c.attended }}</td>
             <td>{{ c.total }}</td>
             <td>
-              <div class="progress">
-                <div class="progress-bar {% if c.percent < 75 %}bg-danger{% else %}bg-success{% endif %}"
-                     style="width: {{ c.percent }}%">
-                     {{ c.percent }}%
+              <div class="progress" style="height:18px; border-radius:10px; overflow:hidden;">
+                <div
+                  class="progress-bar {% if p < 80 %}bg-danger{% else %}bg-success{% endif %}"
+                  role="progressbar"
+                  style="width: {{ p }}%;"
+                  aria-valuenow="{{ p|floatformat:0 }}"
+                  aria-valuemin="0"
+                  aria-valuemax="100">
+                  {{ p|floatformat:0 }}%
                 </div>
               </div>
             </td>
           </tr>
+          {% endwith %}
         {% empty %}
           <tr><td colspan="5" class="text-muted">No courses found.</td></tr>
         {% endfor %}
@@ -53,5 +51,7 @@
     </div>
   </div>
 </div>
-</body>
-</html>
+
+{% endblock %}
+
+{% block script %}{% endblock %}

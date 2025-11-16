@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sootrank | Bulk Result Upload</title>
+
+  <!-- Bootstrap & Font Awesome -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+
+  <style>
+    :root {
+      --color-primary: #34495e;
+      --color-accent: #3498db;
+      --color-bg: #ecf0f1;
+      --color-surface: #ffffff;
+      --color-text: #2c3e50;
+      --border: #e6ecf1;
+      --radius: 12px;
+      --shadow-subtle: 0 2px 8px rgba(0,0,0,.06);
+      --shadow-hover: 0 10px 20px rgba(52,152,219,.12);
+    }
+
+    body {
+      background: var(--color-bg);
+      color: var(--color-text);
+      font-family: "Segoe UI", Inter, Roboto, Arial, sans-serif;
+    }
+
+    .navbar-dark.bg-primary {
+      background: linear-gradient(180deg, var(--color-primary), #2f4252) !important;
+      border-bottom: 1px solid rgba(255,255,255,.06);
+    }
+
+    .hero {
+      background: linear-gradient(135deg, var(--color-primary), #3d6b8a);
+      color: #fff;
+      border-radius: var(--radius);
+      padding: 18px 22px;
+      box-shadow: var(--shadow-subtle);
+    }
+
+    .card-shell {
+      background: var(--color-surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-subtle);
+      padding: 24px;
+      margin-top: 24px;
+    }
+
+    .alert {
+      border-radius: 10px;
+    }
+
+    .error-list li {
+      font-family: "Consolas", monospace;
+      background: #fff6f6;
+      border-left: 4px solid #e74c3c;
+      margin-bottom: 4px;
+      padding: 6px 10px;
+      border-radius: 4px;
+      color: #b33a3a;
+    }
+
+    .success-list li {
+      font-family: "Consolas", monospace;
+      background: #f3fcf7;
+      border-left: 4px solid #27ae60;
+      margin-bottom: 4px;
+      padding: 6px 10px;
+      border-radius: 4px;
+      color: #216f42;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
+    <div class="container">
+      <a class="navbar-brand fw-bold" href="{% url 'custom_admin_home' %}">
+        <i class="fa-solid fa-graduation-cap me-2"></i>Sootrank Admin
+      </a>
+      <div class="ms-auto">
+        <a href="{% url 'custom_admin_home' %}" class="btn btn-outline-light btn-sm">
+          <i class="fa-solid fa-arrow-left me-1"></i> Back
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container" style="max-width:1100px;">
+
+    <div class="hero d-flex justify-content-between align-items-center mt-4">
+      <h3 class="fw-bold mb-0"><i class="fa-solid fa-table me-2"></i>Bulk Result Upload</h3>
+      <a href="{% url 'custom_admin_home' %}" class="btn btn-light">
+        <i class="fa-solid fa-arrow-left me-1"></i> Back
+      </a>
+    </div>
+
+    <!-- Messages -->
+    {% if messages %}
+      <div class="mt-3">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+          {{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <!-- Upload Form -->
+    <div class="card-shell">
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+
+        <div class="row g-4">
+          
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Upload CSV/Excel File</label>
+            <input type="file" name="file" accept=".csv,.xls,.xlsx" class="form-control">
+            <div class="form-text">Accepted: .csv, .xls, .xlsx</div>
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label fw-semibold">Select Semester</label>
+            <select name="semester" class="form-select">
+              <option value="1" {% if selected_semester == 1 %}selected{% endif %}>Semester 1</option>
+              <option value="2" {% if selected_semester == 2 %}selected{% endif %}>Semester 2</option>
+              <option value="3" {% if selected_semester == 3 %}selected{% endif %}>Semester 3</option>
+              <option value="4" {% if selected_semester == 4 %}selected{% endif %}>Semester 4</option>
+              <option value="5" {% if selected_semester == 5 %}selected{% endif %}>Semester 5</option>
+              <option value="6" {% if selected_semester == 6 %}selected{% endif %}>Semester 6</option>
+              <option value="7" {% if selected_semester == 7 %}selected{% endif %}>Semester 7</option>
+              <option value="8" {% if selected_semester == 8 %}selected{% endif %}>Semester 8</option>
+            </select>
+          </div>
+
+          <!-- 🔥 NEW: DEFAULT COURSE MODE -->
+          <div class="col-md-3">
+            <label class="form-label fw-semibold">Course Mode (Default)</label>
+            <select name="default_mode" class="form-select">
+              <option value="REG">Regular</option>
+              <option value="PF">Pass / Fail</option>
+              <option value="AUD">Audit</option>
+            </select>
+          </div>
+
+          <div class="col-md-2 d-flex align-items-end">
+            <button type="submit" name="preview" class="btn btn-outline-primary w-100">
+              <i class="fa-solid fa-eye me-1"></i> Preview
+            </button>
+          </div>
+
+        </div>
+
+        <div class="mt-4">
+          <label class="form-label fw-semibold">Or Paste CSV Data Here</label>
+          <textarea name="csv_text" rows="6" class="form-control"
+            placeholder="roll_no,course_code,grade,outcome&#10;b24001,EE101,A,PAS&#10;b24002,CS101,B,PAS"></textarea>
+        </div>
+
+        <div class="text-center mt-4">
+          <button type="submit" class="btn btn-success px-5">
+            <i class="fa-solid fa-upload me-2"></i> Upload Results
+          </button>
+        </div>
+
+      </form>
+    </div>
+
+    {% if summary %}
+      <div class="card-shell mt-4">
+        <h5 class="fw-bold text-primary mb-3">
+          <i class="fa-solid fa-clipboard-list me-2"></i>Upload Summary
+        </h5>
+
+        <ul class="mb-2">
+          <li><strong>Created:</strong> {{ summary.created }}</li>
+          <li><strong>Updated:</strong> {{ summary.updated }}</li>
+          <li><strong>Skipped:</strong> {{ summary.skipped }}</li>
+        </ul>
+
+        {% if summary.success_details %}
+        <div class="mt-3">
+          <h6 class="fw-semibold text-success mb-2">
+            <i class="fa-solid fa-check-circle me-1"></i>Successful Updates
+          </h6>
+          <ul class="success-list">
+            {% for s in summary.success_details %}
+              <li>{{ s }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
+        {% if summary.errors %}
+        <div class="mt-3">
+          <h6 class="fw-semibold text-danger mb-2">
+            <i class="fa-solid fa-triangle-exclamation me-1"></i>Issues Detected
+          </h6>
+          <ul class="error-list">
+            {% for e in summary.errors %}
+              <li>{{ e }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
+      </div>
+    {% endif %}
+
+  </div>
+
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    setTimeout(() => {
+      document.querySelectorAll('.alert').forEach(el => {
+        new bootstrap.Alert(el).close();
+      });
+    }, 4000);
+  </script>
+
+</body>
+</html>

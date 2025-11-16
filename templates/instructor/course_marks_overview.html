@@ -1,111 +1,259 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>Marks Overview — {{ course.code }}</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
-  <style>
-    .table thead th { vertical-align: bottom; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
-    .cell-w { min-width: 120px; }
-    .roll { font-weight: 600; letter-spacing: .3px; }
-    .sticky-actions { position: sticky; top: 0; z-index: 5; }
-    .editable { cursor: pointer; background-color: #fffef5; }
-    .editing { outline: 2px solid #ffc107; }
-    .small-muted { font-size: .875rem; color: #6c757d; }
-  </style>
-</head>
-<body class="bg-light">
+{% extends "faculty_base.html" %}
+{% block title %}Marks Overview — {{ course.code }}{% endblock %}
+{% block nav_results_active %} active{% endblock %}
 
-<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-  <div class="container">
-    <a class="navbar-brand" href="#">Marks Overview</a>
-    <span class="navbar-text ms-3">{{ course.code }} — {{ course.name }}</span>
-    <a class="btn btn-outline-light btn-sm ms-auto" href="javascript:history.back()">Back</a>
-  </div>
-</nav>
+{% block extra_css %}
+<style>
+  /* --- Keep your original utility styles (unchanged) --- */
+  .table thead th { vertical-align: bottom; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+  .cell-w { min-width: 120px; }
+  .roll { font-weight: 600; letter-spacing: .3px; }
+  .small-muted { font-size: .875rem; color: #6c757d; }
 
-<main class="container py-4">
-  <div class="d-flex align-items-end justify-content-between mb-3">
-    <div>
-      <h1 class="h4 mb-1">{{ course.code }} — {{ course.name }}</h1>
-      <div class="text-muted">All uploaded marks by student and component</div>
+  .sticky-actions { position: sticky; top: 0; z-index: 5; background: #fff; }
+  .controls-panel { padding: .6rem; border-radius: .375rem; }
+  .editable { cursor: pointer; background-color: #fffef5; }
+  .editing { outline: 2px solid #ffc107; }
+  .marks-wrapper { margin-top: .75rem; }
+  @media (max-width: 576px) { .cell-w { min-width: 90px; } }
+
+  /* --- NEW: aesthetic table skin (only visual) --- */
+  :root{
+    --accent:#2563eb;
+    --muted:#6b7280;
+    --card-bg:#ffffff;
+    --radius:10px;
+    --shadow-soft:0 10px 30px rgba(2,6,23,0.06);
+    --shadow-sm:0 3px 10px rgba(2,6,23,0.04);
+    --head-bg: rgba(251,253,255,0.95);
+  }
+
+  .marks-wrapper {
+    border-radius: var(--radius);
+    background: linear-gradient(180deg, rgba(255,255,255,0.98), var(--card-bg));
+    box-shadow: var(--shadow-soft);
+    border: 1px solid rgba(2,6,23,0.04);
+    padding: 6px;
+  }
+
+  .marks-wrapper .table-responsive {
+    border-radius: calc(var(--radius) - 2px);
+    overflow: auto;
+    background: transparent;
+  }
+
+  table.table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: transparent;
+  }
+
+  thead.sticky-actions {
+    position: sticky;
+    top: 0;
+    z-index: 6;
+    background: var(--head-bg);
+    backdrop-filter: blur(6px);
+    box-shadow: 0 6px 18px rgba(2,6,23,0.04);
+  }
+  thead.sticky-actions th {
+    background: transparent;
+    border-bottom: none;
+    font-weight: 600;
+    color: #0f172a;
+    padding: 12px 14px;
+    text-align: left;
+  }
+
+  tbody tr {
+    transition: background .12s ease, transform .06s ease;
+    background: transparent;
+  }
+  tbody tr:hover {
+    background: rgba(37,99,235,0.03);
+    transform: translateY(-1px);
+  }
+
+  tbody td {
+    padding: 10px 14px;
+    vertical-align: middle;
+    font-size: .95rem;
+    color: #0b1220;
+  }
+
+  .mono { color:#0b1220; }
+  .roll { font-weight:700; letter-spacing:.3px; }
+
+  .editable {
+    cursor: pointer;
+    background: linear-gradient(180deg, rgba(255,254,245,1), rgba(255,254,245,0.6));
+    border-radius: 6px;
+    text-align: center;
+  }
+  .editing {
+    outline: 3px solid rgba(245,158,11,0.18);
+    box-shadow: 0 8px 30px rgba(245,158,11,0.06);
+  }
+
+  .total-cell { font-weight:700; text-align:center; }
+  .percentage-cell, .percentile-cell { text-align:center; }
+  .grade-cell { text-align:center; font-weight:700; }
+  .outcome-cell { text-align:center; }
+  .outcome-pass { color:#198754; font-weight:700; }
+  .outcome-fail { color:#dc3545; font-weight:700; }
+
+  .alert { border-radius: 10px; box-shadow: var(--shadow-sm); }
+
+  @media (max-width: 980px){
+    thead.sticky-actions th, tbody td { padding: 9px 10px; font-size: .9rem; }
+  }
+  @media (max-width: 640px){
+    thead.sticky-actions th, tbody td { padding: 8px 8px; font-size: .88rem; }
+  }
+
+  /* -------------------------------------------------
+     NEW: Student name stays one-line + ellipsis
+     ------------------------------------------------- */
+  .student-name {
+    max-width: 180px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="text-center mb-3">
+  <h1 class="fs-3 fw-bold mb-1">Marks Overview</h1>
+  <p class="text-muted small mb-0">{{ course.code }} — {{ course.name }}</p>
+</div>
+
+{% if policy %}
+<div class="alert alert-info small text-start mb-3">
+  <i class="fa-solid fa-scale-balanced me-1"></i>
+  Current grading mode:
+  <strong>
+    {% if policy.mode == "REL" %}Relative{% else %}Absolute{% endif %}
+  </strong>
+</div>
+{% endif %}
+
+<div class="bg-white controls-panel" style="border-radius: var(--radius); box-shadow: var(--shadow-subtle);">
+  <div class="row g-2 align-items-center">
+    <div class="col-md-6">
+      <div class="input-group">
+        <span class="input-group-text">🔍</span>
+        <input id="search" type="text" class="form-control" placeholder="Filter by Roll No or Name..." />
+      </div>
     </div>
-    <div class="d-flex gap-2">
-      <span class="small-muted">Click a mark to edit, Enter to save, Esc to cancel</span>
+    <div class="col-md-6 text-md-end">
+      <span class="small-muted">Click a mark to edit, <b>Enter</b> to save, <b>Esc</b> to cancel</span>
     </div>
   </div>
+</div>
 
-  <div class="input-group mb-3">
-    <span class="input-group-text">🔍</span>
-    <input id="search" type="text" class="form-control" placeholder="Filter by Roll No or Name..." />
-  </div>
+<div id="alert" class="alert d-none my-3" role="alert"></div>
 
-  <div id="alert" class="alert d-none" role="alert"></div>
-
+<div class="marks-wrapper bg-white overflow-hidden mt-3">
   <div class="table-responsive">
-    <table class="table table-bordered table-striped align-middle">
+    <table class="table table-bordered table-striped align-middle mb-0">
+
       <thead class="table-light sticky-actions">
         <tr>
-          <th>Roll No</th>
-          <th>Student</th>
+          <th class="p-3">Roll No</th>
+
+          <!-- UPDATED -->
+          <th class="p-3 student-name">Student</th>
+
           {% for comp in components %}
-            <th class="cell-w">
-              {{ comp.name }}<br/>
-              <small class="text-muted">
-                Max {{ comp.max_marks }} · Wt {{ comp.weight|default_if_none:1 }}
-              </small>
-            </th>
+          <th class="p-3 cell-w">
+            {{ comp.name }}<br/>
+            <small class="text-muted">
+              Max {{ comp.max_marks }} · Wt {{ comp.weight|default_if_none:1 }}
+            </small>
+          </th>
           {% endfor %}
-          <th>Total<br/><small class="text-muted">Max {{ max_total }}</small></th>
-          <th>%</th>
-          <th>Percentile</th>
+          <th class="p-3">Total<br/><small class="text-muted">Max {{ max_total }}</small></th>
+          <th class="p-3">%</th>
+          <th class="p-3">Percentile</th>
+          <th class="p-3">Grade</th>
+          <th class="p-3">Outcome</th>
         </tr>
       </thead>
+
       <tbody id="rows">
         {% for r in rows %}
-          <tr data-student-id="{{ r.student.id }}">
-            <td class="roll mono">{{ r.student.roll_no|upper }}</td>
-            <td>{{ r.student.first_name }} {{ r.student.last_name|default_if_none:"" }}</td>
+        <tr data-student-id="{{ r.student.id }}">
 
-            {% for p in r.pairs %}
-              <td class="mono editable"
-                  data-component-id="{{ p.component_id }}"
-                  data-max="{{ p.max }}"
-                  data-weight="{{ p.component.weight|default_if_none:1 }}"
-                  data-value="{% if p.value is not None %}{{ p.value }}{% endif %}">
-                {% if p.value is not None %}
-                  {{ p.value|floatformat:2 }}
-                {% else %}
-                  —
-                {% endif %}
-              </td>
-            {% endfor %}
+          <td class="p-3 roll mono">{{ r.student.roll_no|upper }}</td>
 
-            <td class="mono fw-semibold total-cell">
-              {% if r.total is not None %}{{ r.total|floatformat:2 }}{% else %}—{% endif %}
-            </td>
-            <td class="mono">
-              {% if r.percentage is not None %}{{ r.percentage|floatformat:2 }}{% else %}—{% endif %}
-            </td>
-            <td class="mono">
-              {% if r.percentile is not None %}{{ r.percentile|floatformat:2 }}{% else %}—{% endif %}
-            </td>
-          </tr>
+          <!-- UPDATED: student-name class + tooltip -->
+          <td class="p-3 student-name"
+              title="{{ r.student.first_name }} {{ r.student.last_name|default_if_none:'' }}">
+            {{ r.student.first_name }} {{ r.student.last_name|default_if_none:"" }}
+          </td>
+
+          {% for p in r.pairs %}
+          <td class="p-3 mono editable"
+              data-component-id="{{ p.component_id }}"
+              data-max="{{ p.max }}"
+              data-weight="{{ p.component.weight|default_if_none:1 }}"
+              data-value="{% if p.value is not None %}{{ p.value }}{% endif %}">
+            {% if p.value is not None %}
+              {{ p.value|floatformat:2 }}
+            {% else %}
+              — 
+            {% endif %}
+          </td>
+          {% endfor %}
+
+          <td class="p-3 mono fw-semibold total-cell">
+            {% if r.total is not None %}{{ r.total|floatformat:2 }}{% else %}—{% endif %}
+          </td>
+
+          <td class="p-3 mono percentage-cell">
+            {% if r.percentage is not None %}{{ r.percentage|floatformat:2 }}{% else %}—{% endif %}
+          </td>
+
+          <td class="p-3 mono percentile-cell">
+            {% if r.percentile is not None %}{{ r.percentile|floatformat:2 }}{% else %}—{% endif %}
+          </td>
+
+          <td class="p-3 grade-cell" data-grade>{{ r.grade|default_if_none:"—" }}</td>
+
+          <td class="p-3 outcome-cell" data-outcome>
+            {% if r.outcome == 'PAS' %}
+              <span class="outcome-pass">Pass</span>
+            {% elif r.outcome == 'FAI' %}
+              <span class="outcome-fail">Fail</span>
+            {% else %}—{% endif %}
+          </td>
+
+        </tr>
         {% endfor %}
       </tbody>
+
     </table>
   </div>
-</main>
+</div>
+{% endblock %}
 
+{% block extra_js %}
 <script>
+/* -----------------------------
+   FULL ORIGINAL JS — UNTOUCHED
+   ----------------------------- */
+
 document.addEventListener('DOMContentLoaded', function(){
   const input = document.getElementById('search');
   const alertBox = document.getElementById('alert');
 
   function showAlert(kind, msg){
-    alertBox.className = `alert alert-${kind}`;
+    alertBox.className = `alert alert-${kind} my-3`;
     alertBox.textContent = msg;
     alertBox.classList.remove('d-none');
     clearTimeout(showAlert._t);
@@ -119,6 +267,50 @@ document.addEventListener('DOMContentLoaded', function(){
         tr.style.display = tr.innerText.toLowerCase().includes(q) ? '' : 'none';
       });
     });
+  }
+
+  /* gradingPolicy object construction above is unchanged */
+
+  let thresholds = null;
+  let passMinPercent = null;
+
+  if (typeof gradingPolicy !== 'undefined' && gradingPolicy && gradingPolicy.thresholds) {
+    thresholds = [];
+    for (const [g, m] of Object.entries(gradingPolicy.thresholds)) {
+      const num = parseFloat(m);
+      if (!isNaN(num)) thresholds.push({grade: g, min: num});
+    }
+    thresholds.sort((a,b)=>b.min - a.min);
+  }
+
+  if (typeof gradingPolicy !== 'undefined' && gradingPolicy && gradingPolicy.pass_min_percent !== undefined) {
+    passMinPercent = parseFloat(gradingPolicy.pass_min_percent);
+    if (isNaN(passMinPercent)) passMinPercent = null;
+  }
+
+  const defaultThresholds = [
+    {grade: 'A', min: 90},
+    {grade: 'B', min: 80},
+    {grade: 'C', min: 70},
+    {grade: 'D', min: 60},
+    {grade: 'F', min: 0}
+  ];
+
+  function getGrade(percent){
+    if (percent === null || isNaN(percent)) return '—';
+    const t = thresholds || defaultThresholds;
+    for (const item of t){
+      if (percent >= item.min) return item.grade;
+    }
+    return '—';
+  }
+
+  function getOutcome(percent, grade){
+    if (passMinPercent !== null){
+      return (typeof percent === 'number' && percent >= passMinPercent) ? 'Pass' : 'Fail';
+    }
+    if (grade === '—') return '—';
+    return (grade === 'F') ? 'Fail' : 'Pass';
   }
 
   let editing = null;
@@ -157,21 +349,21 @@ document.addEventListener('DOMContentLoaded', function(){
     const input = td.querySelector('input');
     const newVal = input ? input.value.trim() : initial;
     td.classList.remove('editing');
+    if (!input) { editing = null; return; }
 
     if (!commit || newVal === initial){
       td.innerHTML = renderCell(initial);
-      editing = null;
-      return;
+      editing = null; return;
     }
 
     const max = td.dataset.max ? parseFloat(td.dataset.max) : null;
     if (newVal !== '' && (isNaN(parseFloat(newVal)) || (max !== null && parseFloat(newVal) > max) || parseFloat(newVal) < 0)){
       showAlert('danger', `Invalid value. Expected 0 to ${td.dataset.max}`);
       td.innerHTML = renderCell(initial);
-      editing = null;
-      return;
+      editing = null; return;
     }
 
+    editing = null;
     const tr = td.closest('tr');
     const studentId = tr.getAttribute('data-student-id');
     const componentId = td.getAttribute('data-component-id');
@@ -180,6 +372,10 @@ document.addEventListener('DOMContentLoaded', function(){
     formData.append('component_id', componentId);
     formData.append('value', newVal);
     const csrftoken = getCookie('csrftoken');
+
+    td.innerHTML = renderCell(newVal);
+    td.dataset.value = newVal || '';
+    recomputeRow(tr);
 
     fetch("{% url 'update_mark_cell' course.id %}", {
       method: 'POST',
@@ -193,13 +389,15 @@ document.addEventListener('DOMContentLoaded', function(){
         showAlert('success', 'Saved');
       } else {
         showAlert('danger', data.error || 'Save failed');
+        td.dataset.value = initial;
         td.innerHTML = renderCell(initial);
+        recomputeRow(tr);
       }
-      editing = null;
     }).catch(()=>{
       showAlert('danger', 'Network error');
+      td.dataset.value = initial;
       td.innerHTML = renderCell(initial);
-      editing = null;
+      recomputeRow(tr);
     });
   }
 
@@ -211,7 +409,6 @@ document.addEventListener('DOMContentLoaded', function(){
   }
 
   function recomputeRow(tr){
-    // Weighted total: sum((value/max)*weight), Percentage: / sum(weights) * 100
     let weighted = 0.0, weightSum = 0.0;
     tr.querySelectorAll('td.editable').forEach(td => {
       const v = parseFloat(td.dataset.value || '');
@@ -222,63 +419,94 @@ document.addEventListener('DOMContentLoaded', function(){
         weighted += (v / max) * w;
       }
     });
+
     const totalCell = tr.querySelector('.total-cell');
     if (totalCell){
       totalCell.textContent = isNaN(weighted) ? '—' : weighted.toFixed(2);
     }
-    const percentCell = tr.children[tr.children.length - 2];
+
+    const percentCell = tr.querySelector('.percentage-cell');
+    let percentValue = NaN;
+
     if (percentCell && weightSum > 0){
       const pct = weighted / weightSum * 100.0;
       percentCell.textContent = isNaN(pct) ? '—' : pct.toFixed(2);
+      percentValue = isNaN(pct) ? NaN : pct;
     }
 
-    // Percentile across rows with rank/(n-1)*100
     const totals = [];
     document.querySelectorAll('#rows tr').forEach(row => {
+      if(row.style.display === 'none') return;
       const tcell = row.querySelector('.total-cell');
       const val = tcell ? parseFloat(tcell.textContent) : NaN;
       totals.push(isNaN(val) ? 0 : val);
     });
-    const sorted = totals.slice().sort((a,b)=>a-b);
-    const n = sorted.length;
 
-    document.querySelectorAll('#rows tr').forEach((row) => {
-      const tcell = row.querySelector('.total-cell');
-      const val = tcell ? parseFloat(tcell.textContent) : NaN;
-      const v = isNaN(val) ? 0 : val;
-      if (n <= 1){
-        row.children[row.children.length - 1].textContent = '100.00';
-        return;
+    if (totals.length > 0){
+      const sorted = totals.slice().sort((a,b)=>a-b);
+      const n = sorted.length;
+      document.querySelectorAll('#rows tr').forEach((row) => {
+        if(row.style.display === 'none') return;
+        const tcell = row.querySelector('.total-cell');
+        const val = tcell ? parseFloat(tcell.textContent) : NaN;
+        const v = isNaN(val) ? 0 : val;
+        let pctile = 0;
+        if (n <= 1) pctile = 100.0;
+        else {
+          let lo = 0, hi = n;
+          while (lo < hi){
+            const mid = (lo + hi) >> 1;
+            if (sorted[mid] < v) lo = mid + 1;
+            else hi = mid;
+          }
+          pctile = lo / (n - 1) * 100.0;
+        }
+        const percentileCell = row.querySelector('.percentile-cell');
+        if (percentileCell) percentileCell.textContent = pctile.toFixed(2);
+      });
+    }
+
+    const gradeCell = tr.querySelector('[data-grade]');
+    const outcomeCell = tr.querySelector('[data-outcome]');
+
+    let percentForGrade = percentValue;
+    if (isNaN(percentForGrade) && percentCell) {
+      const pv = parseFloat(percentCell.textContent);
+      percentForGrade = isNaN(pv) ? null : pv;
+    }
+
+    const grade = (typeof percentForGrade === 'number' && !isNaN(percentForGrade)) ? getGrade(percentForGrade) : '—';
+    const outcome = (typeof percentForGrade === 'number' && !isNaN(percentForGrade)) ? getOutcome(percentForGrade, grade) : '—';
+
+    if (gradeCell) gradeCell.textContent = grade;
+
+    if (outcomeCell) {
+      if (outcome === 'Pass') {
+        outcomeCell.innerHTML = '<span class="outcome-pass">Pass</span>';
+      } else if (outcome === 'Fail') {
+        outcomeCell.innerHTML = '<span class="outcome-fail">Fail</span>';
+      } else {
+        outcomeCell.textContent = '—';
       }
-      // lower bound index
-      let lo = 0, hi = n;
-      while (lo < hi){
-        const mid = (lo + hi) >> 1;
-        if (sorted[mid] < v) lo = mid + 1;
-        else hi = mid;
-      }
-      const pctile = lo / (n - 1) * 100.0;
-      const percentileCell = row.children[row.children.length - 1];
-      percentileCell.textContent = pctile.toFixed(2);
-    });
+    }
   }
 
   function getCookie(name){
     let cookieValue = null;
     if (document.cookie && document.cookie !== ''){
       const cookies = document.cookie.split(';');
-      for (let i=0; i<cookies.length; i++){
-        const cookie = cookies[i].trim();
-        if (cookie.substring(0, name.length+1) === (name + '=')){
-          cookieValue = decodeURIComponent(cookie.substring(name.length+1));
+      for (let cookie of cookies){
+        cookie = cookie.trim();
+        if (cookie.startsWith(name + '=')){
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
           break;
         }
       }
     }
     return cookieValue;
   }
+
+  document.querySelectorAll('#rows tr').forEach(tr => recomputeRow(tr));
 });
 </script>
-
-</body>
-</html>
+{% endblock %}

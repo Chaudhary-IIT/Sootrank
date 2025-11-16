@@ -1,205 +1,266 @@
-{% load static %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Instructor Approvals</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
-</head>
-<body class="min-h-screen bg-gray-100 flex items-start justify-center py-10">
-  <div class="w-[1200px]">
-    {% if messages %}
-      <div class="mb-3">
-        {% for message in messages %}
-          <div class="alert alert-{{ message.tags }} mb-2" role="alert">{{ message }}</div>
-        {% endfor %}
-      </div>
-    {% endif %}
-    <div class="mb-5 flex items-center justify-between">
-      <h1 class="text-3xl font-bold">Pre‑Registration Requests</h1>
-      <div class="text-sm text-gray-600">Logged in as: {{ instructor.first_name }} {{ instructor.last_name }}</div>
+{% extends "faculty_base.html" %}
+
+{% block title %}Pre-Registration Requests{% endblock %}
+{% block nav_courses_active %} active{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="fs-3 fw-bold mb-0">Pre-Registration Requests</h1>
+    <span class="text-muted small">Instructor: {{ instructor.first_name }} {{ instructor.last_name }}</span>
+  </div>
+
+  <!-- Filters -->
+  <div class="card mb-4">
+    <div class="card-body p-3">
+      <form method="get" class="row g-3 align-items-end">
+        <div class="col-auto">
+          <label for="statusFilter" class="form-label mb-1 small fw-medium">Status</label>
+          <select name="status" id="statusFilter" class="form-select form-select-sm">
+            <option value="PND" {% if status_filter == "PND" %}selected{% endif %}>Pending</option>
+            <option value="INS" {% if status_filter == "INS" %}selected{% endif %}>Instructor OK</option>
+            <option value="ENR" {% if status_filter == "ENR" %}selected{% endif %}>Enrolled</option>
+            <option value="DRP" {% if status_filter == "DRP" %}selected{% endif %}>Rejected</option>
+          </select>
+        </div>
+
+        <div class="col-auto">
+          <label for="courseFilter" class="form-label mb-1 small fw-medium">Course</label>
+          <select name="course" id="courseFilter" class="form-select form-select-sm">
+            <option value="">All</option>
+            {% for code, name, slot in my_courses %}
+            <option value="{{ code }}" {% if course_code == code %}selected{% endif %}>{{ code }} — {{ name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-auto">
+          <label for="slotFilter" class="form-label mb-1 small fw-medium">Slot</label>
+          <select name="slot" id="slotFilter" class="form-select form-select-sm">
+            <option value="">All</option>
+            {% for s in slots %}
+            <option value="{{ s }}" {% if slot_filter == s %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-auto">
+          <button class="btn btn-primary btn-sm">
+            <i class="fa-solid fa-filter me-1"></i> Apply
+          </button>
+        </div>
+      </form>
     </div>
+  </div>
 
-    <!-- Filters -->
-    <form method="get" class="mb-4 flex items-center gap-3 flex-wrap">
-      <label class="text-sm text-gray-700">Status</label>
-      <select name="status" class="bg-white border border-gray-300 text-sm rounded-lg p-2">
-        <option value="PND" {% if status_filter == "PND" %}selected{% endif %}>Pending</option>
-        <option value="INS" {% if status_filter == "INS" %}selected{% endif %}>Instructor OK</option>
-        <option value="ENR" {% if status_filter == "ENR" %}selected{% endif %}>Enrolled</option>
-        <option value="DRP" {% if status_filter == "DRP" %}selected{% endif %}>Rejected</option>
-      </select>
+  <!-- Legend -->
+  <div class="d-flex align-items-center gap-2 mb-3">
+    <span class="badge bg-primary-subtle text-primary-emphasis"><i class="fa-solid fa-circle fa-xs me-1"></i> Regular</span>
+    <span class="badge bg-info-subtle text-info-emphasis"><i class="fa-solid fa-circle fa-xs me-1"></i> Pass/Fail</span>
+    <span class="badge bg-warning-subtle text-warning-emphasis"><i class="fa-solid fa-circle fa-xs me-1"></i> Audit</span>
+  </div>
 
-      <label class="text-sm text-gray-700">Course</label>
-      <select name="course" class="bg-white border border-gray-300 text-sm rounded-lg p-2">
-        <option value="">All</option>
-        {% for code,name,slot in my_courses %}
-          <option value="{{ code }}" {% if course_code == code %}selected{% endif %}>{{ code }} — {{ name }}</option>
-        {% endfor %}
-      </select>
+  <!-- Table -->
+  <div class="card mb-4">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <!-- narrow checkbox column -->
+            <th class="p-3 text-center" style="width: 38px;">
+              <input class="form-check-input" type="checkbox" id="checkAll" />
+            </th>
+            <th class="p-3">Student</th>
+            <th class="p-3">Course</th>
+            <th class="p-3">Course Mode</th>
+            <th class="p-3">Status</th>
+            <th class="p-3">Actions</th>
+          </tr>
+        </thead>
 
-      <label class="text-sm text-gray-700">Slot</label>
-      <select name="slot" class="bg-white border border-gray-300 text-sm rounded-lg p-2">
-        <option value="">All</option>
-        {% for s in slots %}
-          <option value="{{ s }}" {% if slot_filter == s %}selected{% endif %}>{{ s }}</option>
-        {% endfor %}
-      </select>
+        <tbody>
+          {% if requests %}
+            {% for sc in requests %}
+            <tr>
+              <td class="p-3 text-center align-middle">
+                {% if sc.status == "PND" %}
+                <input type="checkbox" class="form-check-input row-check" data-id="{{ sc.id }}" />
+                {% endif %}
+              </td>
 
-      <button class="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-black">Apply</button>
-    </form>
+              <td class="p-3">
+                <div class="fw-semibold text-truncate" style="max-width:220px;">
+                  {{ sc.student.first_name }}{% if sc.student.last_name %} {{ sc.student.last_name }}{% endif %}
+                </div>
+                <div class="small text-muted">{{ sc.student.roll_no }}</div>
+              </td>
 
-    <!-- Table -->
-    <div class="bg-white rounded-2xl shadow">
-      <div class="overflow-x-auto rounded-2xl">
-        <table class="w-full text-left border-collapse">
-          <thead>
-            <tr class="bg-gray-50 text-gray-700">
-              <th class="px-5 py-3">
-                <input type="checkbox" id="checkAll">
-              </th>
-              <th class="px-5 py-3 text-sm font-semibold">Student</th>
-              <th class="px-5 py-3 text-sm font-semibold">Roll No</th>
-              <th class="px-5 py-3 text-sm font-semibold">Course</th>
-              <th class="px-5 py-3 text-sm font-semibold">Slot</th>
-              <th class="px-5 py-3 text-sm font-semibold">Credits</th>
-              <th class="px-5 py-3 text-sm font-semibold">Pass/Fail</th>
-              <th class="px-5 py-3 text-sm font-semibold">Status</th>
-              <th class="px-5 py-3 text-sm font-semibold">Actions</th>
+              <td class="p-3">
+                <div class="fw-semibold text-truncate" style="max-width:360px;">
+                  {{ sc.course.code }} — {{ sc.course.name }}
+                </div>
+                <div class="small text-muted">Slot: {{ sc.course.slot }} | Credits: {{ sc.course.credits }}</div>
+              </td>
+
+              <td class="p-3">
+                {% if sc.course_mode == "REG" %}
+                <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis">Regular</span>
+                {% elif sc.course_mode == "PF" %}
+                <span class="badge rounded-pill bg-info-subtle text-info-emphasis">Pass/Fail</span>
+                {% elif sc.course_mode == "AUD" %}
+                <span class="badge rounded-pill bg-warning-subtle text-warning-emphasis">Audit</span>
+                {% else %}
+                <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">—</span>
+                {% endif %}
+              </td>
+
+              <td class="p-3">
+                {% if sc.status == "PND" %}
+                <span class="badge rounded-pill bg-warning-subtle text-warning-emphasis">Pending</span>
+                {% elif sc.status == "ENR" %}
+                <span class="badge rounded-pill bg-success-subtle text-success-emphasis">Enrolled</span>
+                {% elif sc.status == "DRP" %}
+                <span class="badge rounded-pill bg-danger-subtle text-danger-emphasis">Rejected</span>
+                {% else %}
+                <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">{{ sc.get_status_display }}</span>
+                {% endif %}
+              </td>
+
+              <td class="p-3">
+                {% if sc.status == "PND" %}
+                <div class="d-flex gap-2">
+                  <form method="post" action="{% url 'instructor_request_action' %}" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="sc_id" value="{{ sc.id }}" />
+                    <button type="submit" name="action" value="approve" class="btn btn-success btn-sm">Approve</button>
+                  </form>
+
+                  <form method="post" action="{% url 'instructor_request_action' %}" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="sc_id" value="{{ sc.id }}" />
+                    <button type="submit" name="action" value="reject" class="btn btn-outline-danger btn-sm">Reject</button>
+                  </form>
+                </div>
+                {% else %}
+                <span class="text-muted small">No actions</span>
+                {% endif %}
+              </td>
             </tr>
-          </thead>
-          <tbody class="text-gray-900">
-            {% if requests %}
-              {% for sc in requests %}
-                <tr class="{% cycle '' 'bg-gray-50' %} border-t">
-                  <td class="px-5 py-3">
-                    {% if sc.status == "PND" %}
-                      <input type="checkbox" class="row-check" data-id="{{ sc.id }}">
-                    {% endif %}
-                  </td>
-
-                  <td class="px-5 py-3">{{ sc.student.first_name }}{% if sc.student.last_name %} {{ sc.student.last_name }}{% endif %}</td>
-                  <td class="px-5 py-3 whitespace-nowrap">{{ sc.student.roll_no }}</td>
-
-                  <td class="px-5 py-3 whitespace-normal break-words">
-                    {{ sc.course.code }} — {{ sc.course.name }}
-                  </td>
-
-                  <td class="px-5 py-3 whitespace-nowrap">{{ sc.course.slot }}</td>
-                  <td class="px-5 py-3 whitespace-nowrap">{{ sc.course.credits }}</td>
-
-                  <!-- Pass/Fail Column with explicit check -->
-                  <td class="px-5 py-3">
-                    {% if sc.is_pass_fail == True %}
-                      <span class="inline-flex items-center rounded-full bg-purple-100 text-purple-800 text-xs font-medium px-3 py-1">
-                        Yes
-                      </span>
-                    {% else %}
-                      <span class="inline-flex items-center rounded-full bg-blue-100 text-blue-800 text-xs font-medium px-3 py-1">
-                        No
-                      </span>
-                    {% endif %}
-                  </td>
-
-                  <td class="px-5 py-3">
-                    {% if sc.status == "PND" %}
-                      <span class="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-xs font-medium px-3 py-1">Pending</span>
-                    {% elif sc.status == "ENR" %}
-                      <span class="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1">Enrolled</span>
-                    {% elif sc.status == "DRP" %}
-                      <span class="inline-flex items-center rounded-full bg-red-100 text-red-700 text-xs font-medium px-3 py-1">Rejected</span>
-                    {% else %}
-                      <span class="inline-flex items-center rounded-full bg-gray-100 text-gray-700 text-xs font-medium px-3 py-1">{{ sc.get_status_display }}</span>
-                    {% endif %}
-                  </td>
-
-                  <td class="px-5 py-3">
-                    {% if sc.status == "PND" %}
-                      <div class="flex items-center gap-2 flex-nowrap">
-                        <form method="post" action="{% url 'instructor_request_action' %}" class="inline">
-                          {% csrf_token %}
-                          <input type="hidden" name="sc_id" value="{{ sc.id }}">
-                          <button type="submit" name="action" value="approve"
-                                  class="px-3 py-1 rounded bg-green-600 text-white hover:bg-green-700 whitespace-nowrap">
-                            Approve
-                          </button>
-                        </form>
-                        <form method="post" action="{% url 'instructor_request_action' %}" class="inline">
-                          {% csrf_token %}
-                          <input type="hidden" name="sc_id" value="{{ sc.id }}">
-                          <button type="submit" name="action" value="reject"
-                                  class="px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700 whitespace-nowrap">
-                            Reject
-                          </button>
-                        </form>
-                      </div>
-                    {% else %}
-                      <span class="text-gray-500 text-sm">No actions</span>
-                    {% endif %}
-                  </td>
-                </tr>
-              {% endfor %}
-            {% else %}
-              <tr class="border-t">
-                <td class="px-5 py-6 text-center text-gray-500" colspan="9">No requests found.</td>
-              </tr>
-            {% endif %}
-          </tbody>
-        </table>
-      </div>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td class="p-4 text-center text-muted" colspan="6">
+                {% if status_filter == "PND" %}
+                  No pending approvals found.
+                {% else %}
+                  No requests found for the selected filter.
+                {% endif %}
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
     </div>
+  </div>
 
-    <!-- Bulk form -->
-    <form method="post" action="{% url 'instructor_bulk_action' %}" class="mt-4 bg-white rounded-2xl shadow px-5 py-4 flex items-center justify-between">
+  <!-- Bulk action footer -->
+  <div class="card card-body p-3">
+    <form method="post" action="{% url 'instructor_bulk_action' %}" class="d-flex justify-content-between align-items-center flex-wrap gap-3">
       {% csrf_token %}
-      <div class="flex items-center gap-3 flex-wrap" id="bulkBox">
+
+      <!-- keep bulk inputs hidden (d-none) -->
+      <div class="d-none">
         {% for sc in requests %}
           {% if sc.status == "PND" %}
-            <input type="checkbox" name="sc_ids" value="{{ sc.id }}" class="hidden" id="bulk-{{ sc.id }}">
+          <input type="checkbox" name="sc_ids" value="{{ sc.id }}" id="bulk-{{ sc.id }}" />
           {% endif %}
         {% endfor %}
-        <span class="text-sm text-gray-600">Use the row checkboxes or "Select all" to build the bulk list.</span>
       </div>
-      <div class="flex items-center gap-3">
-        <button name="action" value="approve" class="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700">
-          Approve Selected
-        </button>
-        <button name="action" value="reject" class="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700">
-          Reject Selected
-        </button>
+
+      <div class="d-flex align-items-center gap-2">
+        <span class="fw-semibold" id="bulk-count-text">0</span>
+        <span class="text-muted" id="bulk-count-label">students selected</span>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button name="action" value="reject" id="bulk-reject-btn" class="btn btn-outline-danger btn-sm" disabled>Reject Selected</button>
+        <button name="action" value="approve" id="bulk-approve-btn" class="btn btn-success btn-sm" disabled>Approve Selected</button>
       </div>
     </form>
   </div>
+</div>
+{% endblock %}
 
-  <script>
-    const checkAll = document.getElementById('checkAll');
-    const rowChecks = Array.from(document.querySelectorAll('.row-check'));
+{% block extra_js %}
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const checkAll = document.getElementById("checkAll");
+    const rowChecks = Array.from(document.querySelectorAll(".row-check"));
+    const bulkApproveBtn = document.getElementById("bulk-approve-btn");
+    const bulkRejectBtn = document.getElementById("bulk-reject-btn");
+    const bulkCountText = document.getElementById("bulk-count-text");
+    const bulkCountLabel = document.getElementById("bulk-count-label");
+
+    // build map to hidden bulk inputs
     const bulkMap = {};
-    rowChecks.forEach(cb => {
+    rowChecks.forEach((cb) => {
       const id = cb.dataset.id;
-      bulkMap[id] = document.getElementById('bulk-' + id);
-      cb.addEventListener('change', () => {
-        if (bulkMap[id]) bulkMap[id].checked = cb.checked;
+      const bulkCheckbox = document.getElementById("bulk-" + id);
+      if (bulkCheckbox) bulkMap[id] = bulkCheckbox;
+    });
+
+    function updateBulkState() {
+      let count = 0;
+      rowChecks.forEach((cb) => {
+        const id = cb.dataset.id;
+        if (bulkMap[id]) {
+          bulkMap[id].checked = cb.checked;
+          if (cb.checked) count++;
+        }
+      });
+
+      if (bulkCountText) bulkCountText.textContent = count;
+      if (bulkCountLabel)
+        bulkCountLabel.textContent = count === 1 ? "student selected" : "students selected";
+
+      const hasSelection = count > 0;
+      if (bulkApproveBtn) bulkApproveBtn.disabled = !hasSelection;
+      if (bulkRejectBtn) bulkRejectBtn.disabled = !hasSelection;
+    }
+
+    // Wire each row checkbox
+    rowChecks.forEach((cb) => {
+      cb.addEventListener("change", () => {
         if (!cb.checked && checkAll) checkAll.checked = false;
+        updateBulkState();
       });
     });
+
     if (checkAll) {
-      checkAll.addEventListener('change', () => {
-        rowChecks.forEach(cb => {
-          cb.checked = checkAll.checked;
-          const bulk = bulkMap[cb.dataset.id];
-          if (bulk) bulk.checked = checkAll.checked;
-        });
+      checkAll.addEventListener("change", () => {
+        rowChecks.forEach((cb) => (cb.checked = checkAll.checked));
+        updateBulkState();
       });
     }
-    setTimeout(function () {
-        document.querySelectorAll('.alert').forEach(function (alert) {
-            var bsAlert = new bootstrap.Alert(alert);
-            bsAlert.close();
-        });
+
+    // Auto-dismiss alerts (faculty_base might already do this)
+    setTimeout(() => {
+      document.querySelectorAll(".alert").forEach((alert) => {
+        try {
+          if (typeof bootstrap !== "undefined" && bootstrap.Alert) {
+            const bsAlert = bootstrap.Alert.getOrCreateInstance(alert);
+            if (bsAlert) bsAlert.close();
+          } else {
+            alert.style.display = "none";
+          }
+        } catch {
+          alert.style.display = "none";
+        }
+      });
     }, 4000);
-  </script>
-</body>
-</html>
+
+    // initialize
+    updateBulkState();
+  });
+</script>
+{% endblock %}

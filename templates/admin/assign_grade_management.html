@@ -183,8 +183,6 @@
   </div>
 {% endif %}
     <div class="container my-5">
-        <h2 class="mb-3 text-primary">Grade Management</h2>
-        <p class="text-muted">Select a course to assign or edit grades for enrolled students.</p>
         
         <div class="form-section">
             <!-- Filters -->
@@ -249,57 +247,9 @@
                 </table>
             </div>
         </div>
-        <div class="col-md-3">
-          <select id="semesterFilter" class="form-select">
-            <option value="">All Semesters</option>
-            {% for sem in semesters %}
-            <option value="{{ sem }}">Semester {{ sem }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="col-md-3">
-          <select id="slotFilter" class="form-select">
-            <option value="">All Slots</option>
-            {% for s in slots %}
-            <option value="{{ s }}">{{ s }}</option>
-            {% endfor %}
-          </select>
-        </div>
+        
       </div>
 
-      <!-- Table -->
-      <div class="table-responsive">
-        <table class="table table-striped align-middle">
-          <thead class="table-primary">
-            <tr>
-              <th>Code</th>
-              <th>Name</th>
-              <th>Slot</th>
-              <th>Enrolled</th>
-              <th class="text-end">Actions</th>
-            </tr>
-          </thead>
-          <tbody id="courseBody">
-            {% for c in courses %}
-            <tr class="course-row" data-slot="{{ c.slot }}">
-              <td class="c-code">{{ c.code }}</td>
-              <td class="c-name">{{ c.name }}</td>
-              <td class="c-slot">{{ c.slot }}</td>
-              <td><span class="badge-enrolled">{{ c.enrolled_count }} student(s)</span></td>
-              <td class="text-end">
-                <a href="{% url 'admin_assign_grades' c.code %}" class="btn btn-sm btn-success">
-                  <i class="fa fa-pencil me-1"></i> Manage
-                </a>
-              </td>
-            </tr>
-            {% empty %}
-            <tr>
-              <td colspan="5" class="text-center text-muted py-3">No enrolled courses found.</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
     </div>
   </div>
 

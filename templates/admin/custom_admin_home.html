@@ -25,10 +25,9 @@
 
         .navbar-brand {
             font-weight: 700;
-            font-size: 1.6rem; /* Slightly reduced for elegance */
+            font-size: 1.6rem;
         }
-        
-        /* Navigation Bar */
+
         .navbar-dark {
             background-color: var(--color-primary) !important;
         }
@@ -38,24 +37,24 @@
             transition: transform 0.3s ease, box-shadow 0.3s ease;
             cursor: pointer;
             border: 1px solid #e0e6ed;
-            border-radius: 8px; /* Softer rounded corners */
+            border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
             background-color: var(--color-surface);
         }
 
         .card:hover {
-            transform: translateY(-5px); /* Less dramatic lift */
-            box-shadow: 0 10px 20px rgba(52, 152, 219, 0.2); /* Soft blue shadow on hover */
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(52, 152, 219, 0.2);
         }
 
         .icon {
-            font-size: 38px; /* Slightly smaller for refinement */
-            color: var(--color-primary); /* Primary color for icon */
+            font-size: 38px;
+            color: var(--color-primary);
             transition: color 0.3s ease;
         }
-        
+
         .card:hover .icon {
-            color: var(--color-accent); /* Accent color on hover */
+            color: var(--color-accent);
         }
 
         .card-title {
@@ -67,10 +66,20 @@
             color: var(--color-text-muted) !important;
             font-size: 0.85rem;
         }
-        
+
         .page-title {
             color: var(--color-primary) !important;
         }
+        /* Open dropdown on hover */
+        .nav-item.dropdown:hover .dropdown-menu {
+            display: block;
+            margin-top: 0;
+        }
+        .nav-item.dropdown:hover .dropdown-toggle {
+            color: #ffffff !important;
+            opacity: 0.9;
+        }
+
     </style>
 </head>
 
@@ -78,8 +87,21 @@
     <nav class="navbar navbar-expand-lg navbar-dark shadow-sm mb-5">
         <div class="container">
             <a class="navbar-brand" href="{% url 'custom_admin_home' %}">Sootrank Admin</a>
+
+            <!-- DROPDOWN WITH HOVER -->
+            <ul class="navbar-nav ms-auto">
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle text-white fw-semibold" href="#" role="button">
+                        Logout
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item text-danger" href="{% url 'login' %}">Logout</a></li>
+                    </ul>
+                </li>
+            </ul>
         </div>
     </nav>
+
 
     <div class="container">
         <h2 class="mb-2 text-center page-title fw-bold">Admin Dashboard</h2>
@@ -170,7 +192,7 @@
             </div>
 
             <div class="col-md-4 col-lg-3">
-                <a href="{% url 'admin_grade_management' %}" class="text-decoration-none">
+                <a href="{% url 'result_management_home' %}" class="text-decoration-none">
                     <div class="card text-center py-4 px-3 rounded">
                         <i class="fa-solid fa-square-poll-vertical icon mb-3"></i>
                         <h5 class="card-title">Result</h5>
@@ -188,28 +210,31 @@
                     </div>
                 </a>
             </div>
+
             <div class="col-md-4 col-lg-3">
                 <a href="{% url 'admin_timetable_dashboard' %}" class="text-decoration-none">
                     <div class="card text-center py-4 px-3 rounded">
-                        <i class="fa-solid fa-database icon mb-3"></i>
+                        <i class="fa-solid fa-calendar-week icon mb-3"></i>
                         <h5 class="card-title">Timetable</h5>
-                        <p class="card-text">Manage all course Timetable</p>
+                        <p class="card-text">Manage all course timetable</p>
                     </div>
                 </a>
             </div>
+
             <div class="col-md-4 col-lg-3">
                 <a href="{% url 'admin_attendance_dashboard' %}" class="text-decoration-none">
                     <div class="card text-center py-4 px-3 rounded">
-                        <i class="fa-solid fa-database icon mb-3"></i>
+                        <i class="fa-solid fa-clipboard-user icon mb-3"></i>
                         <h5 class="card-title">Attendance</h5>
                         <p class="card-text">Manage Attendance centrally</p>
                     </div>
                 </a>
             </div>
+
             <div class="col-md-4 col-lg-3">
                 <a href="{% url 'admin_fee_dashboard' %}" class="text-decoration-none">
                     <div class="card text-center py-4 px-3 rounded">
-                        <i class="fa-solid fa-database icon mb-3"></i>
+                        <i class="fa-solid fa-indian-rupee-sign icon mb-3"></i>
                         <h5 class="card-title">Fees Dashboard</h5>
                         <p class="card-text">Fees Management and Update</p>
                     </div>

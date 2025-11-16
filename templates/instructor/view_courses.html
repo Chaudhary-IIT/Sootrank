@@ -1,47 +1,53 @@
-{% load static %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Your Courses</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="min-h-screen bg-gray-100">
-  <header class="bg-white shadow">
-    <div class="max-w-6xl mx-auto px-4 py-5 flex items-center justify-between">
-      <h1 class="text-2xl font-bold">Instructor Courses</h1>
-      <div class="text-sm text-gray-600">Logged in as: {{ instructor.first_name }} {{ instructor.last_name }}</div>
-    </div>
-  </header>
+{% extends "faculty_base.html" %}
 
-  <main class="max-w-6xl mx-auto px-4 py-8">
-    {% if courses %}
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-        {% for c in courses %}
-          <a href="{% url 'course_roster' c.code default_semester %}"
-             class="block bg-white rounded-2xl shadow hover:shadow-md transition p-5">
-            <div class="flex items-start justify-between">
-              <div>
-                <div class="text-sm text-gray-500">Code</div>
-                <div class="text-lg font-semibold">{{ c.code }}</div>
-              </div>
-              <span class="inline-flex items-center rounded-full bg-gray-100 text-gray-800 text-xs font-medium px-3 py-1">
-                Slot {{ c.slot }}
-              </span>
+{% block title %}Your Courses{% endblock %}
+
+{% block nav_courses_active %} active{% endblock %}
+
+{% block content %}
+<h1 class="fs-3 fw-bold mb-4">📚 Your Courses</h1>
+
+{% if courses %}
+  <div class="row g-4">
+    {% for c in courses %}
+    <div class="col-12 col-md-6 col-lg-4">
+      <a href="{% url 'course_roster' c.code %}" class="card text-decoration-none h-100 text-dark">
+        <div class="card-body p-4">
+          <div class="d-flex justify-content-between align-items-start mb-2">
+            <div>
+              <div class="small text-muted">Code</div>
+              <h5 class="card-title mb-0">{{ c.code }}</h5>
             </div>
-            <div class="mt-2 text-gray-900 font-medium break-words">{{ c.name }}</div>
-            <div class="mt-2 text-sm text-gray-600">Credits: {{ c.credits }} · LTPC: {{ c.LTPC }}</div>
-            <div class="mt-3 text-xs text-gray-500">
-              Total enrolled (all semesters): {{ c.total_enrolled|default:"0" }}
-            </div>
-            <div class="mt-3 text-xs text-blue-700">View roster →</div>
-          </a>
-        {% endfor %}
-      </div>
-    {% else %}
-      <div class="rounded-xl bg-white p-6 text-gray-600">No courses found.</div>
-    {% endif %}
-  </main>
-</body>
-</html>
+            <span class="badge bg-secondary-subtle text-secondary-emphasis rounded-pill">
+              Slot {{ c.slot }}
+            </span>
+          </div>
+          
+          <p class="card-text fw-medium">{{ c.name }}</p>
+          
+          <p class="card-text small text-muted mb-0">
+            Credits: {{ c.credits }} · LTPC: {{ c.LTPC }}
+          </p>
+          
+          <p class="card-text small text-muted mt-3">
+            Total Enrolled: {{ c.total_enrolled|default:"0" }}
+          </p>
+
+          <div class="mt-3">
+            <span class="fw-semibold text-primary">
+              View Roster <i class="fa-solid fa-arrow-right fa-xs ms-1"></i>
+            </span>
+          </div>
+        </div>
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="card">
+    <div class="card-body text-center text-muted p-5">
+      You are not currently teaching any courses.
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

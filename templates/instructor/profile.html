@@ -7,31 +7,171 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <style>
-    body { background:#f4f6fb; font-family: Inter,system-ui,sans-serif; }
-    .brand-text { color:#2469f0; font-weight:700; }
-    .profile-card { border:0; border-radius:16px; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,.05); }
-    .profile-header { background:linear-gradient(135deg,#2469f0,#1a52d1); color:#fff; padding:2rem; }
-    .profile-avatar { width:120px; height:120px; border-radius:50%; border:5px solid rgba(255,255,255,0.3); object-fit:cover; }
-    .avatar-fallback { width:120px;height:120px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:2rem;background:#fff;color:#2469f0; }
-    .btn-edit { background:rgba(255,255,255,.2); border:1px solid rgba(255,255,255,.3); color:white; border-radius:12px; padding:.5rem 1rem; font-weight:600; }
-    .btn-edit:hover { background:rgba(255,255,255,.3); }
-    .stat-card { background:white; border:1px solid #e2e8f0; border-radius:12px; text-align:center; padding:1.25rem; box-shadow:0 2px 6px rgba(0,0,0,.03); }
-    .stat-value { font-size:1.8rem; font-weight:700; color:#2469f0; }
-    .stat-label { color:#64748b; font-size:.9rem; }
-    .section-title { font-weight:700; font-size:1.2rem; color:#1f2937; margin-bottom:1rem; display:flex; align-items:center; gap:.5rem; }
-    .course-table th { background:#f1f5fb; }
-    .card-section { padding:1.75rem; }
-    .meta-small { opacity:.85; font-size:.95rem; }
+    :root {
+      --primary: #2469f0;
+      --bg: #f4f6fb;
+      --card: #fff;
+      --border: #e2e8f0;
+      --muted: #64748b;
+    }
+
+    body {
+      background: var(--bg);
+      font-family: 'Inter', system-ui, sans-serif;
+      color: #1e293b;
+      overflow-x: hidden;
+    }
+
+    /* Navbar */
+    .navbar {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .brand-text { color: var(--primary); font-weight: 700; }
+
+    /* Header */
+    .profile-card {
+      border: 0;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.05);
+      animation: fadeIn 0.7s ease;
+    }
+    .profile-header {
+      background: linear-gradient(135deg, var(--primary), #1a52d1);
+      color: #fff;
+      padding: 2.25rem;
+      display: flex;
+      flex-direction: column;
+      flex-wrap: wrap;
+      align-items: center;
+      animation: fadeInDown 0.9s ease;
+    }
+    @keyframes fadeInDown {
+      from { opacity: 0; transform: translateY(-25px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(15px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .profile-avatar, .avatar-fallback {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      border: 5px solid rgba(255,255,255,0.3);
+      object-fit: cover;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      transition: transform 0.3s ease;
+    }
+    .profile-avatar:hover { transform: scale(1.05); }
+
+    .avatar-fallback {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 2rem;
+      background: #fff;
+      color: var(--primary);
+    }
+
+    .meta-small { opacity: .9; font-size: .95rem; }
+
+    .btn-edit {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      background: rgba(255,255,255,0.18);
+      border: 1px solid rgba(255,255,255,0.3);
+      color: white;
+      border-radius: 10px;
+      padding: .45rem .9rem;
+      font-weight: 600;
+      transition: all .3s ease;
+    }
+    .btn-edit:hover { background: rgba(255,255,255,0.28); transform: translateY(-2px); }
+
+    /* Stat cards */
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      text-align: center;
+      padding: 1.25rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+      transition: all 0.3s ease;
+      animation: fadeIn 0.6s ease;
+    }
+    .stat-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 25px rgba(36,105,240,0.12);
+    }
+    .stat-value {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: var(--primary);
+    }
+    .stat-label { color: var(--muted); font-size: .9rem; }
+
+    .section-title {
+      font-weight: 700;
+      font-size: 1.2rem;
+      color: #1f2937;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
+
+    /* Courses table */
+    .course-table th { background: #f1f5fb; color: #1e293b; }
+    .course-table tbody tr {
+      transition: all .2s ease;
+    }
+    .course-table tbody tr:hover {
+      background-color: #eef4ff;
+      transform: scale(1.005);
+    }
+
+    /* Chart */
+    canvas { max-width: 380px !important; margin: 0 auto; display: block; }
+
+    .chart-center-text {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: #162029;
+    }
+
+    .card-section {
+      padding: 1.75rem;
+      animation: fadeIn 0.7s ease;
+    }
+
+    .btn-outline-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(36,105,240,0.15); }
+    .btn-outline-secondary:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(100,116,139,0.15); }
+
+    @media (max-width: 768px) {
+      .profile-header { text-align: center; }
+    }
   </style>
 </head>
 
 <body>
   <!-- Navbar -->
-  <nav class="navbar navbar-light bg-white shadow-sm">
+  <nav class="navbar navbar-light">
     <div class="container">
       <a class="navbar-brand d-flex align-items-center" href="{% url 'faculty_dashboard' %}">
-        <img src="{% static 'images/sootrank_logo.jpg' %}" width="36" height="36" class="me-2">
+        <img src="{% static 'images/sootrank_logo.jpg' %}" width="36" height="36" class="me-2" alt="logo">
         <span class="brand-text fs-4">Sootrank</span>
       </a>
     </div>
@@ -40,35 +180,37 @@
   <main class="container py-5">
     <div class="card profile-card mb-4">
       <!-- Profile Header -->
-      <div class="profile-header d-flex flex-column flex-md-row align-items-center">
-        {% if faculty.profile_image %}
-          <img src="{{ faculty.profile_image.url }}" class="profile-avatar me-md-4 mb-3 mb-md-0" alt="Profile">
-        {% else %}
-          <div class="avatar-fallback me-md-4 mb-3 mb-md-0">
-            {{ faculty.first_name|slice:":1" }}{{ faculty.last_name|default_if_none:""|slice:":1" }}
-          </div>
-        {% endif %}
-        <div class="flex-grow-1">
-          <h2 class="fw-bold mb-1">{{ faculty.first_name }} {{ faculty.last_name|default_if_none:"" }}</h2>
-          <div class="meta-small">{{ faculty.designation }} | {{ faculty.department }}</div>
-          <div class="meta-small">Email: {{ faculty.email_id }}</div>
-          {% if faculty.mobile_no %}
-          <div class="meta-small">Mobile: {{ faculty.mobile_no }}</div>
+      <div class="profile-header flex-md-row align-items-center justify-content-between">
+        <div class="d-flex flex-column flex-md-row align-items-center w-100">
+          {% if faculty.profile_image %}
+            <img src="{{ faculty.profile_image.url }}" class="profile-avatar me-md-4 mb-3 mb-md-0" alt="Profile">
+          {% else %}
+            <div class="avatar-fallback me-md-4 mb-3 mb-md-0">
+              {{ faculty.first_name|slice:":1" }}{{ faculty.last_name|default_if_none:""|slice:":1" }}
+            </div>
           {% endif %}
-          <div class="mt-3">
-            <a href="{% url 'faculty_edit_profile' %}" class="btn btn-edit me-2">
-              <i class="bi bi-pencil-square"></i> Edit Profile
-            </a>
-            <a href="{% url 'faculty_dashboard' %}" class="btn btn-light text-primary border">
-              <i class="bi bi-speedometer2"></i> Dashboard
-            </a>
+          <div>
+            <h2 class="fw-bold mb-1">{{ faculty.first_name }} {{ faculty.last_name|default_if_none:"" }}</h2>
+            <div class="meta-small">{{ faculty.designation }} | {{ faculty.department }}</div>
+            <div class="meta-small">Email: {{ faculty.email_id }}</div>
+            {% if faculty.mobile_no %}
+            <div class="meta-small">Mobile: {{ faculty.mobile_no }}</div>
+            {% endif %}
+            <div class="mt-3">
+              <a href="{% url 'faculty_edit_profile' %}" class="btn btn-edit me-2">
+                <i class="bi bi-pencil-square"></i> Edit Profile
+              </a>
+              <a href="{% url 'faculty_dashboard' %}" class="btn btn-light text-primary border">
+                <i class="bi bi-speedometer2"></i> Dashboard
+              </a>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Stats Section -->
+      <!-- Stats -->
       <div class="card-section">
-        <div class="row g-3">
+        <div class="row g-3 mb-4">
           <div class="col-md-6">
             <div class="stat-card">
               <div class="stat-value">{{ total_courses }}</div>
@@ -82,9 +224,17 @@
             </div>
           </div>
         </div>
+
+        <!-- Chart: Students per Course -->
+        {% if course_student_counts %}
+        <div class="text-center mb-4 position-relative">
+          <canvas id="facultyChart" width="320" height="320"></canvas>
+          <div id="chartCenterText" class="chart-center-text"></div>
+        </div>
+        {% endif %}
       </div>
 
-      <!-- Courses List -->
+      <!-- Courses -->
       <div class="card-section border-top">
         <div class="section-title">
           <i class="bi bi-journal-bookmark-fill text-primary"></i> Courses Teaching
@@ -122,13 +272,59 @@
         <a href="mailto:{{ faculty.email_id }}" class="btn btn-outline-primary">
           <i class="bi bi-envelope-fill me-1"></i> Email
         </a>
-        <a href="#" class="btn btn-outline-secondary">
-          <i class="bi bi-shield-lock me-1"></i> Security Settings
-        </a>
       </div>
     </div>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+  document.addEventListener('DOMContentLoaded', function () {
+    // Chart
+    const ctx = document.getElementById('facultyChart');
+    if (ctx) {
+      const courseData = [
+        {% for course, count in course_student_counts.items %}
+          { label: "{{ course }}", value: {{ count }} },
+        {% endfor %}
+      ];
+
+      const labels = courseData.map(c => c.label);
+      const values = courseData.map(c => c.value);
+      const total = values.reduce((a, b) => a + b, 0);
+
+      const colors = ['#2469f0', '#34d399', '#facc15', '#f97316', '#ec4899', '#8b5cf6', '#10b981'];
+
+      new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: values,
+            backgroundColor: colors.slice(0, labels.length),
+            borderWidth: 3,
+            borderColor: '#fff'
+          }]
+        },
+        options: {
+          cutout: '70%',
+          plugins: {
+            legend: { display: true, position: 'bottom' },
+            tooltip: {
+              callbacks: {
+                label: function(ctx) {
+                  return ctx.label + ': ' + ctx.formattedValue + ' students';
+                }
+              }
+            }
+          },
+          animation: { animateRotate: true, animateScale: true, duration: 1500, easing: 'easeOutQuart' }
+        }
+      });
+
+      // Center text
+      document.getElementById('chartCenterText').textContent = total + ' Students';
+    }
+  });
+  </script>
 </body>
 </html>
