@@ -90,6 +90,7 @@ urlpatterns = [
     path('instructor/update-grade/<str:course_code>/', views.update_student_grade, name='update_student_grade'),
     path('instructor/marks/course/<int:course_id>/', views.enter_marks, name='enter_marks'),
     path('courses/<int:course_id>/marks/overview/', views.course_marks_overview, name='course_marks_overview'),
+    path("course/<int:course_id>/apply_policy/", views.apply_grading_policy, name="apply_grading_policy"),
     path('courses/<int:course_id>/marks/update/', views.update_mark_cell, name='update_mark_cell'),
     path('faculty/<int:faculty_id>/courses/', views.all_courses, name='grading_courses'),
     path('courses/<str:course_code>/grading/assign/',views.assign_grading_policy, name='assign_grades_csv'),
@@ -108,6 +109,9 @@ urlpatterns = [
     path('custom-admin/database/', views.database_management_view, name='database_management'),
     path('custom-admin/database/edit/<str:record_type>/<int:record_id>/', views.edit_database_record, name='edit_database_record'),
     path('custom-admin/database/delete/<str:record_type>/<int:record_id>/', views.delete_database_record, name='delete_database_record'),
+    path('custom-admin/api/record/<str:record_type>/<int:record_id>/', views.api_get_record, name='api_get_record'),
+    path('custom-admin/api/record/<str:record_type>/<int:record_id>/update/', views.api_update_record, name='api_update_record'),
+    path('custom-admin/api/record/<str:record_type>/<int:record_id>/delete/', views.api_delete_record, name='api_delete_record'),
     path('custom-admin/database/export/', views.export_page_view, name='export_page'),
     path('custom-admin/database/export-filtered/', views.export_filtered_data, name='export_filtered_data'),
     #-------------(View Results - Instructor)

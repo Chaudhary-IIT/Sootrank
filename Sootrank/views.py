@@ -9,6 +9,7 @@ from django.utils.safestring import mark_safe
 from django.db.models import Sum
 from django.conf import settings
 from django.core.files.storage import FileSystemStorage
+from django.template.loader import render_to_string
 from decimal import Decimal, ROUND_HALF_UP
 from django.contrib import messages
 from django.views.decorators.csrf import csrf_exempt
@@ -756,7 +757,12 @@ def student_profile(request):
 
     # Base queryset: only CMP & PAS
     completed_qs = (
-        StudentCourse.objects.filter(student=student, status="CMP", outcome="PAS")
+        StudentCourse.objects.filter(
+            student=student,
+            status="CMP",
+            outcome="PAS",
+        )
+        .exclude(course_mode="AUD")   # ← Only exclude audit
         .select_related("course")
         .prefetch_related(
             Prefetch(
@@ -766,6 +772,7 @@ def student_profile(request):
             )
         )
     )
+
 
     # Step 1: Determine each course’s primary (highest priority) category
     course_to_category = {}
@@ -3430,21 +3437,22 @@ def course_marks_overview(request, course_id):
 
     faculty = get_object_or_404(Faculty, email_id=email)
 
-    # ✅ Fetch grading policy if exists
+    # Fetch grading policy (if any)
     policy = GradingPolicy.objects.filter(course=course).first()
 
     components = list(AssessmentComponent.objects.filter(course=course).order_by('id'))
 
-    # ✅ Only current active-cycle enrolled students
-    enrollments = (
+    # Only current active-cycle enrolled students
+    enrollments_qs = (
         StudentCourse.objects
-        .filter(course=course, status='ENR', is_active_pre_reg=True)
+        .filter(course=course, status__in=["ENR", "CMP"], is_active_pre_reg=True)
         .select_related('student')
         .order_by('student__roll_no')
     )
+    enrollments = list(enrollments_qs)
     students = [e.student for e in enrollments]
 
-    # --- Scores lookup ---
+    # Scores lookup
     scores = {}
     if students and components:
         for s in AssessmentScore.objects.filter(
@@ -3455,7 +3463,7 @@ def course_marks_overview(request, course_id):
             except (InvalidOperation, TypeError):
                 scores[(s.student_id, s.component_id)] = None
 
-    # --- Component metadata ---
+    # Component metadata and weights
     comp_info, total_weight = [], Decimal("0")
     for c in components:
         max_d = Decimal(str(c.max_marks))
@@ -3464,7 +3472,7 @@ def course_marks_overview(request, course_id):
         comp_info.append((c, max_d, weight_d))
         total_weight += weight_d
 
-    # --- Build student rows ---
+    # Build student rows (attach enrollment to each row for later saving)
     rows, totals_by_student = [], {}
     for e in enrollments:
         stu = e.student
@@ -3488,9 +3496,10 @@ def course_marks_overview(request, course_id):
             "pairs": pairs,
             "total": weighted_total,
             "percentage": percentage,
+            "enrollment": e,   # keep reference for saving
         })
 
-    # --- Percentile calculation ---
+    # Percentile calculation (for relative grading)
     all_totals = [totals_by_student[e.student.id] for e in enrollments]
     n = len(all_totals)
     sorted_totals = sorted(all_totals)
@@ -3506,46 +3515,131 @@ def course_marks_overview(request, course_id):
             else:
                 hi = mid
         lower = lo
+        # denominator (n - 1) might be zero-guarded above
         return (Decimal(lower) / Decimal(n - 1)) * Decimal("100")
 
     for r in rows:
         r["percentile"] = percentile_rank(r["total"]) if r["total"] is not None else None
 
-    # ✅ --- Apply GradingPolicy (if available) ---
+    # Default grade mapping (if you use grade points elsewhere)
     grade_letters = {10: "A", 9: "A-", 8: "B", 7: "B-", 6: "C", 5: "C-", 4: "D", 0: "F"}
 
-    for r in rows:
-        pct = r["percentage"] or Decimal("0")
-        grade, outcome = None, None
+    # Default absolute cutoffs (percent). You can override via policy.abs_cutoffs
+    default_abs = {"A": 85, "A-": 75, "B": 65, "B-": 55, "C": 45, "D": 40, "F": 0}
 
-        if policy and policy.mode == "REL":
-            # relative grading based on percentile
-            perc = r["percentile"] or Decimal("0")
-            rel = policy.rel_buckets or {}
-            if perc <= Decimal(rel.get("top10", 10)): grade = "A"
-            elif perc <= Decimal(rel.get("top10", 10)) + Decimal(rel.get("next15", 15)): grade = "A-"
-            elif perc <= Decimal("50"): grade = "B"
-            elif perc <= Decimal("75"): grade = "B-"
-            elif perc <= Decimal("90"): grade = "C"
-            else: grade = "D"
-            outcome = "PAS" if grade != "F" else "FAI"
+    # Apply grading policy and persist to StudentCourse (only if changed)
+    rows_to_save = []
+    for r in rows:
+        pct = (r["percentage"] if r["percentage"] is not None else Decimal("0"))
+        perc_percentile = (r["percentile"] if r["percentile"] is not None else Decimal("0"))
+        enrollment = r["enrollment"]
+        course_mode = (enrollment.course_mode or "").upper()
+
+        grade = None
+        outcome = None
+
+        # Pass/Fail mode: we set outcome based on pass cutoff, but don't assign letter grade
+        if course_mode == "PF":
+            # Determine pass threshold (use policy.abs_cutoffs.Pass if provided else default C threshold)
+            abs_cutoffs = (policy.abs_cutoffs if policy else {}) or {}
+            pass_threshold = Decimal(str(abs_cutoffs.get("Pass", abs_cutoffs.get("C", default_abs["C"]))))
+            outcome = "PAS" if pct >= pass_threshold else "FAI"
+            grade = None
+
+        # Audit mode: normally auditable -> pass, keep grade None and outcome PAS
+        elif course_mode == "AUD":
+            grade = None
+            outcome = "PAS"
 
         else:
-            # absolute grading
-            abs_cutoffs = (policy.abs_cutoffs if policy else None) or {
-                "A": 85, "A-": 75, "B": 65, "B-": 55, "C": 45, "Pass": 45
-            }
-            if pct >= abs_cutoffs["A"]: grade = "A"
-            elif pct >= abs_cutoffs["A-"]: grade = "A-"
-            elif pct >= abs_cutoffs["B"]: grade = "B"
-            elif pct >= abs_cutoffs["B-"]: grade = "B-"
-            elif pct >= abs_cutoffs["C"]: grade = "C"
-            elif pct >= abs_cutoffs["Pass"]: grade = "D"
-            else: grade = "F"
-            outcome = "PAS" if grade != "F" else "FAI"
+            # If policy exists and is REL, use percentile buckets
+            if policy and getattr(policy, "mode", "").upper() == "REL":
+                rel = policy.rel_buckets or {}
+                # safe parsing of bucket numbers; fallback to common defaults
+                try:
+                    top10 = Decimal(str(rel.get("top10", 10)))
+                    next15 = Decimal(str(rel.get("next15", 15)))
+                except (InvalidOperation, TypeError):
+                    top10 = Decimal("10")
+                    next15 = Decimal("15")
 
+                p = perc_percentile
+                # Example bucket logic: top10, next15, next25, ...
+                if p <= top10:
+                    grade = "A"
+                elif p <= (top10 + next15):
+                    grade = "A-"
+                elif p <= Decimal("50"):
+                    grade = "B"
+                elif p <= Decimal("75"):
+                    grade = "B-"
+                elif p <= Decimal("90"):
+                    grade = "C"
+                else:
+                    grade = "D"
+                outcome = "PAS" if grade != "F" else "FAI"
+
+            else:
+                # Absolute grading - compare percentage to cutoffs
+                abs_cutoffs = (policy.abs_cutoffs if policy else {}) or default_abs
+                # convert to Decimal and provide fallback values
+                def get_cutoff(k, fallback):
+                    try:
+                        return Decimal(str(abs_cutoffs.get(k, fallback)))
+                    except (InvalidOperation, TypeError):
+                        return Decimal(str(fallback))
+
+                A_th = get_cutoff("A", default_abs["A"])
+                Am_th = get_cutoff("A-", default_abs["A-"])
+                B_th = get_cutoff("B", default_abs["B"])
+                Bm_th = get_cutoff("B-", default_abs["B-"])
+                C_th = get_cutoff("C", default_abs["C"])
+                D_th = get_cutoff("D", default_abs["D"])
+                # grading descending
+                if pct >= A_th:
+                    grade = "A"
+                elif pct >= Am_th:
+                    grade = "A-"
+                elif pct >= B_th:
+                    grade = "B"
+                elif pct >= Bm_th:
+                    grade = "B-"
+                elif pct >= C_th:
+                    grade = "C"
+                elif pct >= D_th:
+                    grade = "D"
+                else:
+                    grade = "F"
+                outcome = "PAS" if grade != "F" else "FAI"
+
+        # Store into row for template rendering
         r["grade"] = grade
         r["outcome"] = outcome
+
+        # Prepare DB update - update StudentCourse only if values changed
+        changed = False
+        # grade field stored should be None or a string matching choices; allow None
+        if (enrollment.grade != (grade if grade is not None else None)):
+            enrollment.grade = grade
+            changed = True
+        # enrollment.outcome stored as "PAS"/"FAI"
+        if (enrollment.outcome != (outcome if outcome is not None else None)):
+            enrollment.outcome = outcome
+            changed = True
+        # If we assigned a letter grade, ensure status is CMP
+        if grade and enrollment.status != "CMP":
+            enrollment.status = "CMP"
+            changed = True
+
+        if changed:
+            rows_to_save.append(enrollment)
+
+    # Bulk-save changed enrollments (small list, do one-by-one to respect model signals/constraints)
+    if rows_to_save:
+        with transaction.atomic():
+            for enr in rows_to_save:
+                # Only update relevant fields
+                enr.save(update_fields=["grade", "outcome", "status"])
 
     max_total_display = total_weight
 
@@ -3558,12 +3652,123 @@ def course_marks_overview(request, course_id):
         "policy": policy,
     })
 
+
+from decimal import Decimal
+from django.db import transaction
+
+def apply_grading_policy(request, course_id):
+    course = get_object_or_404(Course, id=course_id)
+    policy = GradingPolicy.objects.filter(course=course).first()
+
+    if not policy:
+        messages.error(request, "No grading policy set for this course.")
+        return redirect("course_marks_overview", course_id=course.id)
+
+    # Fetch active enrollments (CMP + ENR)
+    enrollments = (
+        StudentCourse.objects.filter(
+            course=course,
+            status__in=["ENR", "CMP"],
+            is_active_pre_reg=True
+        )
+        .select_related("student")
+        .order_by("student__roll_no")
+    )
+
+    components = list(AssessmentComponent.objects.filter(course=course))
+
+    # Score lookup
+    score_map = {}
+    for s in AssessmentScore.objects.filter(
+        course=course,
+        student__in=[e.student for e in enrollments],
+        component__in=components
+    ):
+        score_map[(s.student_id, s.component_id)] = Decimal(str(s.marks_obtained))
+
+    # Component metadata
+    comp_data = []
+    total_weight = Decimal("0")
+    for c in components:
+        max_d = Decimal(str(c.max_marks))
+        w = Decimal(str(getattr(c, "weight", 1)))
+        comp_data.append((c, max_d, w))
+        total_weight += w
+
+    # Compute totals
+    totals = {}
+    for e in enrollments:
+        stu_total = Decimal("0")
+        for comp, max_d, w in comp_data:
+            val = score_map.get((e.student.id, comp.id))
+            if val is not None and max_d > 0:
+                stu_total += (val / max_d) * w
+        totals[e.student.id] = stu_total
+
+    # Percentile calculation
+    total_list = list(totals.values())
+    sorted_totals = sorted(total_list)
+    n = len(sorted_totals)
+
+    def percentile_rank(value):
+        if n <= 1:
+            return Decimal("100")
+        lower = sum(1 for x in sorted_totals if x < value)
+        return Decimal(lower) / Decimal(n - 1) * Decimal("100")
+
+    # --- APPLY GRADING POLICY ---
+    with transaction.atomic():
+        for e in enrollments:
+            pct = (totals[e.student.id] / total_weight * Decimal("100")) if total_weight else Decimal("0")
+            grade = None
+            outcome = None
+
+            # --- RELATIVE ---
+            if policy.mode == "REL":
+                per = percentile_rank(totals[e.student.id])
+                rb = policy.rel_buckets
+
+                if per <= rb.get("top10", 10): grade = "A"
+                elif per <= rb.get("top10", 10) + rb.get("next15", 15): grade = "A-"
+                elif per <= 50: grade = "B"
+                elif per <= 75: grade = "B-"
+                elif per <= 90: grade = "C"
+                else: grade = "D"
+
+                outcome = "PAS" if grade != "F" else "FAI"
+
+            # --- ABSOLUTE ---
+            else:
+                c = policy.abs_cutoffs
+                if pct >= c["A"]: grade = "A"
+                elif pct >= c["A-"]: grade = "A-"
+                elif pct >= c["B"]: grade = "B"
+                elif pct >= c["B-"]: grade = "B-"
+                elif pct >= c["C"]: grade = "C"
+                elif pct >= c["Pass"]: grade = "D"
+                else: grade = "F"
+                outcome = "PAS" if grade != "F" else "FAI"
+
+            # Save results
+            e.grade = grade
+            e.outcome = outcome
+            e.status = "CMP"  # mark as completed
+            e.save()
+
+    messages.success(request, "Grades updated successfully using current grading policy.")
+    return redirect("course_marks_overview", course_id=course.id)
+
+
+
 @require_POST
 def update_mark_cell(request, course_id):
     try:
         student_id = int(request.POST.get('student_id'))
         component_id = int(request.POST.get('component_id'))
-        raw_val = (request.POST.get('value') or '').trim()
+
+        # FIXED — Python uses strip(), not trim()
+        raw_val = (request.POST.get('value') or '').strip()
+
     except (TypeError, ValueError):
         return HttpResponseBadRequest("Invalid parameters")
 
@@ -3573,7 +3778,7 @@ def update_mark_cell(request, course_id):
     # Ensure active enrollment
     enr = StudentCourse.objects.filter(
         course=course, student_id=student_id,
-        status='ENR', is_active_pre_reg=True
+        status__in=['ENR', 'CMP'], is_active_pre_reg=True
     ).first()
 
     if not enr:
@@ -3587,10 +3792,11 @@ def update_mark_cell(request, course_id):
                 course=course,
                 component=comp
             ).delete()
-        # Also clear grade/outcome for incomplete data
+
         enr.grade = None
         enr.outcome = None
         enr.save(update_fields=["grade", "outcome"])
+
         return JsonResponse({'ok': True, 'value': '', 'grade': '—', 'outcome': '—'})
 
     # ======= SAVE MARK =======
@@ -3613,12 +3819,10 @@ def update_mark_cell(request, course_id):
             obj.marks_obtained = val
             obj.save(update_fields=['marks_obtained'])
 
-    # ======= NOW RECALCULATE TOTAL, % , GRADE =======
-    # Fetch all required components for the course
+    # ======= RECALCULATE =======
     components = AssessmentComponent.objects.filter(course=course)
     scores = AssessmentScore.objects.filter(student_id=student_id, course=course)
 
-    # Compute weighted total
     total_weight = Decimal("0")
     weighted_sum = Decimal("0")
 
@@ -3633,23 +3837,21 @@ def update_mark_cell(request, course_id):
         if c.id in score_map:
             weighted_sum += (score_map[c.id] / max_m) * w
 
-    # If marks incomplete → clear grade
+    # Incomplete marks → clear grade
     if len(score_map) != len(components):
         enr.grade = None
         enr.outcome = None
         enr.save(update_fields=["grade", "outcome"])
         return JsonResponse({'ok': True, 'value': str(val), 'grade': '—', 'outcome': '—'})
 
-    # ---- Compute percentage ----
     percentage = float(weighted_sum / total_weight * 100)
 
-    # ---- Apply grading policy ----
     policy = GradingPolicy.objects.filter(course=course).first()
 
-    # Absolute mode
     grade = 'F'
     outcome = 'FAI'
 
+    # ABSOLUTE
     if policy and policy.mode == "ABS":
         cutoff = policy.abs_cutoffs
         if percentage >= cutoff["A"]: grade = "A"
@@ -3662,9 +3864,8 @@ def update_mark_cell(request, course_id):
 
         outcome = "PAS" if grade != "F" else "FAI"
 
-    # Relative mode
+    # RELATIVE
     elif policy and policy.mode == "REL":
-        # compute percentile
         all_scores = []
         all_enrs = StudentCourse.objects.filter(course=course, status='ENR', is_active_pre_reg=True)
 
@@ -3697,7 +3898,6 @@ def update_mark_cell(request, course_id):
         else: grade = "D"
         outcome = "PAS"
 
-    # Save to StudentCourse
     enr.grade = grade
     enr.outcome = outcome
     enr.save(update_fields=["grade", "outcome"])
@@ -3708,6 +3908,7 @@ def update_mark_cell(request, course_id):
         'grade': grade,
         'outcome': outcome
     })
+
 
 
 def _canon(s: str) -> str:
@@ -3784,9 +3985,7 @@ def all_courses(request, faculty_id):
     })
 
 
-
 def assign_grading_policy(request, course_code):
-    """View for instructors to define or edit grading policy for a course."""
     email = request.session.get("email_id")
     faculty = get_object_or_404(Faculty, email_id=email)
     course = get_object_or_404(Course, code=course_code, faculties=faculty)
@@ -3794,28 +3993,29 @@ def assign_grading_policy(request, course_code):
     components = list(AssessmentComponent.objects.filter(course=course))
     total_weight = sum([float(c.weight or 0) for c in components]) if components else None
 
-    # ✅ Count enrolled students (active ENR)
+    # Count active enrolled students
     num_enrolled = StudentCourse.objects.filter(
         course=course, status="ENR", is_active_pre_reg=True
     ).count()
 
-    # Fetch or create policy
+    # Fetch or create grading policy
     policy, _ = GradingPolicy.objects.get_or_create(course=course)
 
-    # --- Handle POST ---
+    # POST SAVE
     if request.method == "POST":
         mode = (request.POST.get("mode") or "ABS").upper()
-        # ✅ Force absolute if less than 25 students
+
+        # Force absolute if < 25 students
         if num_enrolled < 25:
             mode = "ABS"
 
         abs_cutoffs = {
             "A": int(request.POST.get("abs_A") or 85),
-            "A-": int(request.POST.get("abs_B") or 75),
-            "B": int(request.POST.get("abs_C") or 65),
-            "B-": int(request.POST.get("abs_D") or 55),
-            "C": int(request.POST.get("abs_E") or 45),
-            "Pass": int(request.POST.get("pass_min_percent") or 45),
+            "A-": int(request.POST.get("abs_Aminus") or 75),
+            "B": int(request.POST.get("abs_B") or 65),
+            "B-": int(request.POST.get("abs_Bminus") or 55),
+            "C": int(request.POST.get("abs_C") or 45),
+            "Pass": int(request.POST.get("abs_Pass") or 45),
         }
 
         rel_buckets = {
@@ -3834,14 +4034,15 @@ def assign_grading_policy(request, course_code):
             policy.rel_buckets = rel_buckets
             policy.save()
 
-        messages.success(request, f"Grading policy for {course.code} updated successfully.")
+        messages.success(request, f"Grading policy saved for {course.code}.")
         return redirect("faculty_dashboard")
 
-    # --- Defaults & safe keys ---
+    # DEFAULTS for first-time policy
     abs_defaults = {"A": 85, "A-": 75, "B": 65, "B-": 55, "C": 45, "Pass": 45}
     rel_defaults = {
-        "top10": 10, "next15": 15, "next25": 25, "next25b": 25,
-        "next15b": 15, "next10": 10, "rest_min": 4,
+        "top10": 10, "next15": 15, "next25": 25,
+        "next25b": 25, "next15b": 15,
+        "next10": 10, "rest_min": 4,
     }
 
     abs_cutoffs = {**abs_defaults, **(policy.abs_cutoffs or {})}
@@ -3855,9 +4056,9 @@ def assign_grading_policy(request, course_code):
         "C": abs_cutoffs.get("C"),
         "Pass": abs_cutoffs.get("Pass"),
     }
-    rel_buckets_safe = {k: rel_buckets.get(k) for k in rel_defaults.keys()}
 
-    # ✅ Add student count & flag
+    rel_buckets_safe = {k: rel_buckets.get(k) for k in rel_defaults}
+
     force_absolute = num_enrolled < 25
 
     return render(request, "instructor/assign_grading.html", {
@@ -4756,6 +4957,329 @@ def delete_database_record(request, record_type, record_id):
         return JsonResponse({'success': False, 'error': str(e)})
 
 
+@require_http_methods(["GET"])
+def ajax_edit_record(request, record_type, record_id):
+    """
+    Returns HTML for the edit modal body (AJAX).
+    """
+    context = {}
+    
+    if record_type == 'student':
+        record = get_object_or_404(Student, id=record_id)
+        branches = Branch.objects.all()
+        context = {"record_type": "student", "record": record, "branches": branches}
+
+    elif record_type == 'faculty':
+        record = get_object_or_404(Faculty, id=record_id)
+        departments = Department.objects.all()
+        context = {"record_type": "faculty", "record": record, "departments": departments}
+
+    elif record_type == 'course':
+        record = get_object_or_404(Course, id=record_id)
+        context = {"record_type": "course", "record": record, "slots": Course.SLOT_CHOICES}
+
+    elif record_type == 'enrollment':
+        record = get_object_or_404(StudentCourse, id=record_id)
+        context = {
+            "record_type": "enrollment",
+            "record": record,
+            "statuses": StudentCourse.STATUS,
+            "outcomes": StudentCourse.OUTCOME,
+            "grades": StudentCourse.GRADES,
+            "modes": StudentCourse.COURSE_MODE,
+        }
+
+    elif record_type == 'requirement':
+        record = get_object_or_404(ProgramRequirement, id=record_id)
+        context = {"record_type": "requirement", "record": record}
+
+    else:
+        return JsonResponse({"success": False, "error": "Invalid type"})
+
+    html = render_to_string("admin/database_edit_modal.html", context, request=request)
+    return JsonResponse({"success": True, "html": html})
+
+@require_http_methods(["POST"])
+def ajax_save_record(request, record_type, record_id):
+    try:
+        if record_type == "student":
+            student = get_object_or_404(Student, id=record_id)
+            student.first_name = request.POST.get("first_name", student.first_name)
+            student.last_name = request.POST.get("last_name", student.last_name)
+            student.email_id = request.POST.get("email", student.email_id)
+            branch = request.POST.get("branch")
+            if branch:
+                student.branch = Branch.objects.filter(id=branch).first()
+            student.save()
+
+            return JsonResponse({
+                "success": True,
+                "updated": {
+                    "name": student.first_name + " " + (student.last_name or ""),
+                    "email": student.email_id,
+                    "branch": student.branch.name if student.branch else "",
+                }
+            })
+
+        elif record_type == "enrollment":
+            enr = get_object_or_404(StudentCourse, id=record_id)
+
+            enr.status = request.POST.get("status", enr.status)
+            enr.grade = request.POST.get("grade", enr.grade)
+            enr.outcome = request.POST.get("outcome", enr.outcome)
+            mode = request.POST.get("course_mode")
+            if mode in ["REG", "PF", "AUD"]:
+                enr.course_mode = mode
+            enr.save()
+
+            return JsonResponse({
+                "success": True,
+                "updated": {
+                    "status": enr.status,
+                    "grade": enr.grade,
+                    "outcome": enr.outcome,
+                    "course_mode": enr.course_mode,
+                }
+            })
+
+        elif record_type == "course":
+            c = get_object_or_404(Course, id=record_id)
+            c.code = request.POST.get("code", c.code)
+            c.name = request.POST.get("name", c.name)
+            c.credits = request.POST.get("credits", c.credits)
+            c.slot = request.POST.get("slot", c.slot)
+            c.save()
+            return JsonResponse({"success": True})
+
+        elif record_type == "requirement":
+            r = get_object_or_404(ProgramRequirement, id=record_id)
+            credits = request.POST.get("required_credits")
+            if credits and credits.isdigit():
+                r.required_credits = int(credits)
+            r.save()
+            return JsonResponse({"success": True})
+
+        return JsonResponse({"success": False, "error": "Invalid type"})
+
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)})
+    
+@require_http_methods(["POST"])
+def ajax_delete_record(request, record_type, record_id):
+    try:
+        if record_type == 'student':
+            obj = get_object_or_404(Student, id=record_id)
+        elif record_type == 'faculty':
+            obj = get_object_or_404(Faculty, id=record_id)
+        elif record_type == 'course':
+            obj = get_object_or_404(Course, id=record_id)
+        elif record_type == 'enrollment':
+            obj = get_object_or_404(StudentCourse, id=record_id)
+        elif record_type == 'requirement':
+            obj = get_object_or_404(ProgramRequirement, id=record_id)
+        else:
+            return JsonResponse({"success": False, "error": "Invalid type"})
+
+        obj.delete()
+        return JsonResponse({"success": True})
+
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)})
+    
+
+
+def api_get_record(request, record_type, record_id):
+    try:
+        if record_type == 'student':
+            s = get_object_or_404(Student, id=record_id)
+            data = {
+                "id": s.id, "roll_no": s.roll_no, "first_name": s.first_name,
+                "last_name": s.last_name or "", "email": s.email_id,
+                "branch_id": s.branch.id if s.branch else None,
+                "department_id": s.department.id if s.department else None,
+                "semester": s.semester, "mobile_no": str(s.mobile_no) if s.mobile_no else ""
+            }
+        elif record_type == 'faculty':
+            f = get_object_or_404(Faculty, id=record_id)
+            data = {
+                "id": f.id, "first_name": f.first_name, "last_name": f.last_name or "",
+                "email": f.email_id, "department_id": f.department.id if f.department else None,
+                "mobile_no": str(f.mobile_no) if f.mobile_no else ""
+            }
+        elif record_type == 'course':
+            c = get_object_or_404(Course, id=record_id)
+            data = {
+                "id": c.id, "code": c.code, "name": c.name,
+                "credits": c.credits, "ltpc": c.LTPC or "", "slot": c.slot, "status": c.status
+            }
+        elif record_type == 'enrollment':
+            enr = get_object_or_404(StudentCourse, id=record_id)
+            data = {
+                "id": enr.id,
+                "student_id": enr.student.id,
+                "student": f"{enr.student.first_name} {enr.student.last_name or ''}".strip(),
+                "roll_no": enr.student.roll_no,
+                "course_id": enr.course.id,
+                "course": enr.course.code,
+                "semester": enr.semester,
+                "status": enr.status,
+                "grade": enr.grade or "",
+                "outcome": enr.outcome,
+                "course_mode": enr.course_mode
+            }
+        elif record_type == 'requirement':
+            r = get_object_or_404(ProgramRequirement, id=record_id)
+            data = {
+                "id": r.id, "branch_id": r.branch.id, "category": r.category, "required_credits": r.required_credits
+            }
+        else:
+            return JsonResponse({"ok": False, "error": "invalid type"}, status=400)
+        return JsonResponse({"ok": True, "record": data})
+    except Exception as e:
+        return JsonResponse({"ok": False, "error": str(e)}, status=500)
+
+
+@require_POST
+def api_update_record(request, record_type, record_id):
+    """
+    Updates a database record. Accepts form-encoded POST body.
+    Returns updated record JSON to update the client arrays.
+    """
+    data = request.POST.dict()
+    try:
+        with transaction.atomic():
+            if record_type == 'student':
+                student = get_object_or_404(Student, id=record_id)
+                student.first_name = data.get('first_name', student.first_name)
+                student.last_name = data.get('last_name', student.last_name)
+                if data.get('email'): student.email_id = data.get('email')
+                mobile = data.get('mobile_no')
+                if mobile is not None and mobile != '':
+                    try:
+                        student.mobile_no = int(mobile)
+                    except ValueError:
+                        pass
+                branch_id = data.get('branch_id')
+                if branch_id:
+                    student.branch = Branch.objects.filter(id=int(branch_id)).first()
+                department_id = data.get('department_id')
+                if department_id:
+                    student.department = Department.objects.filter(id=int(department_id)).first()
+                student.save()
+                updated = {
+                    "id": student.id, "roll_no": student.roll_no, "first_name": student.first_name,
+                    "last_name": student.last_name or "", "email": student.email_id,
+                    "branch": student.branch.name if student.branch else "N/A",
+                    "department": student.department.code if student.department else "N/A",
+                    "semester": student.calculate_current_semester(),
+                    "mobile": str(student.mobile_no) if student.mobile_no else ""
+                }
+            elif record_type == 'faculty':
+                faculty = get_object_or_404(Faculty, id=record_id)
+                faculty.first_name = data.get('first_name', faculty.first_name)
+                faculty.last_name = data.get('last_name', faculty.last_name)
+                if data.get('email'): faculty.email_id = data.get('email')
+                mobile = data.get('mobile_no')
+                if mobile is not None and mobile != '':
+                    try:
+                        faculty.mobile_no = int(mobile)
+                    except ValueError:
+                        pass
+                dept_id = data.get('department_id')
+                if dept_id:
+                    faculty.department = Department.objects.filter(id=int(dept_id)).first()
+                faculty.save()
+                updated = {
+                    "id": faculty.id, "first_name": faculty.first_name,
+                    "last_name": faculty.last_name or "", "email": faculty.email_id,
+                    "department": faculty.department.code if faculty.department else "N/A",
+                    "mobile": str(faculty.mobile_no) if faculty.mobile_no else "",
+                    "courses": faculty.courses.count()
+                }
+            elif record_type == 'course':
+                course = get_object_or_404(Course, id=record_id)
+                if data.get('code'): course.code = data.get('code')
+                if data.get('name'): course.name = data.get('name')
+                if data.get('credits'):
+                    try:
+                        course.credits = int(data.get('credits'))
+                    except ValueError:
+                        pass
+                if 'ltpc' in data: course.LTPC = data.get('ltpc')
+                if 'slot' in data: course.slot = data.get('slot')
+                if 'status' in data: course.status = data.get('status')
+                course.save()
+                updated = {
+                    "id": course.id, "code": course.code, "name": course.name,
+                    "credits": course.credits, "ltpc": course.LTPC, "slot": course.slot, "status": course.status,
+                    "enrolled": course.enrollments.filter(status__in=['ENR','CMP']).count()
+                }
+            elif record_type == 'enrollment':
+                enr = get_object_or_404(StudentCourse, id=record_id)
+                if 'status' in data: enr.status = data.get('status')
+                if 'grade' in data:
+                    enr.grade = data.get('grade') or None
+                if 'outcome' in data:
+                    enr.outcome = data.get('outcome') or None
+                if 'course_mode' in data and data.get('course_mode') in ['REG','PF','AUD']:
+                    enr.course_mode = data.get('course_mode')
+                enr.save()
+                updated = {
+                    "id": enr.id, "student": f"{enr.student.first_name} {enr.student.last_name or ''}".strip(),
+                    "roll_no": enr.student.roll_no, "course": enr.course.code, "semester": enr.semester,
+                    "status": enr.status, "grade": enr.grade or "-", "outcome": enr.outcome or "", "course_mode": enr.course_mode
+                }
+            elif record_type == 'requirement':
+                req = get_object_or_404(ProgramRequirement, id=record_id)
+                if data.get('required_credits'):
+                    try:
+                        req.required_credits = int(data.get('required_credits'))
+                    except ValueError:
+                        pass
+                req.save()
+                updated = {
+                    "id": req.id, "branch": req.branch.name, "category": req.category, "required_credits": req.required_credits
+                }
+            else:
+                return JsonResponse({"ok": False, "error": "invalid type"}, status=400)
+
+        return JsonResponse({"ok": True, "updated": updated})
+    except Exception as e:
+        return JsonResponse({"ok": False, "error": str(e)}, status=500)
+
+
+@require_POST
+def api_delete_record(request, record_type, record_id):
+    """
+    Deletes the requested record and returns success. Safe wrapped in transaction.
+    """
+    try:
+        with transaction.atomic():
+            if record_type == 'student':
+                obj = get_object_or_404(Student, id=record_id)
+            elif record_type == 'faculty':
+                obj = get_object_or_404(Faculty, id=record_id)
+            elif record_type == 'course':
+                obj = get_object_or_404(Course, id=record_id)
+            elif record_type == 'enrollment':
+                obj = get_object_or_404(StudentCourse, id=record_id)
+            elif record_type == 'requirement':
+                obj = get_object_or_404(ProgramRequirement, id=record_id)
+            elif record_type == 'branch':
+                obj = get_object_or_404(Branch, id=record_id)
+            elif record_type == 'department':
+                obj = get_object_or_404(Department, id=record_id)
+            elif record_type == 'category':
+                obj = get_object_or_404(Category, id=record_id)
+            else:
+                return JsonResponse({"ok": False, "error": "invalid type"}, status=400)
+
+            obj.delete()
+        return JsonResponse({"ok": True, "deleted_id": record_id})
+    except Exception as e:
+        return JsonResponse({"ok": False, "error": str(e)}, status=500)
+
+
 def export_page_view(request):
     """
     Display the export configuration page
@@ -5240,7 +5764,7 @@ def faculty_view_course_grades(request, faculty_id, course_code):
     course = get_object_or_404(Course, code=course_code, faculties=faculty)
     policy = GradingPolicy.objects.filter(course=course).first()
 
-    # ✅ Only current active enrollments
+    # Only current active enrollments (ENR or CMP so faculty can see both)
     enrollments = (
         StudentCourse.objects
         .filter(course=course, status__in=['ENR', 'CMP'], is_active_pre_reg=True)
@@ -5248,7 +5772,7 @@ def faculty_view_course_grades(request, faculty_id, course_code):
         .order_by('student__roll_no')
     )
 
-    # Handle optional sort query param (?sort=asc/desc)
+    # Optional sort query param (?sort=asc/desc)
     sort_order = request.GET.get('sort', 'asc').lower()
     grade_order = {"A": 1, "A-": 2, "B": 3, "B-": 4, "C": 5, "C-": 6, "D": 7, "F": 8}
     reverse = sort_order == "desc"
@@ -5261,10 +5785,13 @@ def faculty_view_course_grades(request, faculty_id, course_code):
 
         if course_mode == "PF":
             display_grade = "Pass/Fail Mode"
-            display_outcome = "Pass" if outcome.upper() in ["PAS", "PASS"] else "Fail"
+            display_outcome = "Pass" if outcome and outcome.upper() in ["PAS", "PASS"] else "Fail"
+        elif course_mode == "AUD":
+            display_grade = "Audit"
+            display_outcome = "Pass" if outcome and outcome.upper() in ["PAS", "PASS"] else "Fail"
         else:
             display_grade = grade or "—"
-            display_outcome = "Pass" if outcome.upper() in ["PAS", "PASS"] else "Fail"
+            display_outcome = "Pass" if outcome and outcome.upper() in ["PAS", "PASS"] else "Fail"
 
         results.append({
             "student": enr.student,
@@ -5273,10 +5800,10 @@ def faculty_view_course_grades(request, faculty_id, course_code):
             "mode": course_mode,
         })
 
-    # Sort by grade order if possible
+    # Sorting by grade order where possible (non-standard values go to end)
     def grade_sort_key(r):
         g = r["grade"]
-        return grade_order.get(g, 999)  # Fallback for non-standard grades
+        return grade_order.get(g, 999)
 
     results.sort(key=grade_sort_key, reverse=reverse)
 
@@ -5287,6 +5814,7 @@ def faculty_view_course_grades(request, faculty_id, course_code):
         "policy": policy,
         "sort_order": sort_order,
     })
+
 
 @require_POST
 @transaction.atomic
@@ -6241,7 +6769,6 @@ def faculty_course_report(request):
     })
 
 
-# ---------------------- EXCEL EXPORT ----------------------
 def export_course_enrollments_excel(request, course_id):
     course = get_object_or_404(Course, id=course_id)
     enrollments = (
@@ -6275,7 +6802,7 @@ def export_course_enrollments_excel(request, course_id):
     return response
 
 
-# ---------------------- PDF EXPORT ----------------------
+
 def export_course_enrollments_pdf(request, course_id):
     course = get_object_or_404(Course, id=course_id)
     enrollments = (
@@ -6318,3 +6845,5 @@ def export_course_enrollments_pdf(request, course_id):
     buffer.close()
     response.write(pdf_data)
     return response
+
+

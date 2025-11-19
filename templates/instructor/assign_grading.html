@@ -63,7 +63,7 @@
     {% if force_absolute %}
       <p class="text-danger small mt-2">
         ⚠️ Only <strong>{{ num_enrolled }}</strong> student{{ num_enrolled|pluralize }} enrolled.<br>
-        Relative grading is available only when there are <strong>25 or more</strong> students.<br>
+        Relative grading requires <strong>25 or more</strong> students.
       </p>
     {% else %}
       <p class="text-muted small mt-2">
@@ -74,75 +74,89 @@
 
   <!-- Absolute Grading Section -->
   <div id="absSection" class="bg-white p-4 p-md-5 mb-4 rounded shadow-sm">
-    <h3 class="fs-6 fw-semibold mb-3">Absolute Cutoffs (percent)</h3>
+    <h3 class="fs-6 fw-semibold mb-3">Absolute Cutoffs (percentage)</h3>
+
     <div class="row g-3">
       <div class="col-6 col-sm-2">
         <label class="form-label small mb-1">A ≥</label>
         <input name="abs_A" type="number" value="{{ abs_cutoffs_safe.A }}" class="form-control form-control-sm">
       </div>
+
       <div class="col-6 col-sm-2">
         <label class="form-label small mb-1">A− ≥</label>
-        <input name="abs_B" type="number" value="{{ abs_cutoffs_safe.A_minus }}" class="form-control form-control-sm">
+        <input name="abs_Aminus" type="number" value="{{ abs_cutoffs_safe.A_minus }}" class="form-control form-control-sm">
       </div>
+
       <div class="col-6 col-sm-2">
         <label class="form-label small mb-1">B ≥</label>
-        <input name="abs_C" type="number" value="{{ abs_cutoffs_safe.B }}" class="form-control form-control-sm">
+        <input name="abs_B" type="number" value="{{ abs_cutoffs_safe.B }}" class="form-control form-control-sm">
       </div>
+
       <div class="col-6 col-sm-2">
         <label class="form-label small mb-1">B− ≥</label>
-        <input name="abs_D" type="number" value="{{ abs_cutoffs_safe.B_minus }}" class="form-control form-control-sm">
+        <input name="abs_Bminus" type="number" value="{{ abs_cutoffs_safe.B_minus }}" class="form-control form-control-sm">
       </div>
+
       <div class="col-6 col-sm-2">
         <label class="form-label small mb-1">C ≥</label>
-        <input name="abs_E" type="number" value="{{ abs_cutoffs_safe.C }}" class="form-control form-control-sm">
+        <input name="abs_C" type="number" value="{{ abs_cutoffs_safe.C }}" class="form-control form-control-sm">
       </div>
+
       <div class="col-6 col-sm-2">
         <label class="form-label small mb-1">Pass ≥</label>
-        <input name="pass_min_percent" type="number" value="{{ abs_cutoffs_safe.Pass }}" class="form-control form-control-sm">
+        <input name="abs_Pass" type="number" value="{{ abs_cutoffs_safe.Pass }}" class="form-control form-control-sm">
       </div>
     </div>
-    <p class="form-text small text-muted mt-2">Ensure A ≥ A− ≥ B ≥ B− ≥ C ≥ Pass.</p>
+
+    <p class="form-text small text-muted mt-2">
+      Ensure A ≥ A− ≥ B ≥ B− ≥ C ≥ Pass.
+    </p>
   </div>
 
   <!-- Relative Grading Section -->
   <div id="relSection" class="bg-white p-4 p-md-5 mb-4 rounded shadow-sm {% if force_absolute %}d-none{% endif %}">
-    <h3 class="fs-6 fw-semibold mb-3">Relative Buckets (percent → grade points)</h3>
+    <h3 class="fs-6 fw-semibold mb-3">Relative Buckets</h3>
+    <p class="text-muted small mb-2">Percentile → grade buckets</p>
+
     <div class="row g-3">
       <div class="col-6 col-sm-3">
         <label class="form-label small mb-1">Top 10%</label>
         <input name="top10" type="number" value="{{ rel_buckets_safe.top10 }}" class="form-control form-control-sm">
       </div>
+
       <div class="col-6 col-sm-3">
         <label class="form-label small mb-1">Next 15%</label>
         <input name="next15" type="number" value="{{ rel_buckets_safe.next15 }}" class="form-control form-control-sm">
       </div>
+
       <div class="col-6 col-sm-3">
         <label class="form-label small mb-1">Next 25%</label>
         <input name="next25" type="number" value="{{ rel_buckets_safe.next25 }}" class="form-control form-control-sm">
       </div>
+
       <div class="col-6 col-sm-3">
         <label class="form-label small mb-1">Next 25%</label>
         <input name="next25b" type="number" value="{{ rel_buckets_safe.next25b }}" class="form-control form-control-sm">
       </div>
+
       <div class="col-6 col-sm-3">
         <label class="form-label small mb-1">Next 15%</label>
         <input name="next15b" type="number" value="{{ rel_buckets_safe.next15b }}" class="form-control form-control-sm">
       </div>
+
       <div class="col-6 col-sm-3">
         <label class="form-label small mb-1">Next 10%</label>
         <input name="next10" type="number" value="{{ rel_buckets_safe.next10 }}" class="form-control form-control-sm">
       </div>
+
       <div class="col-6 col-sm-3">
         <label class="form-label small mb-1">Minimum Grade (rest)</label>
         <input name="rest_min" type="number" value="{{ rel_buckets_safe.rest_min }}" class="form-control form-control-sm">
       </div>
     </div>
-    <p class="form-text small text-muted mt-2">
-      The relative policy divides the class percentile into performance bands.
-    </p>
   </div>
 
-  <!-- Submit Buttons -->
+  <!-- Submit -->
   <div class="bg-white p-4 p-md-5 rounded shadow-sm text-end">
     <button type="submit" class="btn btn-primary">
       <i class="fa-solid fa-save me-1"></i> Save Grading Policy
@@ -155,25 +169,23 @@
 {% block extra_js %}
 <script>
 function togglePolicySections() {
-  const modeSel = document.getElementById('mode');
+  const mode = document.getElementById('mode').value;
   const absSec = document.getElementById('absSection');
   const relSec = document.getElementById('relSection');
-
-  // Always keep relative hidden when force_absolute
   const forceAbs = {{ force_absolute|yesno:"true,false" }};
+
   if (forceAbs) {
     absSec.classList.remove('d-none');
     relSec.classList.add('d-none');
-    modeSel.value = 'ABS';
     return;
   }
 
-  if (modeSel.value === 'REL') {
+  if (mode === "REL") {
     absSec.classList.add('d-none');
     relSec.classList.remove('d-none');
   } else {
-    relSec.classList.add('d-none');
     absSec.classList.remove('d-none');
+    relSec.classList.add('d-none');
   }
 }
 
